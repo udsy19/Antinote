@@ -56,49 +56,122 @@ public enum Alerts {
     }
 }
 
-/// Small translucent toast ("Text has been copied", "Link has been copied"…), centered on the active screen.
-@MainActor
-public enum HUD {
-    private static var window: NSPanel?
-    private static var hideWork: DispatchWorkItem?
+/// What a message pill reports; picks its fill colour.
+public enum PillKind: Sendable {
+    /// Neutral (`typeMain` fill): "Empty note deleted", "Timer paused".
+    case info
+    /// `accent1Main` fill: "Stopwatch started", "Extracted text."
+    case success
+    /// `accent4Main` fill.
+    case warning
+    /// `accent5Main` fill.
+    case error
 
-    public static func show(_ text: String, symbol: String = "checkmark.circle.fill", duration: TimeInterval = 1.6) {
+    public func fill(_ theme: Theme) -> NSColor {
+        switch self {
+        case .info: NSColor(hex: theme.typeMain)
+        case .success: NSColor(hex: theme.accent1Main)
+        case .warning: NSColor(hex: theme.accent4Main)
+        case .error: NSColor(hex: theme.accent5Main)
+        }
+    }
+}
+
+/// A message pill: a capsule of bold monospace text in `typeReverse`. It fades in (150 ms), holds and fades
+/// out (300 ms); it never takes clicks.
+@MainActor
+public final class PillView: NSView {
+    public static let bottomInset: CGFloat = 20
+    private let label = NSTextField(labelWithString: "")
+    private var hideWork: DispatchWorkItem?
+
+    public override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        alphaValue = 0
+        label.maximumNumberOfLines = 2
+        label.lineBreakMode = .byWordWrapping
+        label.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(label)
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            label.topAnchor.constraint(equalTo: topAnchor, constant: 3.5),
+            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -3.5),
+        ])
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    public override func layout() {
+        super.layout()
+        layer?.cornerRadius = min(bounds.height / 2, 10)
+    }
+
+    /// Bold editor monospace at 11 pt.
+    public static var font: NSFont {
+        NSFontManager.shared.convert(Typography.font(size: 11), toHaveTrait: .boldFontMask)
+    }
+
+    /// Sets the text and colours without animating (used directly by offscreen renders).
+    public func configure(_ text: String, kind: PillKind, theme: Theme) {
+        label.stringValue = text
+        label.font = Self.font
+        label.alignment = text.contains("\n") ? .left : .center
+        label.textColor = NSColor(hex: theme.typeReverse)
+        layer?.backgroundColor = kind.fill(theme).cgColor
+    }
+
+    /// Shows `text` for `duration` seconds, then fades out.
+    public func show(_ text: String, kind: PillKind = .info, theme: Theme, duration: TimeInterval = 2.2,
+                     completion: (@MainActor @Sendable () -> Void)? = nil) {
+        configure(text, kind: kind, theme: theme)
         hideWork?.cancel()
-        window?.orderOut(nil)
-        let label = NSTextField(labelWithString: text)
-        label.font = .systemFont(ofSize: 14, weight: .medium)
-        label.textColor = .labelColor
-        let icon = NSImageView(image: NSImage(systemSymbolName: symbol, accessibilityDescription: nil) ?? NSImage())
-        icon.symbolConfiguration = .init(pointSize: 18, weight: .semibold)
-        icon.contentTintColor = .controlAccentColor
-        let stack = NSStackView(views: [icon, label])
-        stack.spacing = 8
-        stack.edgeInsets = NSEdgeInsets(top: 12, left: 16, bottom: 12, right: 18)
-        let fx = NSVisualEffectView()
-        fx.material = .hudWindow; fx.state = .active; fx.blendingMode = .behindWindow
-        fx.wantsLayer = true; fx.layer?.cornerRadius = 12
-        fx.addSubview(stack)
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo: fx.leadingAnchor), stack.trailingAnchor.constraint(equalTo: fx.trailingAnchor),
-                                     stack.topAnchor.constraint(equalTo: fx.topAnchor), stack.bottomAnchor.constraint(equalTo: fx.bottomAnchor)])
-        let size = stack.fittingSize
-        let screen = NSScreen.active
-        let frame = NSRect(x: screen.frame.midX - size.width / 2, y: screen.frame.minY + screen.frame.height * 0.18,
-                           width: size.width, height: size.height)
-        let w = NSPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-        w.isOpaque = false; w.backgroundColor = .clear; w.hasShadow = true
-        w.level = .statusBar; w.ignoresMouseEvents = true
-        w.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        w.contentView = fx
-        w.alphaValue = 0
-        w.orderFrontRegardless()
-        NSAnimationContext.runAnimationGroup { $0.duration = 0.15; w.animator().alphaValue = 1 }
-        window = w
-        let work = DispatchWorkItem {
-            NSAnimationContext.runAnimationGroup({ $0.duration = 0.25; w.animator().alphaValue = 0 }) { w.orderOut(nil) }
+        NSAnimationContext.runAnimationGroup { $0.duration = 0.15; animator().alphaValue = 1 }
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                NSAnimationContext.runAnimationGroup({ $0.duration = 0.3; self.animator().alphaValue = 0 }) {
+                    MainActor.assumeIsolated { completion?() }
+                }
+            }
         }
         hideWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: work)
+    }
+
+    public override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
+/// App-wide message pill, centred 20 pt above the bottom of the key Jotter window (or low on the active screen
+/// when no window is key).
+@MainActor
+public enum HUD {
+    private static var panel: NSPanel?
+
+    public static func show(_ text: String, kind: PillKind = .info) {
+        panel?.parent?.removeChildWindow(panel!)
+        panel?.orderOut(nil)
+        let pill = PillView()
+        pill.configure(text, kind: kind, theme: Theme.current)
+        let host = NSApp.keyWindow.flatMap { $0.isVisible && $0.styleMask.contains(.titled) ? $0 : nil }
+        let area = host?.frame ?? NSScreen.active.visibleFrame
+        var size = pill.fittingSize
+        size.width = min(size.width, area.width - 40)
+        let frame = NSRect(x: area.midX - size.width / 2,
+                           y: area.minY + (host == nil ? area.height * 0.15 : PillView.bottomInset),
+                           width: size.width, height: pill.fittingSize.height)
+        let w = NSPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        w.isOpaque = false; w.backgroundColor = .clear; w.hasShadow = false
+        w.level = .statusBar; w.ignoresMouseEvents = true
+        w.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        w.contentView = pill
+        host?.addChildWindow(w, ordered: .above)
+        w.orderFrontRegardless()
+        panel = w
+        pill.show(text, kind: kind, theme: Theme.current) {
+            w.parent?.removeChildWindow(w)
+            w.orderOut(nil)
+        }
     }
 }
 

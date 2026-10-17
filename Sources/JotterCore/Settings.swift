@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 
 // All user-facing preferences, grouped by Settings tab. Module-private state may add keys in its own module
 // (prefix the key name with the module).
@@ -18,7 +19,37 @@ public enum AppPresence: String, Codable, CaseIterable, Sendable {
 
 public enum CheckedItemBehavior: String, Codable, CaseIterable, Sendable { case keep, moveToBottom, delete }
 public enum ListStyle: String, Codable, CaseIterable, Sendable { case checkbox, bullet, numbered }
-public enum PaperType: String, Codable, CaseIterable, Sendable { case blank, lined, grid, dotted }
+public enum PaperType: String, Codable, CaseIterable, Sendable {
+    case blank, lines, dots, smallGrid, bigGrid
+    public var displayName: String {
+        switch self {
+        case .blank: "Blank"
+        case .lines: "Lines"
+        case .dots: "Dots"
+        case .smallGrid: "Small Grid"
+        case .bigGrid: "Large grid"
+        }
+    }
+}
+/// Paper line strength; maps to the theme's `gridSuperlight` / `gridClear` / `gridBold`.
+public enum PaperOpacity: String, Codable, CaseIterable, Sendable {
+    case subtle, clear, bold
+    public var displayName: String { rawValue.capitalized }
+}
+/// Editor text size presets (⌘+ / ⌘− step through them).
+public enum TextSize: String, Codable, CaseIterable, Sendable {
+    case xs, s, m, l, xl
+    public var displayName: String { rawValue.uppercased() }
+    public var points: CGFloat {
+        switch self {
+        case .xs: 11
+        case .s: 12.5
+        case .m: 13.5
+        case .l: 16
+        case .xl: 18
+        }
+    }
+}
 public enum TimerAlertStyle: String, Codable, CaseIterable, Sendable { case fullScreen, notification, both }
 public enum ExportDestination: String, Codable, CaseIterable, Sendable {
     case appleNotes, obsidian, bear, plainText, markdown, pdf
@@ -52,13 +83,15 @@ public extension Defaults.Keys {
     static let forceRTL = Key<Bool>("forceRTL", default: false)
 
     // Appearance
-    static let lightTheme = Key<String>("lightTheme", default: "paper")
-    static let darkTheme = Key<String>("darkTheme", default: "ink")
+    static let lightTheme = Key<String>("lightTheme", default: Theme.defaultLight.id)
+    static let darkTheme = Key<String>("darkTheme", default: Theme.defaultDark.id)
     static let paperType = Key<PaperType>("paperType", default: .blank)
-    static let paperOpacity = Key<Double>("paperOpacity", default: 1)
-    static let fontName = Key<String>("fontName", default: "")          // "" = system monospaced
-    static let fontSize = Key<Double>("fontSize", default: 15)
-    static let lineSpacing = Key<Double>("lineSpacing", default: 4)
+    static let paperOpacity = Key<PaperOpacity>("paperOpacity", default: .subtle)
+    static let fontName = Key<String>("fontName", default: "Menlo")
+    static let textSize = Key<TextSize>("textSize", default: .m)
+    static let doubleFontSize = Key<Bool>("doubleFontSize", default: false)
+    /// Points added to the 1.6× line pitch.
+    static let lineSpacing = Key<Double>("lineSpacing", default: 0)
     static let translucent = Key<Bool>("translucent", default: false)    // macOS 15+
     static let appIcon = Key<String>("appIcon", default: "default")
 
@@ -77,7 +110,10 @@ public extension Defaults.Keys {
     // Math
     static let primaryCurrency = Key<String>("primaryCurrency", default: Locale.current.currency?.identifier ?? "USD")
     static let secondaryCurrency = Key<String>("secondaryCurrency", default: "EUR")
-    static let significantDigits = Key<Int>("significantDigits", default: 6)
+    /// Decimal places shown in math results (0…7); -1 = automatic (up to 6 significant digits, zeros trimmed).
+    static let decimalPlaces = Key<Int>("decimalPlaces", default: 2)
+    /// Prefix results in the primary currency with its symbol ("$881.40" instead of "881.40").
+    static let showCurrencySymbol = Key<Bool>("showCurrencySymbol", default: false)
     static let autoUpdateRates = Key<Bool>("autoUpdateRates", default: true)
     static let preventEditingAnswers = Key<Bool>("preventEditingAnswers", default: true)
     /// Word that refers to the previous answer in math notes; `ans` and `prev` always work.

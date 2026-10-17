@@ -39,7 +39,7 @@ private final class VoidModel: ObservableObject {
 
     func recover(_ note: Note) {
         Services.store.restoreFromVoid(note.id)
-        HUD.show("Note recovered", symbol: "arrow.uturn.backward.circle.fill")
+        HUD.show("Note recovered", kind: .success)
     }
 
     func open(_ note: Note) {
@@ -54,13 +54,13 @@ private final class VoidModel: ObservableObject {
     }
 
     func emptyVoid() {
-        guard !notes.isEmpty else { HUD.show("The Void is already empty", symbol: "tornado"); return }
+        guard !notes.isEmpty else { HUD.show("The Void is already empty"); return }
         let count = notes.count
         guard Alerts.confirm("Empty The Void?",
                              info: "\(count) note\(count == 1 ? "" : "s") will be erased. There is no recovery beyond The Void.",
                              confirmTitle: "Empty The Void", destructive: true) else { return }
         for note in notes { Services.store.deletePermanently(note.id) }
-        HUD.show("The Void is empty", symbol: "tornado")
+        HUD.show("The Void is empty")
     }
 
     var retentionText: String {

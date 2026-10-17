@@ -14,16 +14,20 @@ themeAppearanceObserver), `WindowTopBar` (buttonVisibilityState, isHovered), `Cu
 "Or mouse over the top part of Antinote to click cool sci-fi buttons", "Make Antinote translucent",
 "Requires macOS 15 (Sequoia) or later.", "Translucency opacity".
 
-- A small (default 380×440) titled window with a transparent, full-size title bar; the title is hidden.
-- The top strip (28 pt) is a custom title bar. Its buttons — New Note, Split View (slots), Pin, Settings,
-  More (…) — and the traffic lights fade in while the pointer is over the strip and fade out on exit.
-- Below it: the optional slots bar, the editor area (one pane or a split), and a bottom bar.
-- Bottom bar: mode summary on the left; on the right the optional date, the position "3 / 12" and the
-  latest-note dot ("Marks the most recent note on the bottom right" → `showLatestNoteIndicator`).
-  Clicking the position jumps to the front note.
+- A small (default 337×386) titled window with a transparent, full-size title bar; the title is hidden. The note
+  fills the window and the bars float over it (see ui-reference.md §1).
+- Top bar (34 pt, hover): the traffic lights (centred 17 pt down), Settings and Search on the left, New Note and
+  Pin on the right — line-art glyphs drawn in code (`ChromeIcon`), `typeHyperLight` hover, `typeLight` pressed,
+  `accent3Main` when pinned. The strip drags the window even while hidden.
+- Bottom bar (30 pt, hover): Move to The Void on the left; the note's date ("Show note modified/created time"
+  adds the time) and position "14 of 18" in the middle; Previous, Next, Latest and Export (a menu of the export
+  destinations, Quick Export and Print) on the right.
+- Latest-note dot: 5 pt `accent1Main`, 10 pt from the bottom-right corner, on the front note only
+  (`showLatestNoteIndicator`).
 - The editor comes from `Services.editorFactory.makeEditor()`; each pane owns one editor.
 - Background = `Theme.current.background`; re-applied on appearance change, `Theme.didChange` and theme keys.
-- Translucent (`translucent`, macOS 15+ only): a behind-window visual-effect view under a theme tint.
+- Translucent (`translucent`, macOS 15+ only): a behind-window visual-effect view under the theme background at 50%.
+- `present(inWindow:)` puts a view (Search) over the whole note area; navigating to a note removes it.
 - Frame is autosaved (`setFrameAutosaveName`) in normal presence modes.
 - Closing the window hides it (the app keeps running); ⌘Q quits.
 
@@ -63,8 +67,10 @@ notes bar", "Create new notes in the ephemeral pane when in slotted view", "Swap
 - Nine slots (`Note.slot` 0…8). Rules (`SlotBoard`): assigning a note to its own slot removes it from the slot;
   assigning to an occupied slot pushes the occupant back to the deck; a note is in at most one slot.
 - ⌘1…⌘9 open slots; ⌘0 returns to the ephemeral deck. ⌃⌘1…⌃⌘9 assign the current note.
-- The slots bar (numbered chips, ∞ chip for the deck) shows when `alwaysShowSlotsBar`, when any slot is used,
-  or while a slot is open. Clicking an empty chip assigns the current note to it.
+- The slot bar is a floating capsule (55% of the width, 24 pt, 16 pt up) of nine planets, Mercury → Pluto, in
+  `typeLight` with the open slot in `accent1Main`; hovering names the planet and its note. It shows when
+  `alwaysShowSlotsBar`, for 2 s after a slot is used, and with the bottom bar when slots are in use. Clicking a
+  planet opens its slot (the open one goes back to the deck); an empty one takes the current note.
 - Split view (`shellKitSplit`): ephemeral pane + slotted pane, side by side or stacked
   (`shellKitSplitHorizontal`, "Split horizontally"), order swappable (`shellKitSwapPanes`).
 - ⌘N while a slotted note is focused creates the note in the ephemeral deck when
@@ -126,35 +132,13 @@ time a locked note was in focus. Quitting Antinote always locks them.", "Relock 
 
 ## Settings window
 
-Evidence: `SettingsTabRouter` (_selected), the *Preferences classes, strings listed per row.
-SwiftUI sidebar window; `showSettings(tab:)` routes ids/aliases (`SettingsTab(routing:)`, e.g. "advanced",
-"notes", "backups" → Storage; "keyboard", "hotkey" → Shortcuts).
-
-1. General — Show Jotter in; Global hotkey; Launch at login; Restore pin state on open; Hide when it loses
-   focus; Create a new note after (never/5/15/30/60/120/480 min); Swipe between notes; Swipe sensitivity;
-   Show latest-note indicator; Show note dates; Always show the slots bar; New notes in the ephemeral pane;
-   Split horizontally; Force right-to-left layout.
-2. Appearance — Light theme / Dark theme swatch grids (Theme.all previews); Paper type; Paper opacity
-   (disabled for blank, "Select a non-blank paper type…"); Font; Size; Line spacing; Translucent (macOS 15);
-   App icon (drawn variants + "An image of your own").
-3. Writing — Vim mode; Keep indentation on Return; Allow macOS text replacements; Detect links; Shorten links.
-4. Lists — Default list style; When an item is checked; List continuity on Return.
-5. Math — Primary / secondary currency; Significant digits; Update rates daily; Prevent editing answers;
-   Custom currency rates editor.
-6. Copy & Paste — Clean up pasted text + markdown/bullets/numbering/leading whitespace/empty lines; Copy whole
-   note when nothing selected; Cut line when nothing selected; Skip keyword; Copy items unchecked; Skip markers.
-7. Keywords — one row per mode: built-in keywords + editable extra keywords (comma separated).
-8. Timers — Alert style; Sounds; Time in menu bar; Pause on quit; Pomodoro work / break minutes.
-9. Shortcuts — global hotkey recorder; every menu shortcut (read-only list from `MenuCatalog`).
-10. Extensions — `Services.extensions.makeSettingsView()` embedded; enable + logging toggles.
-11. Privacy — currency rates, extension updates, extension APIs, note/pref/extension sync — each with what it
-    calls; Turn Everything Off; relock minutes; Relock now.
-12. Sync — three toggles, live `Services.sync.statusText`, Sync Now; Copy Encryption Key / Paste Key from Another Mac
-    (`exportKey` / `importKey`).
-13. Storage — Void retention; Backups to keep; Make backup now; Restore from backup; Open backups folder;
-    Export all notes; Export as JSON / Import JSON (`exportJSON` / `importJSON`); Reset preferences; Reset app to factory settings (destructive confirmation).
-14. Export — enabled destinations; Quick Export destination; Omit keyword; Obsidian vault.
-15. About — version, MIT license, tutorial button.
+A toolbar-tab preferences window (`NSTabViewController`, ~780 pt wide; the title is the tab name) with the
+11 tabs of ui-reference.md §5 — General, Appearance, Editor, Notes, Keywords, Shortcuts, Timer, Export,
+Extensions, Privacy, Updates — each a grouped SwiftUI form using the reference labels ("Antinote" → "Jotter").
+`showSettings(tab:)` routes ids, titles and old aliases (`SettingsTab(routing:)`: "copyPaste"/"writing"/"lists" →
+Editor, "storage"/"sync"/"backups"/"advanced" → Notes, "math" → Keywords, "timers" → Timer, "about" → Updates).
+Appearance picks themes from one grid of preview tiles with a sun (light mode) and moon (dark mode) button each.
+Jotter has no updater, so Updates shows the version and the tutorial button.
 
 ## Onboarding & icons
 
@@ -163,8 +147,10 @@ palette, slotted "first of nine"), `AppIconManager` (_style, _customIcon, applyI
 "Choose an image to use as the Antinote app icon", "The current Antinote icon.", "An image of your own.",
 "App icon updated".
 
-- First launch with an empty deck: seed short tutorial notes (own wording) demonstrating swiping, list, math,
-  sum, count, timer, code, paste and `::today`, plus one slotted note; set `onboardingCompleted`.
+- First launch with an empty deck: seed tutorial notes in the reference's teaching order (ui-reference.md §11),
+  in Jotter's own wording — welcome, math, conversions, variables, breathe, sum, avg, count, list, timer, commands,
+  screenshots, shortcuts — each ending with a "[←]" hint and using its feature live, plus one slotted note; set
+  `onboardingCompleted`.
 - App icons are drawn in code (`AppIconArt`): default, midnight, mint, sunset; "custom" uses a chosen image
   copied to `support/AppIcon.png`. Applied with `NSApp.applicationIconImage` at launch and on change.
 

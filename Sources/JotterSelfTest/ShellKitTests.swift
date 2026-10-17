@@ -95,13 +95,15 @@ func registerShellKitTests() {
 
     SelfTest.cases.append(("ShellKit.settingsRouting", {
         check(SettingsTab(routing: "general") == .general, "raw value")
-        check(SettingsTab(routing: "Copy & Paste") == .copyPaste, "title")
-        check(SettingsTab(routing: "copyPaste") == .copyPaste, "camel case")
-        check(SettingsTab(routing: "advanced") == .storage, "alias advanced")
+        check(SettingsTab(routing: "Copy & Paste") == .editor, "old tab title routes to its new home")
+        check(SettingsTab(routing: "copyPaste") == .editor, "camel case")
+        check(SettingsTab(routing: "advanced") == .notes && SettingsTab(routing: "storage") == .notes, "storage aliases")
+        check(SettingsTab(routing: "math") == .keywords && SettingsTab(routing: "about") == .updates, "moved tabs")
         check(SettingsTab(routing: "HOTKEY") == .shortcuts, "case-insensitive alias")
         check(SettingsTab(routing: nil) == nil && SettingsTab(routing: " ") == nil, "empty")
         check(SettingsTab(routing: "nonsense") == nil, "unknown")
         check(SettingsTab.allCases.allSatisfy { SettingsTab(routing: $0.title) == $0 }, "every title routes to itself")
-        check(SettingsTab.allCases.count == 15, "fifteen tabs")
+        check(SettingsTab.allCases.map(\.title) == ["General", "Appearance", "Editor", "Notes", "Keywords", "Shortcuts",
+                                                     "Timer", "Export", "Extensions", "Privacy", "Updates"], "eleven tabs in order")
     }))
 }

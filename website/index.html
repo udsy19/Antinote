@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Jotter — a scratchpad for your Mac</title>
+  <meta name="description" content="Jotter is a free, open-source scratchpad for macOS. Press ⌥A, type, and the first word turns the note into a checklist, a calculator or a timer. Your notes stay on your Mac.">
+  <meta name="theme-color" content="#1F4E47">
+  <link rel="icon" type="image/png" href="assets/icon-64.png">
+  <link rel="apple-touch-icon" href="assets/icon-256.png">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Jotter — a scratchpad for your Mac">
+  <meta property="og:description" content="Press ⌥A and type. The first word turns a note into a checklist, a calculator or a timer. Free, open source, and your notes stay on your Mac.">
+  <meta property="og:image" content="https://udsy19.github.io/Antinote/assets/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:url" content="https://udsy19.github.io/Antinote/">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wdth,wght@75..112.5,300..700&family=Schibsted+Grotesk:ital,wght@0,400..700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip" href="#keywords">Skip to the features</a>
+
+  <!-- ============ Hero: the green field and the deck ============ -->
+  <header class="field hero" id="top">
+    <nav class="wrap nav" aria-label="Main">
+      <a class="brand" href="#top"><img src="assets/icon-64.png" alt="" width="30" height="30">Jotter</a>
+      <div class="nav-links">
+        <a href="#keywords">Keywords</a>
+        <a href="#extensions">Extensions</a>
+        <a href="#privacy">Privacy</a>
+        <a href="#shortcuts">Shortcuts</a>
+        <a href="https://github.com/udsy19/Antinote">GitHub</a>
+      </div>
+      <a class="btn btn-small" href="https://github.com/udsy19/Antinote/releases/latest/download/Jotter.dmg">Download</a>
+    </nav>
+
+    <div class="wrap hero-grid">
+      <div class="hero-copy">
+        <p class="hotkey"><kbd>⌥</kbd><kbd>A</kbd><span>from anywhere on your Mac</span></p>
+        <h1>Jot first,<br>sort never.</h1>
+        <p class="lede">Jotter is a scratchpad one keystroke away. Type, and the first word turns the note into a
+          checklist, a calculator or a timer. Free, open source, and your notes stay on your Mac.</p>
+
+        <div class="install" data-copy>
+          <code><span class="prompt" aria-hidden="true">$ </span><span data-copy-text>curl -fsSL https://udsy19.github.io/Antinote/install.sh | bash</span></code>
+          <button type="button" class="copy" aria-label="Copy install command">Copy</button>
+        </div>
+        <div class="cta">
+          <a class="btn" href="https://github.com/udsy19/Antinote/releases/latest/download/Jotter.dmg">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v8.2m0 0L4.6 6.8M8 10.2l3.4-3.4M3 13.5h10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Download for Mac
+          </a>
+          <a class="btn-text" href="https://github.com/udsy19/Antinote">Read the source</a>
+        </div>
+        <p class="meta">Version 1.0.0 · macOS 14 or later · Apple silicon and Intel · MIT license</p>
+      </div>
+
+      <div class="deck" role="group" aria-label="A Jotter note in math mode, on top of other notes in the deck">
+        <div class="win back back-1" aria-hidden="true">
+          </div>
+        <div class="win back back-2" aria-hidden="true">
+          </div>
+        <figure class="win front">
+          <div class="chrome" aria-hidden="true">
+            <span class="lights"><i></i><i></i><i></i></span>
+            <span class="tools">
+              <svg viewBox="0 0 16 16"><path d="M7 3H4.5A1.5 1.5 0 0 0 3 4.5v7A1.5 1.5 0 0 0 4.5 13h7a1.5 1.5 0 0 0 1.5-1.5V9M8 8l5-5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+              <svg viewBox="0 0 16 16"><circle cx="8" cy="5.5" r="2.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 8.1V13M5 13h6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+            </span>
+          </div>
+          <div class="note type">
+            <p class="ln kw" style="--n:20;--d:.4s"><span class="t">math: Lisbon weekend</span><i class="c"></i></p>
+            <p class="ln" style="--n:9;--d:1.55s"><span class="t">nights: 3</span><i class="c"></i></p>
+            <p class="ln" style="--n:21;--d:2.2s"><span class="t">hotel: €96 × nights =</span><i class="c"></i><b class="r">€288.00</b></p>
+            <p class="ln" style="--n:20;--d:3.6s"><span class="t">food: €40 × nights =</span><i class="c"></i><b class="r">€120.00</b></p>
+            <p class="ln" style="--n:7;--d:4.95s"><span class="t">total =</span><i class="c"></i><b class="r">€408.00</b></p>
+            <p class="ln" style="--n:15;--d:5.7s"><span class="t">each: ans / 3 =</span><i class="c"></i><b class="r">€136.00</b></p>
+            <p class="ln">&nbsp;</p>
+            <p class="ln comment" style="--n:19;--d:6.9s"><span class="t">// walking to Belém</span><i class="c"></i></p>
+            <p class="ln" style="--n:12;--d:7.95s"><span class="t">7 km in mi =</span><i class="c last"></i><b class="r">4.3496 mi</b></p>
+          </div>
+          <div class="bar"><span></span><span class="pos">1 / 12<i class="latest" title="Latest note"></i></span></div>
+        </figure>
+      </div>
+    </div>
+
+    <p class="wrap gatekeeper">Downloaded the DMG? Jotter isn’t notarized, so the first launch needs
+      <b>System Settings → Privacy &amp; Security → Open Anyway</b>. The install command skips this.</p>
+  </header>
+
+  <main>
+    <!-- ============ Keyword modes ============ -->
+    <section class="band" id="keywords">
+      <div class="wrap">
+        <div class="head">
+          <h2>The first word decides what a note does.</h2>
+          <p>Every note starts as plain text. Put one keyword on the first line and it becomes a checklist, a
+            calculator or a timer. Delete the word and it’s plain text again.</p>
+        </div>
+
+        <div class="modes">
+          <figure class="mode">
+            <div class="win">
+              <div class="note">
+                <p class="ln kw">list: Saturday</p>
+                <p class="ln item done"><i class="box"></i>farmers market</p>
+                <p class="ln item done"><i class="box"></i>return library books</p>
+                <p class="ln item"><i class="box"></i>fix the bike light</p>
+                <p class="ln item"><i class="box"></i>call grandma</p>
+                <p class="ln item"><i class="box"></i>book the train to Porto</p>
+                <p class="ln item"><i class="box"></i>water the basil</p>
+                <p class="ln item"><i class="box"></i>pick up the dry cleaning</p>
+              </div>
+              <div class="bar"><span></span><span class="pos">2 / 12</span></div>
+            </div>
+            <figcaption>
+              <p class="kws"><code>list</code><code>todo</code><code>checklist</code><code>tasks</code></p>
+              <p>Every line gets a checkbox. Click to tick it, or press <kbd>⇧⌘M</kbd>. Return starts the next item.</p>
+            </figcaption>
+          </figure>
+
+          <figure class="mode">
+            <div class="win">
+              <div class="note">
+                <p class="ln kw">math</p>
+                <p class="ln">89 miles to km = <b class="r">143.232 km</b></p>
+                <p class="ln">5 ft 3 in to cm = <b class="r">160.02 cm</b></p>
+                <p class="ln">100 F to C = <b class="r">37.7778°C</b></p>
+                <p class="ln">$200 - 25% = <b class="r">$150.00</b></p>
+                <p class="ln">20% of 80 = <b class="r">16</b></p>
+                <p class="ln">$32 USD to JPY = <b class="r">¥4,800</b></p>
+                <p class="ln">sqrt(16) + 2^10 = <b class="r">1,028</b></p>
+                <p class="ln">1 cup in ml = <b class="r">236.588 ml</b></p>
+                <p class="ln">3 m * 4 m = <b class="r">12 m²</b></p>
+                <p class="ln">2 weeks in days = <b class="r">14 days</b></p>
+              </div>
+              <div class="bar"><span></span><span class="pos">3 / 12</span></div>
+            </div>
+            <figcaption>
+              <p class="kws"><code>math</code><code>calc</code></p>
+              <p>Lines ending in <code>=</code> get answered. Units, currencies, crypto, percentages and variables.</p>
+            </figcaption>
+          </figure>
+
+          <figure class="mode">
+            <div class="win">
+              <div class="note">
+                <p class="ln kw">sum: splitting groceries</p>
+                <p class="ln">bread $4.20</p>
+                <p class="ln">cheese $11.50</p>
+                <p class="ln">olive oil $9.80</p>
+                <p class="ln comment">// the wine is on Sam</p>
+                <p class="ln">tomatoes $3.25</p>
+                <p class="ln">pasta $3.40</p>
+                <p class="ln">lemons $2.10</p>
+              </div>
+              <div class="bar"><span class="sum">Total: $34.25</span><span class="pos">4 / 12</span></div>
+            </div>
+            <figcaption>
+              <p class="kws"><code>sum</code><code>avg</code><code>count</code></p>
+              <p>Adds up every number below it, even inside sentences. <code>avg</code> averages them and
+                <code>count</code> tallies lines, words and characters.</p>
+            </figcaption>
+          </figure>
+
+          <figure class="mode">
+            <div class="win">
+              <div class="gutter" aria-hidden="true"><span class="clock"><b data-mm>18</b><b data-ss>42</b></span><span class="track"><i data-fill style="height:25%"></i></span></div>
+              <div class="note">
+                <p class="ln kw">timer pomo</p>
+                <p class="ln">Chapter 3 rewrite</p>
+                <p class="ln">&nbsp;</p>
+                <p class="ln">tighten the intro</p>
+                <p class="ln">move the chart up</p>
+                <p class="ln">cut the second example</p>
+                <p class="ln">check the citations</p>
+                <p class="ln">send to Maya by 6</p>
+              </div>
+              <div class="bar"><span class="sum" data-status>18:42 · work 2</span><span class="pos">5 / 12</span></div>
+            </div>
+            <figcaption>
+              <p class="kws"><code>timer</code><code>stopwatch</code><code>pomodoro</code></p>
+              <p><code>timer 5</code> counts down, <code>timer</code> alone is a stopwatch, <code>timer pomo</code> runs
+                25/5 rounds and <code>timer breathe</code> slows you down.</p>
+            </figcaption>
+          </figure>
+
+          <figure class="mode">
+            <div class="win">
+              <div class="note">
+                <p class="ln kw">code bash</p>
+                <div class="code">
+                  <p class="ln"><span class="tk-c"># resize every png</span></p>
+                  <p class="ln"><span class="tk-k">for</span> f <span class="tk-k">in</span> *.png; <span class="tk-k">do</span></p>
+                  <p class="ln">  sips -Z <span class="tk-n">1200</span> <span class="tk-s">"$f"</span></p>
+                  <p class="ln"><span class="tk-k">done</span></p>
+                  <p class="ln">&nbsp;</p>
+                  <p class="ln"><span class="tk-c"># five newest downloads</span></p>
+                  <p class="ln">ls -t ~/Downloads | head -<span class="tk-n">5</span></p>
+                </div>
+              </div>
+              <div class="bar"><span></span><span class="pos">6 / 12</span></div>
+            </div>
+            <figcaption>
+              <p class="kws"><code>code</code><code>snippet</code></p>
+              <p>Highlights Swift, Python, JavaScript, Go, Rust, shell, SQL and more. Pasted code stays exactly as you copied it.</p>
+            </figcaption>
+          </figure>
+
+          <figure class="mode">
+            <div class="win">
+              <div class="note">
+                <p class="ln kw">paste</p>
+                <p class="ln"><u>github.com/…/pull/42</u></p>
+                <p class="ln">“Ship small, ship often.”</p>
+                <p class="ln">milk, eggs, coffee filters</p>
+                <p class="ln">Gate B32, boarding 18:05</p>
+                <p class="ln"><u>apple.com/…/macos</u></p>
+              </div>
+              <p class="toast">AutoPaste started. Press ESC to stop.</p>
+            </div>
+            <figcaption>
+              <p class="kws"><code>paste</code><code>autopaste</code></p>
+              <p>Press Return on the first line and everything you copy lands here, cleaned up, until you press Esc.</p>
+            </figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ Extensions ============ -->
+    <section class="band band-alt" id="extensions">
+      <div class="wrap split">
+        <div class="split-copy">
+          <h2>Two colons, and a line runs a command.</h2>
+          <p>Type <code>::</code> anywhere to pick from the built-in extensions, then press Return. They’re small
+            JavaScript files you can read, change, or install from GitHub.</p>
+          <dl class="cmds">
+            <div><dt>::today</dt><dd>October 17, 2026</dd></div>
+            <div><dt>::today(7, eu)</dt><dd>24/10/2026</dd></div>
+            <div><dt>::workday(3)</dt><dd>October 21, 2026</dd></div>
+            <div><dt>::tip(120, 20, 4)</dt><dd>Tip: 24.00 · Total: 144.00 · Each: 36.00</dd></div>
+            <div><dt>::pick(pizza, sushi, tacos)</dt><dd>sushi</dd></div>
+            <div><dt>::sort · ::dedupe · ::trim</dt><dd>Tidy the lines of a note</dd></div>
+            <div><dt>::format · ::replace_regex</dt><dd>Pretty-print JSON, find and replace with a pattern</dd></div>
+            <div><dt>::meeting(Design review)</dt><dd>Meeting notes titled “Design review”</dd></div>
+            <div><dt>::ask · ::summarize · ::translate</dt><dd>Your own OpenAI, Anthropic, Gemini or OpenRouter key, or a local Ollama model</dd></div>
+          </dl>
+          <p class="fine">Extensions that call the internet only work after you switch on <b>Extension APIs</b>, and only
+            at the addresses they declare.</p>
+        </div>
+
+        <figure class="win ext-win">
+          <div class="note">
+            <p class="ln">standup</p>
+            <p class="ln">October 17, 2026</p>
+            <p class="ln item bullet"><i class="dot"></i>shipped the export menu</p>
+            <p class="ln item bullet"><i class="dot"></i>reviewed Maya’s pull request</p>
+            <p class="ln item bullet"><i class="dot"></i>demo on <span class="typed">::t</span><i class="c on"></i></p>
+            <p class="ln item bullet"><i class="dot"></i>blocked on the icon files</p>
+          </div>
+          <div class="complete" role="presentation">
+            <p class="sel"><b>today</b><span>Insert today’s date</span></p>
+            <p><b>tomorrow</b><span>Insert tomorrow’s date</span></p>
+            <p><b>tip</b><span>Tip and total for a bill</span></p>
+            <p><b>title</b><span>Capitalize Every Word</span></p>
+          </div>
+          <div class="bar"><span></span><span class="pos">7 / 12</span></div>
+        </figure>
+      </div>
+    </section>
+
+    <!-- ============ Everything else ============ -->
+    <section class="band" id="more">
+      <div class="wrap">
+        <div class="head">
+          <h2>Small app, deep pockets.</h2>
+          <p>No folders and no titles to think up. Notes pile into a deck, newest on top, and everything else stays
+            out of the way until you need it.</p>
+        </div>
+        <dl class="more">
+          <div><dt>The deck</dt><dd>Swipe with two fingers or press <kbd>⌘[</kbd> <kbd>⌘]</kbd>. Swipe past the newest note for a fresh one; empty notes tidy themselves away.</dd></div>
+          <div><dt>Nine slots</dt><dd>Pin the notes you keep coming back to on <kbd>⌘1…9</kbd>. Open one beside the deck in split view.</dd></div>
+          <div><dt>The Void</dt><dd>Deleted notes drift here for 30 days, or as long as you choose, before they’re gone. Daily backups too.</dd></div>
+          <div><dt>Locked notes</dt><dd>Lock a note behind Touch ID or your password. It locks again a few minutes after you leave it.</dd></div>
+          <div><dt>Export</dt><dd>Send a note to Apple Notes, Obsidian or Bear, or save it as Markdown, text or PDF.</dd></div>
+          <div><dt>Encrypted sync</dt><dd>Optional. Notes are encrypted on your Mac, then synced through your own iCloud Drive.</dd></div>
+          <div><dt>Palette &amp; search</dt><dd><kbd>⌘K</kbd> runs any command, <kbd>⇧⌘F</kbd> searches every note, archived ones included.</dd></div>
+          <div><dt>Themes &amp; paper</dt><dd>Built-in light and dark themes or your own, lined, dotted or grid paper, and a translucent window.</dd></div>
+          <div><dt>Where it lives</dt><dd>Dock, menu bar, a drop-down under the menu bar, or nowhere but the hotkey.</dd></div>
+          <div><dt>Vim mode</dt><dd>Normal, Insert and Visual modes with counts, motions and operators.</dd></div>
+          <div><dt>Text from images</dt><dd>Drop a screenshot onto a note and its text is typed in for you, recognised on-device.</dd></div>
+          <div><dt>jotter://</dt><dd>Create, append to and open notes from Shortcuts, Raycast, Alfred or the shell.</dd></div>
+        </dl>
+      </div>
+    </section>
+
+    <!-- ============ Privacy ============ -->
+    <section class="field band privacy" id="privacy">
+      <div class="wrap split">
+        <div class="split-copy">
+          <h2>Your notes stay on&nbsp;your&nbsp;Mac.</h2>
+          <p>Jotter is a local app. There’s no account, no analytics and no server. Your notes never leave your Mac
+            unless you turn on a feature that needs the network, and every one of those has its own switch.</p>
+          <ul class="facts">
+            <li>Notes live in one SQLite file in your Library folder.</li>
+            <li>Sync encrypts every note on your Mac before it reaches iCloud Drive.</li>
+            <li>Extensions reach only the URLs they declare, with API keys you grant them.</li>
+            <li>Currency rates are the only switch that starts on. It downloads today’s rates and sends nothing of yours.</li>
+          </ul>
+          <a class="btn-text on-field" href="https://github.com/udsy19/Antinote/blob/main/PRIVACY.md">Read the privacy policy</a>
+        </div>
+
+        <figure class="settings" aria-label="Jotter’s Privacy settings: currency rates on, all other network features off">
+          <div class="settings-top"><span class="lights" aria-hidden="true"><i></i><i></i><i></i></span><b>Privacy</b></div>
+          <div class="settings-body">
+            <p class="group">Allow these network calls</p>
+            <p class="caption">Jotter works fully offline. Each switch below is the only way the feature next to it reaches the network.</p>
+            <div class="row"><div><b>Currency rates</b><span>Fetches daily exchange rates for currency conversions in math notes.</span></div><i class="switch on" role="img" aria-label="On"></i></div>
+            <div class="row"><div><b>Extension updates</b><span>Checks the community extensions repository on GitHub for new extensions and updates.</span></div><i class="switch" role="img" aria-label="Off"></i></div>
+            <div class="row"><div><b>Extension APIs</b><span>Lets extensions call their own web APIs (only the ones they declare).</span></div><i class="switch" role="img" aria-label="Off"></i></div>
+            <div class="row"><div><b>Sync notes</b><span>Writes encrypted notes to your own iCloud Drive to keep your Macs in step.</span></div><i class="switch" role="img" aria-label="Off"></i></div>
+            <div class="row"><div><b>Sync preferences</b><span>Keeps settings, keywords and themes the same on your other Macs.</span></div><i class="switch" role="img" aria-label="Off"></i></div>
+            <p class="off"><span class="pill">Turn Everything Off</span></p>
+          </div>
+        </figure>
+      </div>
+    </section>
+
+    <!-- ============ Shortcuts ============ -->
+    <section class="band" id="shortcuts">
+      <div class="wrap">
+        <div class="head">
+          <h2>Hands stay on the keys.</h2>
+          <p>Every menu command has a shortcut, and you can choose your own global hotkey in Settings → General.</p>
+        </div>
+        <div class="keys">
+          <div class="keygroup">
+            <h3>Get around</h3>
+            <p><span>Show or hide Jotter</span><kbd>⌥A</kbd></p>
+            <p><span>New note</span><kbd>⌘N</kbd></p>
+            <p><span>Previous · next note</span><kbd>⌘[</kbd><kbd>⌘]</kbd></p>
+            <p><span>Newest note</span><kbd>⇧⌘L</kbd></p>
+            <p><span>Open slot 1–9 · back to the deck</span><kbd>⌘1…9</kbd><kbd>⌘0</kbd></p>
+            <p><span>Put the note in a slot</span><kbd>⌃⌘1…9</kbd></p>
+          </div>
+          <div class="keygroup">
+            <h3>Find</h3>
+            <p><span>Command palette</span><kbd>⌘K</kbd></p>
+            <p><span>Search all notes</span><kbd>⇧⌘F</kbd></p>
+            <p><span>Find · find &amp; replace</span><kbd>⌘F</kbd><kbd>⌥⌘F</kbd></p>
+            <p><span>Extension autocomplete</span><kbd>⌃Space</kbd></p>
+          </div>
+          <div class="keygroup">
+            <h3>Write</h3>
+            <p><span>Toggle checklist item</span><kbd>⇧⌘M</kbd></p>
+            <p><span>Cycle list style</span><kbd>⌃⇧⌘M</kbd></p>
+            <p><span>Move line up · down</span><kbd>⌥⌘↑</kbd><kbd>⌥⌘↓</kbd></p>
+            <p><span>Duplicate line</span><kbd>⌥⇧⌘↓</kbd></p>
+            <p><span>Strikethrough</span><kbd>⇧⌘X</kbd></p>
+            <p><span>Copy the whole note</span><kbd>⌥⌘C</kbd></p>
+          </div>
+          <div class="keygroup">
+            <h3>Keep &amp; let go</h3>
+            <p><span>Move to The Void · recover</span><kbd>⌘⌫</kbd><kbd>⇧⌘⌫</kbd></p>
+            <p><span>Lock note</span><kbd>⌃⌘L</kbd></p>
+            <p><span>Archive</span><kbd>⇧⌘A</kbd></p>
+            <p><span>Quick Export</span><kbd>⇧⌘E</kbd></p>
+            <p><span>Pin on top</span><kbd>⇧⌘P</kbd></p>
+            <p><span>Split view</span><kbd>⌃⌘S</kbd></p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ FAQ ============ -->
+    <section class="band band-alt" id="faq">
+      <div class="wrap faq">
+        <h2>Questions</h2>
+        <div class="qa">
+          <details open>
+            <summary>Is it really free?</summary>
+            <p>Yes. Jotter is MIT-licensed open source. There’s no account, no subscription and no pro tier.</p>
+          </details>
+          <details>
+            <summary>Why does macOS say Jotter can’t be opened?</summary>
+            <p>Jotter isn’t notarized by Apple. The first time you open a copy downloaded in your browser, go to
+              <b>System Settings → Privacy &amp; Security</b>, scroll down and click <b>Open Anyway</b>. You only do this
+              once, and the one-line installer doesn’t need it.</p>
+          </details>
+          <details>
+            <summary>Does anything go online?</summary>
+            <p>Only what you allow in <b>Settings → Privacy</b>. Currency rates start on so currency math works right
+              away; extension updates, extension APIs and sync start off. <b>Turn Everything Off</b> makes Jotter fully
+              offline.</p>
+          </details>
+          <details>
+            <summary>How do I use it on two Macs?</summary>
+            <p>Turn on <b>Sync notes</b> on both. Notes are encrypted on your Mac and synced through your own iCloud
+              Drive. The key travels in iCloud Keychain, or you can copy it across by hand.</p>
+          </details>
+          <details>
+            <summary>Can I use an AI model?</summary>
+            <p>The bundled <code>llm</code> extension adds <code>::ask</code>, <code>::summarize</code>,
+              <code>::rewrite</code> and <code>::translate</code>. Bring your own OpenAI, Anthropic, Gemini or OpenRouter
+              key, or point it at a local Ollama model. It does nothing until you switch on <b>Extension APIs</b>.</p>
+          </details>
+          <details>
+            <summary>Can I get my notes out?</summary>
+            <p>Any time. Export a note to Apple Notes, Obsidian, Bear, Markdown, text or PDF, or export every note at
+              once as Markdown files plus a JSON file that another Mac can import.</p>
+          </details>
+          <details>
+            <summary>What do I need?</summary>
+            <p>macOS 14 Sonoma or later, on Apple silicon or Intel. Run the install command again to update, or add
+              <code>-s -- --uninstall</code> after <code>bash</code> to remove Jotter.</p>
+          </details>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============ Footer ============ -->
+  <footer class="field foot">
+    <div class="wrap">
+      <div class="foot-cta">
+        <p class="foot-title">Press <kbd>⌥</kbd><kbd>A</kbd> and write something down.</p>
+        <div class="install" data-copy>
+          <code><span class="prompt" aria-hidden="true">$ </span><span data-copy-text>curl -fsSL https://udsy19.github.io/Antinote/install.sh | bash</span></code>
+          <button type="button" class="copy" aria-label="Copy install command">Copy</button>
+        </div>
+        <a class="btn" href="https://github.com/udsy19/Antinote/releases/latest/download/Jotter.dmg">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v8.2m0 0L4.6 6.8M8 10.2l3.4-3.4M3 13.5h10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Download for Mac
+        </a>
+      </div>
+      <div class="foot-meta">
+        <p class="foot-brand"><img src="assets/icon-64.png" alt="" width="24" height="24">Jotter <span>MIT © 2026 Udaya Vijay Anand</span></p>
+        <p class="foot-links">
+          <a href="https://github.com/udsy19/Antinote">Source</a>
+          <a href="https://github.com/udsy19/Antinote/releases">Releases</a>
+          <a href="https://github.com/udsy19/Antinote/blob/main/CHANGELOG.md">Changelog</a>
+          <a href="https://github.com/udsy19/Antinote/blob/main/PRIVACY.md">Privacy</a>
+          <a href="https://github.com/udsy19/Antinote/issues">Report a bug</a>
+        </p>
+        <p class="credit">Jotter is an independent project inspired by Antinote. It isn’t affiliated with Antinote and
+          contains none of its code.</p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Copy buttons for the install command.
+    document.querySelectorAll('[data-copy]').forEach(function (box) {
+      var button = box.querySelector('.copy');
+      var text = box.querySelector('[data-copy-text]').textContent;
+      button.addEventListener('click', function () {
+        var done = function () {
+          button.textContent = 'Copied';
+          setTimeout(function () { button.textContent = 'Copy'; }, 1600);
+        };
+        if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, function () {});
+      });
+    });
+
+    // The pomodoro note counts down for real: 25-minute work round, 18:42 left when the page opens.
+    (function () {
+      var mm = document.querySelector('[data-mm]'), ss = document.querySelector('[data-ss]');
+      var fill = document.querySelector('[data-fill]'), status = document.querySelector('[data-status]');
+      if (!mm || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      var left = 18 * 60 + 42, total = 25 * 60;
+      var two = function (n) { return (n < 10 ? '0' : '') + n; };
+      setInterval(function () {
+        left = left > 0 ? left - 1 : total;
+        var m = two(Math.floor(left / 60)), s = two(left % 60);
+        mm.textContent = m; ss.textContent = s;
+        fill.style.height = (100 * (total - left) / total).toFixed(1) + '%';
+        status.textContent = m + ':' + s + ' · work 2';
+      }, 1000);
+    })();
+  </script>
+</body>
+</html>

@@ -15,11 +15,17 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
     private var slotPane: NotePane!
     private var titleBar: TitleBarView!
     private var slotsBar: SlotsBarView!
-    private var slotsBarHeight: NSLayoutConstraint!
+    private var slotsBarBottom: NSLayoutConstraint!
     private var bottomBar: BottomBarView!
+    private let latestDot = NSView()
+    /// Shows the slot bar for a moment after a slot is used.
+    private var slotsBarFade: DispatchWorkItem?
+    private var slotsBarFlash = false
     private let paneContainer = NSView()
     private let effectView = NSVisualEffectView()
     private let tintView = NSView()
+    /// A view shown over the note area (`present(inWindow:)`), e.g. Search.
+    private var presented: NSView?
 
     /// Slot shown in the single-pane slotted view or in the slotted half of the split.
     private var openSlot: Int?
@@ -55,6 +61,26 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
 
     @objc private func handleReopen(_ event: NSAppleEventDescriptor, reply: NSAppleEventDescriptor) { showMain() }
 
+    /// Builds the window without showing it (offscreen renders): the front note, or `slot`, with the hover bars
+    /// pinned visible when `revealed`. Returns the window's frame view.
+    func prepareForPreview(revealed: Bool, slot: Int?) -> NSView {
+        if !launched {
+            launched = true
+            buildWindow()
+            restoreCurrentNote()
+        }
+        if let slot { openSlot(slot) }
+        applyTheme()
+        titleBar.pinnedVisible = revealed
+        bottomBar.pinnedVisible = revealed
+        window.trafficLights.forEach { $0.alphaValue = revealed ? 1 : 0 }
+        refreshChrome()
+        let frame = window.contentView?.superview ?? window.contentView!
+        frame.layoutSubtreeIfNeeded()
+        window.alignTrafficLights()
+        return frame
+    }
+
     private func buildWindow() {
         let root = NSView()
         titleBar = TitleBarView(target: self)
@@ -64,33 +90,41 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         slotsBar = SlotsBarView()
         slotsBar.onSelect = { [weak self] slot in self?.slotChipClicked(slot) }
         bottomBar = BottomBarView(target: self)
+        bottomBar.onHoverChange = { [weak self] _ in self?.refreshChrome() }
         effectView.material = .underWindowBackground
         effectView.blendingMode = .behindWindow
         effectView.state = .followsWindowActiveState
         tintView.wantsLayer = true
+        latestDot.wantsLayer = true
+        latestDot.layer?.cornerRadius = 2.5
 
-        for v in [effectView, tintView, titleBar, slotsBar, paneContainer, bottomBar] as [NSView] {
+        // The note fills the window; the bars float over it.
+        for v in [effectView, tintView, paneContainer, latestDot, bottomBar, slotsBar, titleBar] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
             root.addSubview(v)
         }
-        slotsBarHeight = slotsBar.heightAnchor.constraint(equalToConstant: 0)
         var constraints: [NSLayoutConstraint] = []
-        for v in [effectView, tintView] {
+        for v in [effectView, tintView, paneContainer] as [NSView] {
             constraints += [v.leadingAnchor.constraint(equalTo: root.leadingAnchor), v.trailingAnchor.constraint(equalTo: root.trailingAnchor),
                             v.topAnchor.constraint(equalTo: root.topAnchor), v.bottomAnchor.constraint(equalTo: root.bottomAnchor)]
         }
-        for v in [titleBar, slotsBar, paneContainer, bottomBar] as [NSView] {
+        for v in [titleBar, bottomBar] as [NSView] {
             constraints += [v.leadingAnchor.constraint(equalTo: root.leadingAnchor), v.trailingAnchor.constraint(equalTo: root.trailingAnchor)]
         }
+        slotsBarBottom = slotsBar.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -SlotsBarView.bottomInset)
         constraints += [
             titleBar.topAnchor.constraint(equalTo: root.topAnchor),
             titleBar.heightAnchor.constraint(equalToConstant: TitleBarView.height),
-            slotsBar.topAnchor.constraint(equalTo: titleBar.bottomAnchor),
-            slotsBarHeight,
-            paneContainer.topAnchor.constraint(equalTo: slotsBar.bottomAnchor),
-            paneContainer.bottomAnchor.constraint(equalTo: bottomBar.topAnchor),
             bottomBar.heightAnchor.constraint(equalToConstant: BottomBarView.height),
             bottomBar.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            slotsBar.centerXAnchor.constraint(equalTo: root.centerXAnchor),
+            slotsBar.widthAnchor.constraint(equalTo: root.widthAnchor, multiplier: 0.55),
+            slotsBar.heightAnchor.constraint(equalToConstant: SlotsBarView.height),
+            slotsBarBottom,
+            latestDot.widthAnchor.constraint(equalToConstant: 5),
+            latestDot.heightAnchor.constraint(equalToConstant: 5),
+            latestDot.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -10),
+            latestDot.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -10),
         ]
         NSLayoutConstraint.activate(constraints)
         window.contentView = root
@@ -100,6 +134,7 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         ephemeralPane = makePane(.ephemeral)
         slotPane = makePane(.slot)
         if !window.setFrameUsingName("JotterMainWindow") { window.center() }
+        window.alignTrafficLights()
         layoutPanes()
         applyTheme()
     }
@@ -179,6 +214,7 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         Presence.shared.positionDropdown(window)
         NSApp.activate()
         window.makeKeyAndOrderFront(nil)
+        window.alignTrafficLights()
         focusActive()
     }
 
@@ -194,6 +230,19 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
 
     func showSettings(tab: String?) {
         SettingsWindow.shared.show(tab: SettingsTab(routing: tab))
+    }
+
+    func present(inWindow view: NSView?) {
+        presented?.removeFromSuperview()
+        presented = view
+        guard let view, let root = window.contentView else { focusActive(); return }
+        view.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(view, positioned: .below, relativeTo: latestDot)
+        NSLayoutConstraint.activate([
+            view.leadingAnchor.constraint(equalTo: root.leadingAnchor), view.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            view.topAnchor.constraint(equalTo: root.topAnchor), view.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+        ])
+        if !window.isVisible { showMain() }
     }
 
     func hideMain() {
@@ -238,7 +287,7 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
               note.slot == nil, !note.isLocked, DeckNavigator.isBlank(note.content) else { return }
         guard store.deleteIfEmpty(old) else { return }
         pane.clear()
-        HUD.show("Empty note deleted", symbol: "trash")
+        HUD.show("Empty note deleted")
     }
 
     private func showEphemeral(_ id: UUID) {
@@ -267,17 +316,36 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
             let used = board().occupants.keys.sorted()
             guard let i = used.firstIndex(of: current) else { return }
             let j = direction == .previous ? i - 1 : i + 1
-            if used.indices.contains(j) { openSlot(used[j]) } else { HUD.show("No more slotted notes", symbol: "square.grid.3x3") }
+            if used.indices.contains(j) { openSlot(used[j]); slideIn(direction) } else { HUD.show("No more slotted notes") }
             return
         }
         let deck = ephemeralDeck()
         let index = deck.firstIndex { $0.id == ephemeralPane.noteID } ?? 0
         let blank = ephemeralPane.noteID.flatMap(freshNote).map { DeckNavigator.isBlank($0.content) } ?? true
         switch DeckNavigator.step(from: index, count: deck.count, direction: direction, currentIsEmpty: blank) {
-        case .show(let i): showEphemeral(deck[i].id)
-        case .createNew: createNote(); HUD.show("New note created", symbol: "square.and.pencil")
-        case .stay(let reason): if let reason { HUD.show(reason, symbol: "arrow.left.and.right") }
+        case .show(let i): showEphemeral(deck[i].id); slideIn(direction)
+        case .createNew: createNote(); slideIn(direction); HUD.show("New note created")
+        case .stay(let reason): if let reason { HUD.show(reason) }
         }
+    }
+
+    /// The arriving note slides ~9 pt in from the side it came from while fading in (220 ms, ease-out); the page
+    /// itself stays put.
+    private func slideIn(_ direction: SwipeDirection) {
+        let view = pane(activeRole)
+        view.wantsLayer = true
+        guard let layer = view.layer else { return }
+        let shift = CABasicAnimation(keyPath: "transform.translation.x")
+        shift.fromValue = direction == .previous ? -9 : 9
+        shift.toValue = 0
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = 0
+        fade.toValue = 1
+        let group = CAAnimationGroup()
+        group.animations = [shift, fade]
+        group.duration = 0.22
+        group.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        layer.add(group, forKey: "slideIn")
     }
 
     private func startFreshIfInactive() {
@@ -302,7 +370,7 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
 
     func openSlot(_ slot: Int) {
         guard let note = slotNote(slot) else {
-            HUD.show("Slot \(slot + 1) is empty — ⌃⌘\(slot + 1) puts this note there", symbol: "square.dashed")
+            HUD.show("Slot \(slot + 1) is empty — ⌃⌘\(slot + 1) puts this note there")
             return
         }
         let wasOpen = openSlot != nil
@@ -310,6 +378,7 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         slotPane.show(note, locked: isLockedOut(note))
         if !isSplit && !wasOpen { layoutPanes() }
         afterNavigation()
+        flashSlotsBar()
         if !isSplit || slotPane.window != nil { window.makeFirstResponder(slotPane.editor.view) }
         focusActive()
     }
@@ -318,11 +387,13 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         guard openSlot != nil, !isSplit else { focusActive(); return }
         openSlot = nil
         layoutPanes()
+        flashSlotsBar()
         if ephemeralPane.noteID == nil { showFrontEphemeral() } else { afterNavigation() }
     }
 
-    private func slotChipClicked(_ slot: Int?) {
-        guard let slot else { showDeck(); return }
+    /// A planet click opens its slot (the open one goes back to the deck); an empty slot takes the current note.
+    private func slotChipClicked(_ slot: Int) {
+        if activeRole == .slot, openSlot == slot, !isSplit { showDeck(); return }
         if slotNote(slot) != nil { openSlot(slot) } else { assign(toSlot: slot) }
     }
 
@@ -330,7 +401,7 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         guard let id = currentNoteID else { return }
         var b = board()
         let changes = b.assign(id, to: slot)
-        guard !changes.isEmpty else { HUD.show("Slot not available", symbol: "xmark.circle"); return }
+        guard !changes.isEmpty else { HUD.show("Slot not available", kind: .warning); return }
         for change in changes { store.setSlot(change.slot, for: change.id) }
         guard let note = store.note(id) else { return }
         if let s = note.slot {
@@ -338,13 +409,13 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
             slotPane.show(note, locked: isLockedOut(note))
             if ephemeralPane.noteID == id { ephemeralPane.clear(); showFrontEphemeral() }
             if !isSplit { openSlot = s; layoutPanes() }
-            HUD.show("Moved to slot \(s + 1)", symbol: "square.grid.3x3.fill")
+            HUD.show("Moved to slot \(s + 1)")
         } else {
             if slotPane.noteID == id { slotPane.clear(); openSlot = nil }
             if isSplit && b.isEmpty { Defaults[.shellKitSplit] = false }
             showEphemeral(id)
             layoutPanes()
-            HUD.show("Removed from slot", symbol: "square.dashed")
+            HUD.show("Removed from slot")
         }
         afterNavigation()
     }
@@ -355,7 +426,7 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         if isSplit, openSlot == nil {
             guard let first = board().occupants.keys.min() else {
                 Defaults[.shellKitSplit] = false
-                HUD.show("No slotted notes yet", symbol: "square.dashed")
+                HUD.show("No slotted notes yet")
                 return
             }
             openSlot(first)
@@ -436,6 +507,7 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
     }
 
     private func afterNavigation() {
+        if presented != nil { present(inWindow: nil) }
         relock.setFocused(isFocusedOnUnlockedLockedNote, at: Date())
         refreshChrome()
         focusActive()
@@ -457,52 +529,67 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         let b = board()
         var titles: [Int: String] = [:]
         for note in store.deck where note.slot != nil { titles[note.slot!] = note.isLocked ? "Locked note" : note.title }
-        let showBar = Defaults[.alwaysShowSlotsBar] || !b.isEmpty || openSlot != nil
-        slotsBar.isHidden = !showBar
-        slotsBarHeight.constant = showBar ? SlotsBarView.height : 0
-        slotsBar.update(titles: titles, open: activeRole == .slot ? openSlot : nil, theme: theme)
-
         let role = activeRole
+        slotsBar.update(titles: titles, open: role == .slot ? openSlot : nil, theme: theme)
+        let slotsInUse = !b.isEmpty || openSlot != nil
+        let showSlots = Defaults[.alwaysShowSlotsBar] || slotsBarFlash || (bottomBar.isRevealed && slotsInUse)
+        slotsBar.isShown = showSlots
+        slotsBarBottom.constant = bottomBar.isRevealed ? -(BottomBarView.height + 6) : -SlotsBarView.bottomInset
+
         let id = pane(role).noteID
         let note = id.flatMap { store.note($0) }
-        var position = ""
+        var parts: [String] = []
         var latest = false
+        if let note {
+            if analyses[role]?.mode == .timer, let status = Services.timers?.status(noteID: note.id) {
+                parts.append(status)
+            } else {
+                let formatter = Defaults[.showNoteDates] ? Self.dateTimeFormatter : Self.dateFormatter
+                parts.append(formatter.string(from: note.modified))
+            }
+        }
         if role == .slot, let slot = openSlot {
-            position = "Slot \(slot + 1)"
+            parts.append(Planet(rawValue: slot)?.name ?? "Slot \(slot + 1)")
         } else {
             let deck = ephemeralDeck()
             if let i = deck.firstIndex(where: { $0.id == id }) {
-                position = "\(i + 1) / \(deck.count)"
+                parts.append("\(i + 1) of \(deck.count)")
                 latest = i == 0
             }
         }
-        if Defaults[.showNoteDates], let note { position = Self.dateFormatter.string(from: note.modified) + "  ·  " + position }
-        bottomBar.update(summary: summaryText(note: note, role: role), position: position, latest: latest, theme: theme)
+        if pane(role).isShowingLock { parts.append("Locked") } else if note?.isReadOnly == true { parts.append("Read-only") }
+        bottomBar.update(text: parts.joined(separator: "  ·  "), theme: theme)
+        latestDot.isHidden = !(latest && Defaults[.showLatestNoteIndicator]) || bottomBar.isRevealed
+        latestDot.layer?.backgroundColor = NSColor(hex: theme.accent1Main).cgColor
         titleBar.setPinned(Defaults[.pinOnTop])
     }
 
-    private func summaryText(note: Note?, role: Role) -> String {
-        guard let note else { return "" }
-        if pane(role).isShowingLock { return "Locked" }
-        var parts: [String] = []
-        if let analysis = analyses[role] {
-            if analysis.mode == .timer, let status = Services.timers?.status(noteID: note.id) {
-                parts.append(status)
-            } else if let summary = analysis.summary {
-                parts.append(summary)
-            } else if analysis.mode != .plain {
-                parts.append(analysis.mode.displayName)
+    /// Shows the slot bar for two seconds after a slot is used.
+    private func flashSlotsBar() {
+        slotsBarFade?.cancel()
+        slotsBarFlash = true
+        refreshChrome()
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                self?.slotsBarFlash = false
+                self?.refreshChrome()
             }
         }
-        if note.isReadOnly { parts.append("Read-only") }
-        return parts.joined(separator: "  ·  ")
+        slotsBarFade = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: work)
     }
 
     private static let dateFormatter: DateFormatter = {
         let f = DateFormatter()
-        f.dateStyle = .short
+        f.dateStyle = .medium
+        f.timeStyle = .none
+        return f
+    }()
+
+    private static let dateTimeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .medium
         f.timeStyle = .short
-        f.doesRelativeDateFormatting = true
         return f
     }()
 
@@ -523,8 +610,9 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         window.isOpaque = !translucent
         window.backgroundColor = translucent ? .clear : background
         effectView.isHidden = !translucent
-        tintView.layer?.backgroundColor = background.withAlphaComponent(translucent ? 0.55 : 1).cgColor
+        tintView.layer?.backgroundColor = background.withAlphaComponent(translucent ? 0.5 : 1).cgColor
         titleBar.apply(theme: theme)
+        window.alignTrafficLights()
         ephemeralPane.apply(theme: theme)
         slotPane.apply(theme: theme)
         refreshChrome()
@@ -572,7 +660,7 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
     func relockAll() {
         relock.relockAll()
         rerenderPanes()
-        HUD.show("Locked notes are locked again", symbol: "lock.fill")
+        HUD.show("Locked notes are locked again")
     }
 
     private func rerenderPanes() {
@@ -616,6 +704,8 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         return false
     }
 
+    func windowDidResize(_ notification: Notification) { window.alignTrafficLights() }
+
     func windowDidBecomeKey(_ notification: Notification) {
         checkRelock()
         relock.setFocused(isFocusedOnUnlockedLockedNote, at: Date())
@@ -639,7 +729,7 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
     @objc func newNote(_ sender: Any?) {
         if activeRole == .slot {
             guard Defaults[.shellKitNewNotesInEphemeral] else {
-                HUD.show("New notes can only be created in the ephemeral pane", symbol: "exclamationmark.circle")
+                HUD.show("New notes can only be created in the ephemeral pane", kind: .warning)
                 return
             }
             if !isSplit { openSlot = nil; layoutPanes() }
@@ -660,7 +750,7 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
     @objc func goToFirstNote(_ sender: Any?) {
         if !isSplit && openSlot != nil { showDeck() }
         guard let front = ephemeralDeck().first else { return }
-        if front.id == ephemeralPane.noteID { HUD.show("Note is already first", symbol: "arrow.right.to.line") }
+        if front.id == ephemeralPane.noteID { HUD.show("Note is already first") }
         showEphemeral(front.id)
     }
 
@@ -683,7 +773,7 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
                                  info: "You can recover it from File → Recover from The Void… until The Void is emptied.",
                                  confirmTitle: "Move to The Void", suppressionID: "shellKit.moveToVoid") else { return }
             store.moveToVoid(id)
-            HUD.show("Note banished to The Void", symbol: "trash")
+            HUD.show("Note banished to The Void")
         }
         validateVisibleNotes()
     }
@@ -699,20 +789,20 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
 
     @objc func quickExport(_ sender: Any?) {
         guard let destination = Defaults[.quickExportDestination] else {
-            HUD.show("Choose a Quick Export destination in Settings → Export", symbol: "square.and.arrow.up")
+            HUD.show("Choose a Quick Export destination in Settings → Export")
             return
         }
         export(to: destination)
     }
 
     private func export(to destination: ExportDestination) {
-        guard let id = currentNoteID, let note = freshNote(id) else { HUD.show("No note to export", symbol: "xmark.circle"); return }
+        guard let id = currentNoteID, let note = freshNote(id) else { HUD.show("No note to export", kind: .warning); return }
         Services.export?.export(note, to: destination)
     }
 
     @objc func printNote(_ sender: Any?) {
         guard let id = currentNoteID, let note = freshNote(id), !isLockedOut(note) else {
-            HUD.show("No note to print", symbol: "xmark.circle"); return
+            HUD.show("No note to print", kind: .warning); return
         }
         Services.export?.print(note)
     }
@@ -726,10 +816,10 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
 
     @objc func promoteToFront(_ sender: Any?) {
         guard let id = currentNoteID, let note = store.note(id) else { return }
-        if note.slot != nil { HUD.show("Slotted notes don't have a front position", symbol: "exclamationmark.circle"); return }
-        if ephemeralDeck().first?.id == id { HUD.show("Note is already first", symbol: "arrow.right.to.line"); return }
+        if note.slot != nil { HUD.show("Slotted notes don't have a front position", kind: .warning); return }
+        if ephemeralDeck().first?.id == id { HUD.show("Note is already first"); return }
         store.promoteToFront(id)
-        HUD.show("Promoted note to front", symbol: "arrow.up.to.line")
+        HUD.show("Promoted note to front")
     }
 
     @objc func toggleLock(_ sender: Any?) {
@@ -740,14 +830,14 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
                 current.isLocked = false
                 store.update(current)
                 rerenderPanes()
-                HUD.show("Note unlocked", symbol: "lock.open")
+                HUD.show("Note unlocked")
             }
         } else {
             note.isLocked = true
             store.update(note)
             relock.lock(id)
             rerenderPanes()
-            HUD.show("Note locked", symbol: "lock.fill")
+            HUD.show("Note locked")
         }
     }
 
@@ -757,21 +847,20 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         store.update(note)
         let p = pane(activeRole)
         p.editor.load(note)
-        HUD.show(note.isReadOnly ? "Note is now read-only" : "Note is editable again",
-                 symbol: note.isReadOnly ? "lock.doc" : "pencil")
+        HUD.show(note.isReadOnly ? "Note is now read-only" : "Note is editable again")
         refreshChrome()
     }
 
     @objc func archiveNote(_ sender: Any?) {
         guard let id = currentNoteID else { return }
         store.setArchived(true, for: id)
-        HUD.show("Note archived", symbol: "archivebox")
+        HUD.show("Note archived")
         validateVisibleNotes()
     }
 
     @objc func togglePin(_ sender: Any?) {
         Defaults[.pinOnTop].toggle()
-        HUD.show(Defaults[.pinOnTop] ? "Pinned on top" : "Unpinned from top", symbol: Defaults[.pinOnTop] ? "pin.fill" : "pin.slash")
+        HUD.show(Defaults[.pinOnTop] ? "Pinned on top" : "Unpinned from top")
     }
 
     @objc func toggleSlotsBar(_ sender: Any?) { Defaults[.alwaysShowSlotsBar].toggle() }
@@ -793,24 +882,13 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         NSApp.activate()
     }
 
-    @objc func showMoreMenu(_ sender: NSButton) {
-        let menu = NSMenu()
-        func add(_ title: String, _ action: Selector) { menu.addItem(withTitle: title, action: action, keyEquivalent: "").target = self }
-        add("Search All Notes", #selector(searchAllNotes(_:)))
-        add("Command Palette", #selector(showCommandPalette(_:)))
-        add("Recover from The Void…", #selector(recoverFromVoid(_:)))
+    /// The bottom bar's Export button: the enabled destinations, Quick Export and Print.
+    @objc func showExportMenu(_ sender: NSView) {
+        let menu = MainMenu.exportMenu(target: self)
         menu.addItem(.separator())
-        add("Promote to Front", #selector(promoteToFront(_:)))
-        add("Lock Note", #selector(toggleLock(_:)))
-        add("Read-Only", #selector(toggleReadOnly(_:)))
-        add("Archive", #selector(archiveNote(_:)))
-        add("Move to The Void", #selector(moveToVoid(_:)))
-        menu.addItem(.separator())
-        let export = NSMenuItem(title: "Export", action: nil, keyEquivalent: "")
-        export.submenu = MainMenu.exportMenu(target: self)
-        menu.addItem(export)
-        add("Quick Export", #selector(quickExport(_:)))
-        add("Print…", #selector(printNote(_:)))
+        for (title, action) in [("Quick Export", #selector(quickExport(_:))), ("Print…", #selector(printNote(_:)))] {
+            menu.addItem(withTitle: title, action: action, keyEquivalent: "").target = self
+        }
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.maxY + 4), in: sender)
     }
 

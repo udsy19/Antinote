@@ -53,7 +53,7 @@ enum Tally {
         return CurrencyCatalog.code(forWord: String(c[k..<w]), primary: primary)
     }
 
-    /// "Sum: $37.25" / "Average: 9.31".
+    /// "Total: $37.25" / "Average: 9.31".
     static func numbers(_ lines: [String], average: Bool, settings: MathSettings, rates: ExchangeRates) -> String {
         let primary = settings.primaryCurrency
         let all = lines.filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
@@ -71,7 +71,7 @@ enum Tally {
         let value = average ? (all.isEmpty ? 0 : total / Double(all.count)) : total
         let formatter = MathFormatter(settings: settings)
         let text = target.map { formatter.currency(value, code: $0) } ?? formatter.number(value)
-        return (average ? "Average: " : "Sum: ") + text
+        return (average ? "Average: " : "Total: ") + text
     }
 
     /// "4 items · 5 lines · 8 words · 41 characters" (comment lines excluded).

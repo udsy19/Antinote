@@ -140,4 +140,43 @@ func registerToolsKitTests() {
                                       query: "key", radius: 10)
         check(long.text.hasPrefix("…") && long.text.hasSuffix("…") && long.highlights.count == 1, "long lines trimmed")
     }))
+
+    SelfTest.cases.append(("ToolsKit.searchModel", {
+        let a = Note(content: "list\n[ ] Milk\n[x] eggs\n\nbread"), b = Note(content: "Slotted milk", slot: 2)
+        let c = Note(content: "math: Budget\nrent: 1200"), archived = Note(content: "old milk", isArchived: true)
+        let deck = [a, b, c]
+        check(SearchModel.results(query: "", scope: .ephemeral, deck: deck, archived: [archived]).map(\.id) == [a.id, c.id],
+              "empty query lists the ephemeral deck in order")
+        check(SearchModel.results(query: "MILK", scope: .ephemeral, deck: deck, archived: []).map(\.id) == [a.id],
+              "case-insensitive match within scope")
+        check(SearchModel.results(query: "milk", scope: .slotted, deck: deck, archived: []).map(\.id) == [b.id], "slotted scope")
+        check(SearchModel.results(query: " Archived ", scope: .ephemeral, deck: deck, archived: [archived]).map(\.id)
+              == [archived.id], "“archived” browses archived notes")
+        check(SearchModel.listPreview(a.content) == "Milk  |  eggs  |  bread", "keyword dropped, markers removed, joined")
+        check(SearchModel.listPreview(c.content) == "Budget  |  rent: 1200", "keyword title kept")
+        check(SearchModel.previewLines("- [ ] tea\n\tindented") == ["tea", "\tindented"], "dash checkbox stripped")
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let locale = Locale(identifier: "en_US")
+        let now = Date(timeIntervalSince1970: 1_760_000_000)   // 2025-10-09
+        check(SearchModel.meta(modified: now.addingTimeInterval(-6 * 3600), now: now, calendar: calendar, locale: locale)
+              == "Edited 6 hours ago", "recent notes say how long ago")
+        check(SearchModel.meta(modified: now.addingTimeInterval(-20), now: now, calendar: calendar, locale: locale)
+              == "Edited just now", "just now")
+        check(SearchModel.meta(modified: now.addingTimeInterval(-60 * 86_400), now: now, calendar: calendar, locale: locale)
+              == "August 10", "older notes show the date")
+        check(SearchModel.meta(modified: now.addingTimeInterval(-400 * 86_400), now: now, calendar: calendar, locale: locale)
+              == "September 4, 2024", "other years include the year")
+    }))
+
+    SelfTest.cases.append(("ToolsKit.noPeekStreak", {
+        var streak = NoPeekStreak()
+        streak.breakCompleted(); streak.breakCompleted()
+        check(streak == NoPeekStreak(current: 2, best: 2), "breaks sat out count up")
+        streak.peeked()
+        check(streak == NoPeekStreak(current: 0, best: 2), "a peek resets the streak, best stays")
+        streak.breakCompleted()
+        check(streak == NoPeekStreak(current: 1, best: 2), "best only grows when beaten")
+    }))
 }

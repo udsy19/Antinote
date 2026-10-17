@@ -6,7 +6,7 @@
 #
 # Downloads the latest release from GitHub, installs it into /Applications (or ~/Applications when /Applications
 # isn't writable) and opens it. Nothing else on your system is changed.
-# Options (environment): SHOTCRAFT_INSTALL_DIR=<folder> to install elsewhere, SHOTCRAFT_NO_OPEN=1 to skip launching.
+# Options (environment): JOTTER_INSTALL_DIR=<folder> to install elsewhere, JOTTER_NO_OPEN=1 to skip launching.
 set -euo pipefail
 
 REPO="udsy19/Antinote"
@@ -42,7 +42,7 @@ if [ "${1:-}" = "--uninstall" ]; then
   step "Removing $path"
   rm -rf "$path"
   say "${green}✓ Jotter was uninstalled.${reset}"
-  say "${dim}Your captures and settings were kept in ~/Library/Application Support/Jotter and${reset}"
+  say "${dim}Your notes and settings were kept in ~/Library/Application Support/Jotter and${reset}"
   say "${dim}~/Library/Preferences/com.udsy.jotter.plist — delete them to remove everything.${reset}"
   exit 0
 fi
@@ -65,13 +65,13 @@ mkdir -p "$mnt"
 hdiutil attach "$tmp/Jotter.dmg" -nobrowse -readonly -mountpoint "$mnt" -quiet || fail "Couldn't open the disk image."
 [ -d "$mnt/$APP" ] || fail "The disk image doesn't contain $APP."
 
-dest="${SHOTCRAFT_INSTALL_DIR:-/Applications}"
+dest="${JOTTER_INSTALL_DIR:-/Applications}"
 mkdir -p "$dest" 2>/dev/null || true
 if [ ! -w "$dest" ]; then
   dest="$HOME/Applications"; mkdir -p "$dest"
 fi
 
-[ "${SHOTCRAFT_NO_OPEN:-0}" = 1 ] || quit_running
+[ "${JOTTER_NO_OPEN:-0}" = 1 ] || quit_running
 step "Installing to $dest"
 rm -rf "$dest/$APP"
 ditto "$mnt/$APP" "$dest/$APP"
@@ -79,7 +79,7 @@ ditto "$mnt/$APP" "$dest/$APP"
 xattr -dr com.apple.quarantine "$dest/$APP" 2>/dev/null || true
 
 version="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$dest/$APP/Contents/Info.plist" 2>/dev/null || echo "")"
-if [ "${SHOTCRAFT_NO_OPEN:-0}" = 1 ]; then
+if [ "${JOTTER_NO_OPEN:-0}" = 1 ]; then
   say "${green}✓ Jotter ${version} is installed in $dest.${reset}"
 else
   say "${green}✓ Jotter ${version} is installed.${reset} Opening it now — look for the icon in your menu bar."

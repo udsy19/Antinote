@@ -160,7 +160,7 @@ public final class ExtensionsManager: ObservableObject, ExtensionsServicing {
             ext.commands.compactMap { spec -> ExtensionCommandInfo? in
                 guard seen.insert(spec.name.lowercased()).inserted else { return nil }
                 return ExtensionCommandInfo(name: spec.name, aliases: spec.aliases, extensionName: ext.manifest.name,
-                                            helpText: spec.helpText, signature: spec.signature)
+                                            helpText: spec.helpText, signature: spec.signature, action: spec.type.rawValue)
             }
         }
     }

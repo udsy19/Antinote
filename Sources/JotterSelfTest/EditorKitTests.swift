@@ -34,6 +34,21 @@ func registerEditorKitTests() {
         check(ListLine.parse("[ ]")?.markerLength == 3, "bare checkbox")
     }))
 
+    SelfTest.cases.append(("EditorKit.inlineResults", {
+        typealias A = EditorLogic.Annotations
+        check(A.display("96.00", after: "12 beds x 8 plants =") == " 96.00", "space after a trailing =")
+        check(A.display("96.00", after: "12 x 8 = ") == "96.00", "no double space")
+        check(A.display("400", after: "rent / 3") == " = 400", "adds = when the line has none")
+        let fits = A.place(lineEnd: 200, width: 40, textStart: 44, textEnd: 293)
+        check(fits.x == 200 && !fits.wraps, "result follows the line end")
+        check(!A.place(lineEnd: 253, width: 40, textStart: 44, textEnd: 293).wraps, "exactly fits")
+        let wraps = A.place(lineEnd: 260, width: 40, textStart: 44, textEnd: 293)
+        check(wraps.x == 44 && wraps.wraps, "too long: wraps to the text start")
+        let rtl = A.place(lineEnd: 100, width: 40, textStart: 44, textEnd: 293, rightToLeft: true)
+        check(rtl.x == 60 && !rtl.wraps, "right-to-left: before the line end")
+        check(A.place(lineEnd: 70, width: 40, textStart: 44, textEnd: 293, rightToLeft: true) == (253, true), "rtl wrap")
+    }))
+
     SelfTest.cases.append(("EditorKit.listToggleCycle", {
         typealias L = EditorLogic.Lists
         check(L.toggled("buy") == "[ ] buy", "plain → checkbox")
@@ -75,6 +90,8 @@ func registerEditorKitTests() {
         check(L.check(TextState("[x] a\n[ ] b"), line: 0, behavior: .delete).text == "[ ] a\n[ ] b", "unchecking never deletes")
         let n = L.normalizedListNote(TextState("todo\nmilk\n\n[x] eggs", caret: 9))
         check(n == TextState("todo\n[ ] milk\n\n[x] eggs", caret: 13), "list notes get markers; caret follows")
+        let headed = L.normalizedListNote(TextState("list\n# Monday\nbeans\n// Drinks\nfizz"))
+        check(headed.text == "list\n# Monday\n[ ] beans\n// Drinks\n[ ] fizz", "headers and comments stay unchecked")
     }))
 
     SelfTest.cases.append(("EditorKit.lineEditing", {

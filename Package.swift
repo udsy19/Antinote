@@ -23,6 +23,9 @@ let package = Package(
                           path: "Sources/Jotter"),
         .executableTarget(name: "JotterSelfTest", dependencies: ["JotterCore"] + modules.map { .target(name: $0) },
                           path: "Sources/JotterSelfTest"),
+        // Offscreen PNG renders of the UI for visual checks: `.build/debug/JotterRender <out-dir> [scene…]`.
+        .executableTarget(name: "JotterRender", dependencies: ["JotterCore"] + modules.map { .target(name: $0) },
+                          path: "Tools/JotterRender"),
     ] + modules.map { name -> Target in
         name == "ExtensionsKit"
             ? .target(name: name, dependencies: ["JotterCore"], path: "Sources/\(name)", resources: [.copy("Bundled")])

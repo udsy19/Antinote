@@ -1,6 +1,6 @@
 #!/bin/bash
 # Creates a self-signed code-signing identity in a project-local keychain (.signing/), so rebuilt
-# apps keep the same designated requirement and macOS privacy grants (Screen Recording etc.) persist.
+# apps keep the same designated requirement and macOS privacy grants (Accessibility, Automation) persist.
 # Nothing is added to the login keychain or the keychain search list.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

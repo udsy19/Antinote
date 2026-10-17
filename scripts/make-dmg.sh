@@ -20,8 +20,7 @@ Installing Jotter $VERSION
 3. Open System Settings → Privacy & Security, scroll down and click "Open Anyway" next to
    the Jotter message, then confirm with your password.
    (Alternatively, in Terminal: xattr -dr com.apple.quarantine /Applications/Jotter.app)
-4. Jotter appears in the menu bar. Follow the welcome window to grant Screen Recording
-   permission, then relaunch when asked.
+4. Jotter opens with a short tutorial note. Press Option-A anywhere to show or hide it.
 
 Requirements: macOS 14 Sonoma or later, Apple silicon or Intel.
 TXT

@@ -15,15 +15,27 @@ its UI strings (quoted below).
   `RoundedCodeLayoutManager`. TextKit 1 gives stable glyph rects for drawing checkboxes, results and code backgrounds.
 - Plain text only: `isRichText = false`, every paste goes through our paste pipeline, no `.link` attributes.
 - Styling is recomputed from the plain text after each edit (attributes only, never characters).
-- Font: `Defaults[.fontName]` (empty = system monospaced) at `Defaults[.fontSize]`; uniform line height
-  (font height + `Defaults[.lineSpacing]`) so paper lines line up. "Increase/Decrease Text Size" change
-  `Defaults[.fontSize]` (9…48); reset restores the default.
-- Theme colours from `Theme.current`; restyles on `Theme.didChange`, appearance changes and relevant `Defaults` keys.
-- Paper (`Defaults[.paperType]`, `[.paperOpacity]`): lined / grid / dotted, drawn behind text in `paperLines`
-  colour, scrolling with the text.
+- Font: `Typography.font()` — `Defaults[.fontName]` (Menlo) at the `Defaults[.textSize]` preset (XS 11, S 12.5,
+  M 13.5, L 16, XL 18), doubled by `Defaults[.doubleFontSize]`. Line pitch 1.6 × the size (+ `Defaults[.lineSpacing]`);
+  list notes use 1.35 × with 0.65 × extra between items. "Increase/Decrease Text Size" step through the presets;
+  reset restores M.
+- Theme colours from `Theme.current` roles (see ui-reference.md §0); restyles on `Theme.didChange`, appearance
+  changes and relevant `Defaults` keys. Caret: 2 pt rounded, `accent1Main`, ascender to descender. Selection:
+  `typeHighlight`. Scroller: a thin 3 pt `typeHighlight` knob.
+- Paper (`Defaults[.paperType]`, `[.paperOpacity]` = the theme's `gridSuperlight` / `gridClear` / `gridBold`):
+  lines on the text rows, small (20 pt) / large (40 pt) grid, or 1.5 pt dots on the 20 pt lattice.
 - RTL: `Defaults[.forceRTL]` sets right-to-left base writing direction (results then draw on the left).
-- Generous padding (28 pt sides, 22 pt top). The keyword line (first line, when it selects a mode) is drawn in
-  `secondaryText` — "Activate features by typing a keyword in the first line."
+- Insets: text 44 pt from the window sides (scaled with the font), first line's capitals ~37 pt down; list markers
+  sit in the left gutter (12.5 pt boxes 20.5 pt from the edge). On the keyword line only the keyword is coloured
+  (`Theme.keyword(_:)`: math accent 1, list accent 2, sum/paste accent 3, avg/code/timer accent 4, count accent 5);
+  a timer command line is coloured whole.
+- Markdown: `#`/`##`/`###` lines bold in accent 1 main/secondary/tertiary (hashes kept); `**bold**`, `*italic*`,
+  `__underline__`, `~~strike~~` keep their markers, dimmed to `typeLight`; `// comments` italic `typeLight`;
+  inline `` `code` `` and fenced blocks on a `backgroundFade` rounded rect. Code tokens: keywords accent 2,
+  strings accent 3, numbers accent 4, comments `typeLight`.
+- Message pills (`PillView`, shared with `HUD`): bold 11 pt monospace capsule 20 pt above the bottom —
+  `typeMain` (info), `accent1Main` (success: "Extracted text.", "AutoPasting clipboard...", extension messages),
+  `accent4Main` (warning), `accent5Main` (error).
 
 ## Saving & analysis
 
@@ -34,10 +46,12 @@ its UI strings (quoted below).
 
 ## Lists ("Toggle Checklist Item", "Indent/Outdent List Line", "Inline list continuity on enter")
 
-- Markers live in the text: `[ ]`, `[x]`, `- `, `* `, `1. ` (after optional indentation). Checkbox and bullet
-  characters are hidden (clear foreground) and a real checkbox / dot is drawn over them; numbers stay visible.
-- `list` notes: "Every line is automatically a new item." Non-empty lines without a marker get `[ ] ` added.
-- Click a checkbox to toggle; checked items are struck through and dimmed. `Defaults[.checkedItemBehavior]`:
+- Markers live in the text: `[ ]`, `[x]`, `- `, `* `, `1. ` (after optional indentation). Their characters are
+  hidden and take no width, so item text lines up with the body; the checkbox (`typeMain` outline, `accent2Main`
+  on hover, `accent2Secondary` at half strength when checked), bullet dot or number is drawn in the gutter.
+- `list` notes: "Every line is automatically a new item." Non-empty lines without a marker get `[ ] ` added,
+  except `# headers` and `// comments`.
+- Click a checkbox to toggle; checked items are struck through in `typeLight`. `Defaults[.checkedItemBehavior]`:
   keep, move to the bottom of the list block ("Moves to the bottom"), or delete.
 - Return continues the list (`Defaults[.listContinuity]`, new checkbox unchecked, numbers +1); Return on an
   empty item removes the marker (ends the list). Otherwise Return keeps the previous line's indentation
@@ -47,11 +61,16 @@ its UI strings (quoted below).
 
 ## Math & summaries ("Calculated results can't be edited.")
 
-- `LineAnnotation`s draw right-aligned on their line (on the last wrapped fragment), result colour, error colour for
-  errors, secondary for info. They are not text: not selectable, not copied.
+- `LineAnnotation`s draw right after their line's text, on its last wrapped fragment: a space then the result after
+  a trailing "=", otherwise " = result" (`EditorLogic.Annotations`). Results are `accent3Main`, errors
+  `accent5Main`, info `typeLight`. A result that doesn't fit starts its own row under the line (the row is
+  reserved with paragraph spacing). They are not text: not selectable, not copied.
+- Math variables: the defined name (`NoteAnalysis.definitions`) in `accent1Secondary`, its colon in `accent2Main`,
+  later uses in `accent1Tertiary`.
 - Clicking a result copies it ("Copied to clipboard"). With `Defaults[.preventEditingAnswers]` off, ⌥-click
   appends ` = result` text to the line; with it on, ⌥-click shows "Calculated results can't be edited."
-- `NoteAnalysis.summary` draws at the bottom right.
+- `NoteAnalysis.summary` ("Total: $40") draws as a generated line after a blank line below the note, in
+  `accent3Secondary` (sum), `accent4Secondary` (avg) or `accent5Secondary` (count).
 
 ## Links ("Shorten long links automatically", "Detect and highlight links")
 
@@ -81,13 +100,16 @@ its UI strings (quoted below).
 ## AutoPaste ("Enter to start AutoPaste. Everything you copy will be added here.", "Esc stops autopaste")
 
 - In `paste`/`autopaste` notes, Return on the keyword line starts polling `NSPasteboard.changeCount` every 0.4 s;
-  each new string (cleaned) is appended as a new line. Esc or leaving the note stops. Status goes out as the
-  analysis summary ("AutoPaste on · 3 items · Esc stops autopaste").
+  each new string (cleaned) is appended as a new line. Esc or leaving the note stops. While listening, a
+  clipboard glyph in `accent3Main` blinks in the gutter at the first line; starting shows "AutoPasting clipboard...".
 
 ## Extensions ("Extension Autocomplete - Up/Down Arrow, Tab, Enter, Escape")
 
 - Typing `::` shows a completion panel from `Services.extensions.complete(prefix)`; ↑↓ move, Tab/Return accept
   (inserts `::name()` with the caret inside the parentheses when the signature takes arguments), Esc closes.
+  The panel (~60% of the window, `background` with a `typeSuperlight` border) lists 28 pt rows: `›` on the
+  selected (`typeHyperLight`) row, the command name, its extension in `typeSuperlight`, and an action badge
+  ("⇆ replaceLine" accent 1, "↓ insert" accent 3), with a key-hint footer; "No commands found" when empty.
 - Return on a line containing `::name(args)` runs it; the `ExtensionEdit` is applied (insert replaces the
   invocation, replaceLine, replaceAll, openURL opens and removes the invocation, message/failure → inline toast).
 

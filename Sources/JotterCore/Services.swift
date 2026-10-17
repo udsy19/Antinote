@@ -10,9 +10,11 @@ public struct ExtensionCommandInfo: Identifiable, Hashable, Sendable {
     public var helpText: String
     /// e.g. "::today(days)" — shown in autocomplete.
     public var signature: String
-    public init(name: String, aliases: [String], extensionName: String, helpText: String, signature: String) {
+    /// What the command does with its result: "insert", "replaceLine", "replaceAll" or "openURL".
+    public var action: String
+    public init(name: String, aliases: [String], extensionName: String, helpText: String, signature: String, action: String) {
         self.name = name; self.aliases = aliases; self.extensionName = extensionName
-        self.helpText = helpText; self.signature = signature
+        self.helpText = helpText; self.signature = signature; self.action = action
     }
 }
 
@@ -71,6 +73,9 @@ public protocol WindowServicing: AnyObject {
     func showSettings(tab: String?)
     /// The note currently shown in the main window.
     var currentNoteID: UUID? { get }
+    /// Shows `view` over the whole note area of the main window (Search replaces the note in place);
+    /// nil removes it and refocuses the note.
+    func present(inWindow view: NSView?)
 }
 
 /// Floating panels owned by ToolsKit.

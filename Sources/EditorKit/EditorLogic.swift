@@ -305,12 +305,14 @@ extension EditorLogic {
             return TextState(text, NSRange(location: start, length: max(0, map(NSMaxRange(st.selection)) - start)))
         }
 
-        /// List notes: every non-empty line after the keyword line becomes an unchecked item.
+        /// List notes: every non-empty line after the keyword line becomes an unchecked item, except `# headers`
+        /// and `// comments`.
         public static func normalizedListNote(_ st: TextState) -> TextState {
             let count = Lines.ranges(st.ns).count
             guard count > 1 else { return st }
             return Lines.transform(st, lines: 1...(count - 1)) { line in
-                if line.trimmingCharacters(in: .whitespaces).isEmpty || ListLine.parse(line) != nil { return line }
+                let t = line.trimmingCharacters(in: .whitespaces)
+                if t.isEmpty || t.hasPrefix("#") || t.hasPrefix("//") || ListLine.parse(line) != nil { return line }
                 return toggled(line)
             }
         }
@@ -388,6 +390,32 @@ extension EditorLogic {
             if unchecked { notices.append("Copied list items as unchecked.") }
             if stripped { notices.append("Removed hidden list markers from copied text.") }
             return (lines.joined(separator: "\n"), notices)
+        }
+    }
+}
+
+// MARK: - Inline results
+
+extension EditorLogic {
+    /// Placement of math results, which sit right after the end of their line (not in a column).
+    public enum Annotations {
+        /// The text drawn after a line: a space then the result after a trailing "=" (" 96.00"), or " = 96.00"
+        /// when the line has no trailing "=". No extra space when the line already ends in one.
+        public static func display(_ result: String, after line: String) -> String {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            let space = line.last?.isWhitespace == true ? "" : " "
+            return trimmed.hasSuffix("=") ? space + result : space + "= " + result
+        }
+
+        /// Where a result of `width` goes: right after `lineEnd` (left-to-right) or before it (right-to-left)
+        /// when it fits between `textStart` and `textEnd`; otherwise it wraps to a new row starting at the
+        /// text edge, like a long expression's wrapped line.
+        public static func place(lineEnd: CGFloat, width: CGFloat, textStart: CGFloat, textEnd: CGFloat,
+                                 rightToLeft: Bool = false) -> (x: CGFloat, wraps: Bool) {
+            if rightToLeft {
+                return lineEnd - width >= textStart ? (lineEnd - width, false) : (max(textStart, textEnd - width), true)
+            }
+            return lineEnd + width <= textEnd ? (lineEnd, false) : (textStart, true)
         }
     }
 }

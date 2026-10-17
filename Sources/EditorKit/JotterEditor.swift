@@ -20,10 +20,10 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
     private let storage = NSTextStorage()
     private let scrollView = NSScrollView()
     private let undo = UndoManager()
-    private let summaryLabel = PillLabel(fontSize: 12)
     private let modeLabel = PillLabel(fontSize: 10, weight: .semibold, monospaced: true)
-    private let toastLabel = PillLabel(fontSize: 12)
-    private let dropOverlay = PillLabel(fontSize: 14)
+    private let pill = PillView()
+    private let dropOverlay = DropOverlayView()
+    private let linkTip = LinkTipView()
     private let completion = CompletionPanel()
     private let autoPaste = AutoPasteMonitor()
     let vim = VimEngine()
@@ -38,7 +38,10 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
     private var isNormalizing = false
     private var applyingVim = false
     private var saveWork: DispatchWorkItem?
-    private var toastWork: DispatchWorkItem?
+    /// Container width the inline results were last placed for (re-placed when it changes).
+    private var placedWidth: CGFloat = 0
+    /// Baseline positions within a line fragment, per font and line height.
+    private var baselineCache: [String: CGFloat] = [:]
     private(set) var analysis = NoteAnalysis.plain
     private var mode: NoteMode = .plain
     /// Code ranges (whole fenced blocks, or the body of a code note) for "paste as-is".
@@ -81,44 +84,47 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
         textView.autoresizingMask = [.width]
         textView.minSize = .zero
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
-        textView.textContainerInset = NSSize(width: 28, height: 22)
+        textView.textContainerInset = NSSize(width: 44, height: 28)
     }
 
     private func configureLayout() {
         scrollView.documentView = textView
+        // The note runs under the floating title bar; the editor's own insets place the first line.
+        scrollView.automaticallyAdjustsContentInsets = false
         scrollView.hasVerticalScroller = true
+        scrollView.verticalScroller = ThinScroller()
+        scrollView.scrollerStyle = .overlay
         scrollView.autohidesScrollers = true
         scrollView.borderType = .noBorder
         scrollView.drawsBackground = true
-        dropOverlay.label.stringValue = "Drop an image to capture text."
+        scrollView.findBarPosition = .belowContent
         dropOverlay.isHidden = true
-        toastLabel.alphaValue = 0
         modeLabel.isHidden = true
-        summaryLabel.isHidden = true
-        for v in [scrollView, summaryLabel, modeLabel, toastLabel, dropOverlay] as [NSView] {
+        linkTip.isHidden = true
+        for v in [scrollView, modeLabel, pill, dropOverlay] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(v)
         }
+        view.addSubview(linkTip, positioned: .below, relativeTo: dropOverlay)   // placed by frame
         NSLayoutConstraint.activate([
             scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             scrollView.topAnchor.constraint(equalTo: view.topAnchor),
             scrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-            summaryLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -14),
-            summaryLabel.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -10),
-            summaryLabel.leadingAnchor.constraint(greaterThanOrEqualTo: modeLabel.trailingAnchor, constant: 8),
             modeLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 14),
             modeLabel.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -10),
-            toastLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            toastLabel.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -40),
-            toastLabel.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor, constant: -40),
-            dropOverlay.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            dropOverlay.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            pill.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            pill.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -PillView.bottomInset),
+            pill.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor, multiplier: 0.8),
+            dropOverlay.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            dropOverlay.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            dropOverlay.topAnchor.constraint(equalTo: view.topAnchor),
+            dropOverlay.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
     }
 
     private func observeSettings() {
-        let keys: [Defaults.Keys] = [.fontName, .fontSize, .lineSpacing, .paperType, .paperOpacity, .forceRTL, .lightTheme,
+        let keys: [Defaults.Keys] = [.fontName, .textSize, .doubleFontSize, .lineSpacing, .paperType, .paperOpacity, .forceRTL, .lightTheme,
                                      .darkTheme, .vimMode, .detectLinks, .allowTextReplacements]
         let names = Set(keys.map(\.name))
         Defaults.changes.filter { names.contains($0) }.receive(on: RunLoop.main)
@@ -133,10 +139,16 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
         // Keep the text view (and its paper) at least as tall as the visible area.
         scrollView.contentView.postsFrameChangedNotifications = true
         NotificationCenter.default.publisher(for: NSView.frameDidChangeNotification, object: scrollView.contentView)
-            .sink { [weak self] _ in MainActor.assumeIsolated { self.map { $0.textView.setFrameSize($0.textView.frame.size) } } }
+            .sink { [weak self] _ in MainActor.assumeIsolated { self?.visibleAreaChanged() } }
             .store(in: &cancellables)
         completion.onAccept = { [weak self] item in self?.acceptCompletion(item) }
         autoPaste.onNewString = { [weak self] s in self?.appendAutoPaste(s) }
+    }
+
+    /// Keeps the text view at least as tall as the visible area; re-places inline results after a width change.
+    private func visibleAreaChanged() {
+        textView.setFrameSize(textView.frame.size)
+        if abs((textView.textContainer?.size.width ?? 0) - placedWidth) > 0.5 { restyle() }
     }
 
     // MARK: - NoteEditing
@@ -203,9 +215,9 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
         case .findAndReplace: textFinder(.showReplaceInterface)
         case .findNext: textFinder(.nextMatch)
         case .findPrevious: textFinder(.previousMatch)
-        case .increaseTextSize: Defaults[.fontSize] = min(48, Defaults[.fontSize] + 1)
-        case .decreaseTextSize: Defaults[.fontSize] = max(9, Defaults[.fontSize] - 1)
-        case .resetTextSize: Defaults.reset(.fontSize)
+        case .increaseTextSize: stepTextSize(1)
+        case .decreaseTextSize: stepTextSize(-1)
+        case .resetTextSize: Defaults.reset(.textSize); Defaults.reset(.doubleFontSize)
         case .copyAll: copySelection(cut: false, wholeNote: true)
         case .selectLine:
             let st = state
@@ -216,6 +228,13 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
             if completionToken() == nil { insert("::") }
             updateCompletion()
         }
+    }
+
+    /// ⌘+ / ⌘− step through the size presets.
+    private func stepTextSize(_ delta: Int) {
+        let all = TextSize.allCases
+        let i = all.firstIndex(of: Defaults[.textSize]) ?? 2
+        Defaults[.textSize] = all[min(max(i + delta, 0), all.count - 1)]
     }
 
     private func textFinder(_ action: NSTextFinder.Action) {
@@ -309,10 +328,10 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
     /// The caret never stops inside a hidden checkbox/bullet marker (nil = keep `new`).
     func clampedCaret(from old: NSRange, to new: NSRange) -> NSRange? {
         guard new.length == 0, programmaticEdits == 0, !isLoading, !(Defaults[.vimMode] && vim.mode != .insert) else { return nil }
-        guard let m = textView.model.markers.first(where: { new.location > $0.full.location && new.location < NSMaxRange($0.full) })
+        guard let m = textView.model.markers.first(where: { new.location > $0.range.location && new.location < NSMaxRange($0.range) })
         else { return nil }
-        let movingLeft = old.length == 0 && old.location == NSMaxRange(m.full)
-        return NSRange(location: movingLeft ? m.full.location : NSMaxRange(m.full), length: 0)
+        let movingLeft = old.length == 0 && old.location == NSMaxRange(m.range)
+        return NSRange(location: movingLeft ? m.range.location : NSMaxRange(m.range), length: 0)
     }
 
     public func textViewDidChangeSelection(_ notification: Notification) {
@@ -348,47 +367,51 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
             textView.isContinuousSpellCheckingEnabled = mode != .code
         }
         if mode != .autopaste, autoPaste.isRunning { stopAutoPaste(announce: false) }
-        if autoPaste.isRunning {
-            analysis.summary = "AutoPaste on · \(autoPaste.count) item\(autoPaste.count == 1 ? "" : "s") · Esc stops autopaste"
-        } else if mode == .autopaste, analysis.summary == nil {
-            analysis.summary = "Enter to start AutoPaste. Everything you copy will be added here."
-        }
-        summaryLabel.label.stringValue = analysis.summary ?? ""
-        summaryLabel.isHidden = (analysis.summary ?? "").isEmpty
         onAnalysis?(analysis)
     }
 
-    private var baseFont: NSFont {
-        let size = CGFloat(Defaults[.fontSize])
-        if mode != .code, !Defaults[.fontName].isEmpty, let f = NSFont(name: Defaults[.fontName], size: size) { return f }
-        return NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
-    }
-
     private func restyle() {
-        guard !textView.hasMarkedText() else { return }
+        guard !textView.hasMarkedText(), let lm = textView.layoutManager, let tc = textView.textContainer else { return }
         let s = textView.string as NSString
         let theme = Theme.current
-        let font = baseFont
+        let font = Typography.font()
         let codeFont = NSFont.monospacedSystemFont(ofSize: font.pointSize, weight: .regular)
-        let lineHeight = (textView.layoutManager?.defaultLineHeight(for: font) ?? font.pointSize * 1.2).rounded(.up)
-            + CGFloat(Defaults[.lineSpacing])
+        let bold = NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask)
+        let italic = NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask)
+        let advance = ("m" as NSString).size(withAttributes: [.font: font]).width
+        // List notes: tighter wrapped lines, extra space between items.
+        let isList = mode == .list
+        let lineHeight = isList ? font.pointSize * 1.35 : Typography.lineHeight(for: font)
         let rtl = Defaults[.forceRTL]
         let para = NSMutableParagraphStyle()
         para.minimumLineHeight = lineHeight
         para.maximumLineHeight = lineHeight
+        para.paragraphSpacing = isList ? font.pointSize * 0.65 : 0
+        para.tabStops = []
+        para.defaultTabInterval = advance * 4
         para.baseWritingDirection = rtl ? .rightToLeft : .natural
-        let text = NSColor(hex: theme.text), secondary = NSColor(hex: theme.secondaryText)
-        let linkColor = NSColor(hex: theme.link)
+        let text = NSColor(hex: theme.typeMain), light = NSColor(hex: theme.typeLight)
         let lines = EditorLogic.Lines.ranges(s)
         let hasKeyword = mode != .plain
         let full = NSRange(location: 0, length: s.length)
+
+        // The text starts 44 pt in (scaled with the font) and, at the regular line pitch, the first line's
+        // capitals sit ~37 pt down; list notes keep that inset, so their tighter first line sits a little higher.
+        let baselineOffset = self.baselineOffset(font: font, lineHeight: lineHeight)
+        let regularBaseline = self.baselineOffset(font: font, lineHeight: Typography.lineHeight(for: font))
+        let inset = NSSize(width: Gutter.inset(font),
+                           height: max(4, (27 + 10 * Gutter.scale(font) - regularBaseline + font.capHeight).rounded()))
+        if textView.textContainerInset != inset { textView.textContainerInset = inset }
 
         var model = RenderModel()
         model.theme = theme
         model.paper = Defaults[.paperType]
         model.paperOpacity = Defaults[.paperOpacity]
         model.lineHeight = lineHeight
+        model.baselineOffset = baselineOffset
+        model.font = font
         model.rightToLeft = rtl
+        model.autoPasting = autoPaste.isRunning
 
         // Code: the body of a code note, or ``` fenced blocks elsewhere.
         var code: [(range: NSRange, language: CodeLanguage, block: NSRange)] = []
@@ -413,56 +436,114 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
             }
         }
         codeRanges = code.map(\.block)
-        model.codeBlocks = codeRanges
+        model.codeBlocks = mode == .code ? [] : codeRanges
         func inCode(_ r: NSRange) -> Bool { codeRanges.contains { NSIntersectionRange($0, r).length > 0 || NSLocationInRange(r.location, $0) } }
+        func matches(_ regex: NSRegularExpression) -> [NSTextCheckingResult] {
+            regex.matches(in: textView.string, range: full).filter { !inCode($0.range) }
+        }
 
         storage.beginEditing()
         storage.setAttributes([.font: font, .foregroundColor: text, .paragraphStyle: para], range: full)
+
+        // First line: only the keyword is coloured; a timer command is coloured whole.
         if hasKeyword, let first = lines.first, first.length > 0 {
-            storage.addAttribute(.foregroundColor, value: secondary, range: first)
+            let line = s.substring(with: first)
+            let lead = line.prefix { $0.isWhitespace }.utf16.count
+            let word = line.dropFirst(line.prefix { $0.isWhitespace }.count).prefix { !$0.isWhitespace && $0 != ":" }.utf16.count
+            let range = mode == .timer ? first : NSRange(location: first.location + lead, length: word)
+            storage.addAttribute(.foregroundColor, value: NSColor(hex: theme.keyword(mode)), range: range)
         }
 
+        // Markdown: headings, // comments, and emphasis with dimmed markers (not in math-like notes).
         let mathish: Set<NoteMode> = [.math, .sum, .average, .count]
+        if mode != .code {
+            let headingColors = [theme.accent1Main, theme.accent1Secondary, theme.accent1Tertiary]
+            for m in matches(Self.headingRegex) where !(hasKeyword && m.range.location < NSMaxRange(lines[0])) {
+                storage.addAttributes([.font: bold, .foregroundColor: NSColor(hex: headingColors[m.range(at: 1).length - 1])],
+                                      range: m.range)
+            }
+            for m in matches(Self.commentRegex) { storage.addAttributes([.font: italic, .foregroundColor: light], range: m.range) }
+            if !mathish.contains(mode) {
+                let styles: [(NSRegularExpression, Int, [NSAttributedString.Key: Any])] = [
+                    (Self.boldRegex, 2, [.font: bold]),
+                    (Self.italicRegex, 1, [.font: italic]),
+                    (Self.underlineRegex, 2, [.underlineStyle: NSUnderlineStyle.single.rawValue]),
+                    (Self.strikeRegex, 2, [.strikethroughStyle: NSUnderlineStyle.single.rawValue, .strikethroughColor: text]),
+                ]
+                for (regex, marker, attrs) in styles {
+                    for m in matches(regex) {
+                        storage.addAttributes(attrs, range: m.range(at: 1))
+                        storage.addAttribute(.foregroundColor, value: light, range: NSRange(location: m.range.location, length: marker))
+                        storage.addAttribute(.foregroundColor, value: light,
+                                             range: NSRange(location: NSMaxRange(m.range) - marker, length: marker))
+                    }
+                }
+                for m in matches(Self.inlineCodeRegex) {
+                    storage.addAttribute(.font, value: codeFont, range: m.range)
+                    model.inlineCode.append(m.range)
+                }
+            }
+        }
+
+        // List markers: hidden and zero-width, drawn in the left gutter; wrapped lines align with the item text.
         for (i, line) in lines.enumerated() where !(hasKeyword && i == 0) && line.length > 0 && !inCode(line) {
             guard let item = ListLine.parse(s.substring(with: line)) else { continue }
             let isCheckbox: Bool = { if case .checkbox = item.kind { return true }; return false }()
             if mathish.contains(mode) && !isCheckbox { continue }
             let markerStart = line.location + (item.indent as NSString).length
-            let fullMarker = NSRange(location: markerStart, length: item.markerLength)
+            let marker = NSRange(location: markerStart, length: min(item.markerLength, NSMaxRange(line) - markerStart))
+            for offset in 0..<marker.length {
+                let r = NSRange(location: marker.location + offset, length: 1)
+                let width = s.substring(with: r).size(withAttributes: [.font: font]).width
+                storage.addAttributes([.foregroundColor: NSColor.clear, .kern: -width], range: r)
+            }
+            let kind: RenderModel.Marker
             switch item.kind {
             case .checkbox(let checked):
-                let box = NSRange(location: markerStart, length: 3)
-                storage.addAttribute(.foregroundColor, value: NSColor.clear, range: box)
-                model.markers.append((box, fullMarker, .checkbox(checked: checked), i))
-                if checked, NSMaxRange(fullMarker) < NSMaxRange(line) {
-                    let content = NSRange(location: NSMaxRange(fullMarker), length: NSMaxRange(line) - NSMaxRange(fullMarker))
-                    storage.addAttributes([.foregroundColor: secondary, .strikethroughStyle: NSUnderlineStyle.single.rawValue,
-                                           .strikethroughColor: secondary], range: content)
+                kind = .checkbox(checked: checked)
+                if checked, NSMaxRange(marker) < NSMaxRange(line) {
+                    let content = NSRange(location: NSMaxRange(marker), length: NSMaxRange(line) - NSMaxRange(marker))
+                    storage.addAttributes([.foregroundColor: light, .strikethroughStyle: NSUnderlineStyle.single.rawValue,
+                                           .strikethroughColor: light], range: content)
                 }
-            case .bullet:
-                let dot = NSRange(location: markerStart, length: 1)
-                storage.addAttribute(.foregroundColor, value: NSColor.clear, range: dot)
-                model.markers.append((dot, fullMarker, .bullet, i))
-            case .numbered:
-                storage.addAttribute(.foregroundColor, value: secondary, range: fullMarker)
+            case .bullet: kind = .bullet
+            case .numbered(let n): kind = .number("\(n).")
             }
-            // Hanging indent: wrapped lines align with the item's text.
+            model.markers.append((marker, kind, i))
             let hang = para.mutableCopy() as! NSMutableParagraphStyle
-            hang.headIndent = s.substring(with: NSRange(location: line.location, length: NSMaxRange(fullMarker) - line.location))
-                .size(withAttributes: [.font: font]).width
+            hang.headIndent = item.indent.reduce(0) { $0 + ($1 == "\t" ? advance * 4 : advance) }
             storage.addAttribute(.paragraphStyle, value: hang, range: line)
         }
 
-        if mode != .code {
-            for m in Self.strikeRegex.matches(in: textView.string, range: full) where !inCode(m.range) {
-                storage.addAttributes([.strikethroughStyle: NSUnderlineStyle.single.rawValue], range: m.range(at: 1))
-                storage.addAttribute(.foregroundColor, value: secondary, range: NSRange(location: m.range.location, length: 2))
-                storage.addAttribute(.foregroundColor, value: secondary, range: NSRange(location: NSMaxRange(m.range) - 2, length: 2))
+        // Math variables: the defined name in accent 1 secondary, its colon in accent 2, later uses in accent 1 tertiary.
+        if mode == .math, !analysis.definitions.isEmpty {
+            let names = Set(analysis.definitions.values)
+            var definedNames: [NSRange] = []
+            for (index, _) in analysis.definitions where lines.indices.contains(index) {
+                let line = s.substring(with: lines[index])
+                guard let sep = line.firstIndex(where: { $0 == ":" || $0 == "=" }) else { continue }
+                let lead = line.prefix { $0.isWhitespace }.utf16.count
+                let nameEnd = line[..<sep].trimmingCharacters(in: .whitespaces).utf16.count + lead
+                let name = NSRange(location: lines[index].location + lead, length: nameEnd - lead)
+                definedNames.append(name)
+                storage.addAttribute(.foregroundColor, value: NSColor(hex: theme.accent1Secondary), range: name)
+                if line[sep] == ":" {
+                    storage.addAttribute(.foregroundColor, value: NSColor(hex: theme.accent2Main),
+                                         range: NSRange(location: lines[index].location + line[..<sep].utf16.count, length: 1))
+                }
+            }
+            let pattern = names.sorted { $0.count > $1.count }.map(NSRegularExpression.escapedPattern(for:)).joined(separator: "|")
+            if let uses = try? NSRegularExpression(pattern: "(?<![\\w])(?:\(pattern))(?![\\w])", options: [.caseInsensitive]) {
+                let body = NSRange(location: NSMaxRange(lines[0]), length: s.length - NSMaxRange(lines[0]))
+                for m in uses.matches(in: textView.string, range: body)
+                where !definedNames.contains(where: { NSIntersectionRange($0, m.range).length > 0 }) {
+                    storage.addAttribute(.foregroundColor, value: NSColor(hex: theme.accent1Tertiary), range: m.range)
+                }
             }
         }
 
-        let tokenColors: [CodeToken.Kind: NSColor] = [.keyword: NSColor(hex: theme.accent), .string: NSColor(hex: theme.result),
-                                                      .comment: secondary, .number: linkColor]
+        let tokenColors: [CodeToken.Kind: NSColor] = [.keyword: NSColor(hex: theme.accent2Main), .string: NSColor(hex: theme.accent3Main),
+                                                      .comment: light, .number: NSColor(hex: theme.accent4Main)]
         for block in code {
             storage.addAttribute(.font, value: codeFont, range: block.block)
             for t in CodeTokenizer.tokens(s.substring(with: block.range), language: block.language) {
@@ -471,37 +552,97 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
             }
         }
 
-        let underline: [NSAttributedString.Key: Any] = [.foregroundColor: linkColor, .underlineStyle: NSUnderlineStyle.single.rawValue,
-                                                        .underlineColor: linkColor.withAlphaComponent(0.5)]
+        // Links: a dotted underline; shortened links in their own colour.
+        let dotted = NSUnderlineStyle.single.rawValue | NSUnderlineStyle.patternDot.rawValue
+        let underline: [NSAttributedString.Key: Any] = [.underlineStyle: dotted, .underlineColor: NSColor(hex: theme.typeSuperlight)]
         if Defaults[.detectLinks] {
-            for r in EditorLogic.Links.urls(in: textView.string) where !inCode(r) { storage.addAttributes(underline, range: r) }
+            for r in EditorLogic.Links.urls(in: textView.string) where !inCode(r) {
+                storage.addAttributes(underline.merging([.foregroundColor: NSColor(hex: theme.typeSubtle)]) { $1 }, range: r)
+            }
         }
-        for l in links where NSMaxRange(l.range) <= s.length { storage.addAttributes(underline, range: l.range) }
+        for l in links where NSMaxRange(l.range) <= s.length {
+            let color = NSColor(hex: l.expanded ? theme.typeSubtle : theme.typeSubtlePlus)
+            storage.addAttributes(underline.merging([.foregroundColor: color]) { $1 }, range: l.range)
+        }
         storage.endEditing()
 
+        // Results follow their line; one that doesn't fit gets a reserved row below it.
+        lm.ensureLayout(for: tc)
+        placedWidth = tc.size.width
+        let edges = (start: inset.width, end: inset.width + tc.size.width)
+        var wrapped: [NSRange] = []
+        for a in analysis.annotations where lines.indices.contains(a.line) {
+            let line = lines[a.line]
+            let display = EditorLogic.Annotations.display(a.text, after: s.substring(with: line))
+            let width = display.size(withAttributes: [.font: font]).width
+            var wraps = false
+            if tc.size.width > 4 * advance {
+                let end = textView.lineEnd(line).x
+                wraps = EditorLogic.Annotations.place(lineEnd: end, width: width, textStart: edges.start, textEnd: edges.end,
+                                                      rightToLeft: rtl).wraps
+            }
+            if wraps { wrapped.append(line) }
+            model.annotations.append((line, display, wraps, a))
+        }
+        if !wrapped.isEmpty {
+            storage.beginEditing()
+            for line in wrapped {
+                let style = (storage.attribute(.paragraphStyle, at: line.location, effectiveRange: nil) as? NSParagraphStyle ?? para)
+                    .mutableCopy() as! NSMutableParagraphStyle
+                style.paragraphSpacing += lineHeight
+                storage.addAttribute(.paragraphStyle, value: style, range: line)
+            }
+            storage.endEditing()
+        }
+
+        switch mode {
+        case .sum: model.summary = analysis.summary.map { ($0, theme.accent3Secondary) }
+        case .average: model.summary = analysis.summary.map { ($0, theme.accent4Secondary) }
+        case .count: model.summary = analysis.summary.map { ($0, theme.accent5Secondary) }
+        default: break
+        }
         textView.typingAttributes = [.font: font, .foregroundColor: text, .paragraphStyle: para]
-        model.annotations = analysis.annotations.compactMap { a in lines.indices.contains(a.line) ? (lines[a.line], a) : nil }
         model.blockCaret = Defaults[.vimMode] && vim.mode != .insert
         textView.model = model
     }
 
+    /// Where TextKit puts the baseline inside a fixed-height line fragment (measured on a scratch layout).
+    private func baselineOffset(font: NSFont, lineHeight: CGFloat) -> CGFloat {
+        let key = "\(font.fontName)/\(font.pointSize)/\(lineHeight)"
+        if let offset = baselineCache[key] { return offset }
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.minimumLineHeight = lineHeight
+        paragraph.maximumLineHeight = lineHeight
+        let storage = NSTextStorage(string: "X", attributes: [.font: font, .paragraphStyle: paragraph])
+        let lm = NSLayoutManager(), tc = NSTextContainer(size: NSSize(width: 1000, height: 1000))
+        storage.addLayoutManager(lm)
+        lm.addTextContainer(tc)
+        lm.ensureLayout(for: tc)
+        let offset = lm.location(forGlyphAt: 0).y
+        baselineCache[key] = offset
+        return offset
+    }
+
+    private static let headingRegex = try! NSRegularExpression(pattern: #"^(#{1,3})[ \t]+\S.*$"#, options: .anchorsMatchLines)
+    private static let commentRegex = try! NSRegularExpression(pattern: #"^[ \t]*//.*$"#, options: .anchorsMatchLines)
+    private static let boldRegex = try! NSRegularExpression(pattern: #"\*\*(?=\S)([^\n]+?)(?<=\S)\*\*"#)
+    private static let italicRegex = try! NSRegularExpression(pattern: #"(?<![*\w])\*(?=[^\s*])([^*\n]+?)(?<=[^\s*])\*(?![*\w])"#)
+    private static let underlineRegex = try! NSRegularExpression(pattern: #"__(?=\S)([^\n]+?)(?<=\S)__"#)
     private static let strikeRegex = try! NSRegularExpression(pattern: #"~~(?=\S)([^\n]+?)~~"#)
+    private static let inlineCodeRegex = try! NSRegularExpression(pattern: #"`[^`\n]+`"#)
 
     func applyAppearance() {
         let theme = Theme.current
-        let accent = NSColor(hex: theme.accent), background = NSColor(hex: theme.background)
-        textView.insertionPointColor = accent
-        textView.selectedTextAttributes = [.backgroundColor: accent.withAlphaComponent(0.22)]
+        let background = NSColor(hex: theme.background)
+        textView.insertionPointColor = NSColor(hex: theme.accent1Main)
+        textView.selectedTextAttributes = [.backgroundColor: NSColor(hex: theme.typeHighlight)]
         textView.backgroundColor = background
         scrollView.backgroundColor = background
+        (scrollView.verticalScroller as? ThinScroller)?.knobColor = NSColor(hex: theme.typeHighlight)
         textView.isAutomaticTextReplacementEnabled = Defaults[.allowTextReplacements]
-        let text = NSColor(hex: theme.text)
-        summaryLabel.fill = background.withAlphaComponent(0.92)
-        summaryLabel.label.textColor = NSColor(hex: theme.result)
-        modeLabel.fill = text.withAlphaComponent(0.08)
-        modeLabel.label.textColor = NSColor(hex: theme.secondaryText)
-        dropOverlay.fill = text.withAlphaComponent(0.85)
-        dropOverlay.label.textColor = background
+        modeLabel.fill = NSColor(hex: theme.typeHyperLight)
+        modeLabel.label.textColor = NSColor(hex: theme.typeLight)
+        dropOverlay.theme = theme
         if !Defaults[.vimMode] { vim.reset() }
         updateModeLabel()
         restyle()
@@ -705,11 +846,9 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
             }
             return true
         }
-        if textView.isEditable, let m = textView.model.markers.first(where: { m in
-            if case .checkbox = m.kind { return textView.rect(for: m.range).insetBy(dx: -3, dy: -3).contains(p) }
-            return false
-        }) {
-            apply(EditorLogic.Lists.check(state, line: m.line, behavior: Defaults[.checkedItemBehavior]), action: "Toggle Checklist Item")
+        if textView.isEditable, let i = textView.checkbox(at: p) {
+            let line = textView.model.markers[i].line
+            apply(EditorLogic.Lists.check(state, line: line, behavior: Defaults[.checkedItemBehavior]), action: "Toggle Checklist Item")
             return true
         }
         guard let index = characterIndex(at: p) else { return false }
@@ -741,6 +880,24 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
     }
 
     // MARK: - Links
+
+    /// Hovering a link shows its full address and what clicks do, just below the link and ending at the pointer.
+    func hover(at p: NSPoint?) {
+        guard let p, let index = characterIndex(at: p) else { linkTip.isHidden = true; return }
+        let hint: String, range: NSRange, url: String
+        if let l = links.first(where: { NSLocationInRange(index, $0.range) }) {
+            (url, range) = (l.link.url, l.range)
+            hint = l.expanded ? "⌘+Click to open." : "⌘+Click to open | Click to expand."
+        } else if Defaults[.detectLinks], let r = EditorLogic.Links.urls(in: textView.string).first(where: { NSLocationInRange(index, $0) }) {
+            (url, range) = ((textView.string as NSString).substring(with: r), r)
+            hint = "⌘+Click to open."
+        } else {
+            linkTip.isHidden = true
+            return
+        }
+        let below = textView.convert(NSPoint(x: p.x, y: textView.rect(for: range).maxY + 4), to: view)
+        linkTip.show(url + "\n" + hint, theme: Theme.current, endingAt: below, in: view.bounds)
+    }
 
     private func open(_ string: String) {
         if let url = URL(string: string.trimmingCharacters(in: .whitespaces)) { NSWorkspace.shared.open(url) }
@@ -896,6 +1053,7 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
             guard let self else { return }
             guard let text, !text.isEmpty else { return self.toast("No text found in the image.") }
             self.insert(text)
+            self.toast("Extracted text.", kind: .success)
         }
     }
 
@@ -905,15 +1063,15 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
 
     private func startAutoPaste() {
         autoPaste.start()
-        toast("AutoPaste started. Press ESC to stop.")
-        analyze()
+        toast("AutoPasting clipboard...", kind: .success)
+        refresh()
     }
 
     private func stopAutoPaste(announce: Bool) {
         guard autoPaste.isRunning else { return }
         autoPaste.stop()
         if announce { toast("AutoPaste stopped") }
-        analyze()
+        refresh()
     }
 
     private func appendAutoPaste(_ copied: String) {
@@ -1005,27 +1163,15 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
         case .openURL(let url):
             NSWorkspace.shared.open(url)
             if editable, let r = found { replace(r, with: "", action: "Run Command") }
-        case .message(let message): toast(message)
-        case .failure(let message): toast(message, isError: true)
+        case .message(let message): toast(message, kind: .success)
+        case .failure(let message): toast(message, kind: .error)
         }
     }
 
     // MARK: - Toast
 
-    func toast(_ message: String, isError: Bool = false) {
-        let theme = Theme.current
-        toastLabel.label.stringValue = message
-        toastLabel.fill = isError ? NSColor(hex: theme.error) : NSColor(hex: theme.text).withAlphaComponent(0.88)
-        toastLabel.label.textColor = NSColor(hex: theme.background)
-        toastWork?.cancel()
-        NSAnimationContext.runAnimationGroup { $0.duration = 0.12; toastLabel.animator().alphaValue = 1 }
-        let work = DispatchWorkItem { [weak self] in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                NSAnimationContext.runAnimationGroup { $0.duration = 0.3; self.toastLabel.animator().alphaValue = 0 }
-            }
-        }
-        toastWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: work)
+    /// Shows a message pill at the bottom of the note.
+    func toast(_ message: String, kind: PillKind = .info) {
+        pill.show(message, kind: kind, theme: Theme.current)
     }
 }

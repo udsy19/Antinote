@@ -80,7 +80,7 @@ final class URLSchemeHandler: NSObject {
 
     func open(_ url: URL) {
         guard let command = URLCommand.parse(url) else {
-            HUD.show("Unknown Jotter link", symbol: "exclamationmark.triangle.fill"); return
+            HUD.show("Unknown Jotter link", kind: .warning); return
         }
         let store = Services.store!, windows = Services.windows!
         switch command {
@@ -104,7 +104,7 @@ final class URLSchemeHandler: NSObject {
             if store.note(id) != nil { windows.show(noteID: id) } else { windows.showMain() }
         case let .promote(id):
             guard let note = store.note(id) else { windows.showMain(); return }
-            if note.slot != nil { HUD.show("Slotted notes cannot be promoted", symbol: "exclamationmark.triangle.fill") }
+            if note.slot != nil { HUD.show("Slotted notes cannot be promoted", kind: .warning) }
             else { store.promoteToFront(id) }
             windows.show(noteID: id)
         case .togglePin:

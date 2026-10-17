@@ -177,6 +177,12 @@ func registerNoteEngineTests() {
     }))
 
     SelfTest.cases.append(("NoteEngine.math.formatting", {
+        let fixed = makeEngine(MathSettings(decimalPlaces: 2, showPrimarySymbol: false))
+        expect("12 beds x 8 plants = ", "96.00", engine: fixed)
+        expect("($24.25 + $49.2) * 12 =", "881.40", engine: fixed)
+        expect("881.40 / 3 =", "293.80", engine: fixed)
+        let none = makeEngine(MathSettings(decimalPlaces: 0))
+        expect("10 / 4", "3", engine: none)
         let three = makeEngine(MathSettings(significantDigits: 3))
         expect("1/3", "0.333", engine: three)
         expect("1234.5678 + 0", "1,235", engine: three)
@@ -187,18 +193,20 @@ func registerNoteEngineTests() {
         expect("0.000012345 * 1", "0.000012345")
         let annotation = makeEngine().analyze("math\n2 + 3").annotations.first
         check(annotation?.value == 5 && annotation?.line == 1 && annotation?.kind == .result, "annotation value and line")
+        let defs = makeEngine().analyze("math\nGuests: 5\ncost per guest: $34\nguests * cost per guest =").definitions
+        check(defs == [1: "guests", 2: "cost per guest"], "variable definitions by line: \(defs)")
     }))
 
     SelfTest.cases.append(("NoteEngine.sumAverageCount", {
         let engine = makeEngine()
         let tutorial = "$2 for apples, $25 for bus tickets, $6 for coffee and $4.25 for a bagel."
-        check(engine.analyze("sum\n" + tutorial).summary == "Sum: $37.25", "tutorial sum")
+        check(engine.analyze("sum\n" + tutorial).summary == "Total: $37.25", "tutorial sum")
         check(engine.analyze("avg\n" + tutorial).summary == "Average: $9.31", "tutorial average")
-        check(engine.analyze("sum\n$2 for apples, $4,25 for a bagel").summary == "Sum: $6.25", "decimal comma")
+        check(engine.analyze("sum\n$2 for apples, $4,25 for a bagel").summary == "Total: $6.25", "decimal comma")
         let mixed = engine.analyze("sum\n10\n// 5\n-3 and abc123 and 5kg\n1,200")
-        check(mixed.summary == "Sum: 1,207", "plain numbers, comments and glued words: \(mixed.summary ?? "nil")")
-        check(engine.analyze("sum\n10 EUR\n$9").summary == "Sum: €18.10", "currency conversion in sum")
-        check(engine.analyze("total\nnothing here").summary == "Sum: 0", "empty sum")
+        check(mixed.summary == "Total: 1,207", "plain numbers, comments and glued words: \(mixed.summary ?? "nil")")
+        check(engine.analyze("sum\n10 EUR\n$9").summary == "Total: €18.10", "currency conversion in sum")
+        check(engine.analyze("total\nnothing here").summary == "Total: 0", "empty sum")
         check(engine.analyze("mean\n1\n2\n3\n4").summary == "Average: 2.5", "average")
         let count = engine.analyze("count\nTed Bluderfield\nSadie Lafleur\n\n// skip me\nCarl")
         check(count.mode == .count && count.summary == "3 items · 4 lines · 5 words · 32 characters",
@@ -288,14 +296,14 @@ func registerNoteEngineTests() {
 
     SelfTest.cases.append(("NoteEngine.links", {
         let cases = [
-            ("https://github.com/owner/repo/pull/42", "github.com/…/pull/42"),
-            ("https://www.example.com/", "example.com"),
-            ("https://en.wikipedia.org/wiki/A_Psalm_for_the_Wild-Built", "en.wikipedia.org/…/A_Psalm_for_the_Wild-Built"),
-            ("https://store.steampowered.com/app/221910/The_Stanley_Parable/", "store.steampowered.com/…/The_Stanley_Parable"),
-            ("https://youtube.com/watch?v=abc", "youtube.com/watch?…"),
-            ("https://example.com/docs/a%20very%20long%20file%20name%20that%20goes%20on.pdf",
-             "example.com/…/a very long file name tha…"),
-            ("http://news.ycombinator.com/item", "news.ycombinator.com/item"),
+            ("https://github.com/owner/repo/pull/42", "+github.com/...ull/42+"),
+            ("https://www.example.com/", "+example.com+"),
+            ("https://en.wikipedia.org/wiki/A_Psalm_for_the_Wild-Built", "+en.wikipedia.org/...-Built+"),
+            ("https://store.steampowered.com/app/221910/The_Stanley_Parable/", "+store.steampowered.com/...arable+"),
+            ("https://youtube.com/watch?v=abc", "+youtube.com/watch?…+"),
+            ("https://example.com/docs/a%20very%20long%20file%20name%20that%20goes%20on.pdf", "+example.com/...on.pdf+"),
+            ("http://news.ycombinator.com/item", "+news.ycombinator.com/item+"),
+            ("mailto:me@example.com", "+me@example.com+"),
         ]
         for (url, short) in cases {
             let got = makeEngine().shorten(url: url)

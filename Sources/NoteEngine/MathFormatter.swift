@@ -6,14 +6,20 @@ public struct MathSettings: Hashable, Sendable {
     public var primaryCurrency: String
     public var secondaryCurrency: String
     public var significantDigits: Int
+    /// Fixed decimal places for results, or nil for automatic (significant digits, trailing zeros trimmed).
+    public var decimalPlaces: Int?
+    /// Whether results in the primary currency carry its symbol.
+    public var showPrimarySymbol: Bool
     public var useGrouping: Bool
     public var answerWord: String
     public var decimalSeparator: String
     public var groupingSeparator: String
 
     public init(primaryCurrency: String = "USD", secondaryCurrency: String = "EUR", significantDigits: Int = 6,
+                decimalPlaces: Int? = nil, showPrimarySymbol: Bool = true,
                 useGrouping: Bool = true, answerWord: String = "ans", decimalSeparator: String = ".",
                 groupingSeparator: String = ",") {
+        self.decimalPlaces = decimalPlaces; self.showPrimarySymbol = showPrimarySymbol
         self.primaryCurrency = primaryCurrency.uppercased(); self.secondaryCurrency = secondaryCurrency.uppercased()
         self.significantDigits = significantDigits; self.useGrouping = useGrouping; self.answerWord = answerWord
         self.decimalSeparator = decimalSeparator; self.groupingSeparator = groupingSeparator
@@ -23,7 +29,8 @@ public struct MathSettings: Hashable, Sendable {
     public static var current: MathSettings {
         let locale = Locale.current
         return MathSettings(primaryCurrency: Defaults[.primaryCurrency], secondaryCurrency: Defaults[.secondaryCurrency],
-                            significantDigits: Defaults[.significantDigits],
+                            decimalPlaces: Defaults[.decimalPlaces] < 0 ? nil : min(Defaults[.decimalPlaces], 7),
+                            showPrimarySymbol: Defaults[.showCurrencySymbol],
                             useGrouping: Defaults[.thousandsSeparator], answerWord: Defaults[.answerWord],
                             decimalSeparator: locale.decimalSeparator ?? ".",
                             groupingSeparator: locale.groupingSeparator ?? ",")
@@ -47,9 +54,10 @@ struct MathFormatter {
         if CurrencyCatalog.crypto[code] != nil || (value != 0 && Swift.abs(value) < 0.01) {
             amount = number(Swift.abs(value))
         } else {
-            amount = number(Swift.abs(value), fractionDigits: CurrencyCatalog.zeroDecimal.contains(code) ? 0 : 2)
+            amount = number(Swift.abs(value), fractionDigits: CurrencyCatalog.zeroDecimal.contains(code) ? 0 : (settings.decimalPlaces ?? 2))
         }
         let sign = value < 0 ? "-" : ""
+        if code == settings.primaryCurrency, !settings.showPrimarySymbol { return sign + amount }
         if let symbol = CurrencyCatalog.symbol(for: code, primary: settings.primaryCurrency) {
             return sign + symbol + amount
         }
@@ -76,9 +84,13 @@ struct MathFormatter {
             }
             return s
         }
-        let digits = fractionDigits ?? min(12, max(0, sig - magnitude))
-        var s = String(format: "%.\(digits)f", v)
-        if fractionDigits == nil, s.contains(".") {
+        let fixed = fractionDigits ?? settings.decimalPlaces
+        let digits = fixed ?? min(12, max(0, sig - magnitude))
+        // Round half away from zero (2.5 → 3) rather than printf's half-to-even.
+        let scale = pow(10, Double(digits))
+        let rounded = (v * scale).rounded(.toNearestOrAwayFromZero) / scale
+        var s = String(format: "%.\(digits)f", rounded.isFinite ? rounded : v)
+        if fixed == nil, s.contains(".") {
             while s.hasSuffix("0") { s.removeLast() }
             if s.hasSuffix(".") { s.removeLast() }
         }

@@ -32,7 +32,7 @@ public final class NoteEngine: NoteAnalyzing, @unchecked Sendable {
             if let last = lastNote, last.text == text, last.key == key { return last.analysis }
             var analysis = NoteAnalysis(mode: detected.mode, arguments: detected.arguments)
             if detected.mode == .math {
-                analysis.annotations = analyzeMath(body, context: MathContext(settings: settings, rates: rates))
+                (analysis.annotations, analysis.definitions) = analyzeMath(body, context: MathContext(settings: settings, rates: rates))
             } else {
                 analysis.summary = Tally.numbers(body, average: detected.mode == .average, settings: settings, rates: rates)
             }
@@ -110,12 +110,14 @@ public final class NoteEngine: NoteAnalyzing, @unchecked Sendable {
     private static let averageWords: Set<String> = ["average", "avg", "mean"]
 
     /// Must be called with `lock` held. `lines` excludes the keyword line (annotation indices are offset by 1).
-    private func analyzeMath(_ lines: [String], context base: MathContext) -> [LineAnnotation] {
+    /// Returns the annotations and the variable each line defines.
+    private func analyzeMath(_ lines: [String], context base: MathContext) -> ([LineAnnotation], [Int: String]) {
         if lineCache.count > 5000 { lineCache.removeAll() }
         let formatter = MathFormatter(settings: base.settings)
         var context = base
         var block: [Quantity] = []
         var annotations: [LineAnnotation] = []
+        var definitions: [Int: String] = [:]
         for (offset, line) in lines.enumerated() {
             let index = offset + 1
             let trimmed = line.trimmingCharacters(in: .whitespaces)
@@ -140,7 +142,10 @@ public final class NoteEngine: NoteAnalyzing, @unchecked Sendable {
                 outcome = Self.evaluateLine(trimmed, context: context, formatter: formatter)
                 lineCache[key] = outcome
             }
-            if let def = outcome.definition { context.variables[def.name] = def.value }
+            if let def = outcome.definition {
+                context.variables[def.name] = def.value
+                definitions[index] = def.name
+            }
             if let value = outcome.value {
                 if outcome.isAnswer { context.answer = value }
                 if outcome.countsInTotal { block.append(value) }
@@ -150,7 +155,7 @@ public final class NoteEngine: NoteAnalyzing, @unchecked Sendable {
                                                   value: kind == .error ? nil : outcome.value?.value))
             }
         }
-        return annotations
+        return (annotations, definitions)
     }
 
     private static func total(_ values: [Quantity], average: Bool) -> Quantity? {

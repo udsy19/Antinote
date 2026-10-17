@@ -14,7 +14,7 @@ public final class ExportManager: ExportServicing {
         let omit = Defaults[.omitKeywordInExport]
         let body = ExportText.body(note.content, omitKeyword: omit)
         guard !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            HUD.show("No note to export", symbol: "exclamationmark.triangle.fill"); return
+            HUD.show("No note to export", kind: .warning); return
         }
         let title = ExportText.title(of: body)
         let markdown = ExportText.markdownDocument(note.content, omitKeyword: omit)
@@ -69,7 +69,7 @@ public final class ExportManager: ExportServicing {
         guard panel.runModal() == .OK, let folder = panel.url else { return }
         do {
             try exportAll(to: folder)
-            HUD.show("Notes exported")
+            HUD.show("Notes exported", kind: .success)
         } catch {
             Alerts.error("Couldn't export the notes.", error)
         }
@@ -78,7 +78,7 @@ public final class ExportManager: ExportServicing {
     /// Prints a note with the editor font.
     public func print(_ note: Note) {
         let body = ExportText.body(note.content, omitKeyword: Defaults[.omitKeywordInExport])
-        guard !body.isEmpty else { HUD.show("No note to print", symbol: "exclamationmark.triangle.fill"); return }
+        guard !body.isEmpty else { HUD.show("No note to print", kind: .warning); return }
         let info = (NSPrintInfo.shared.copy() as? NSPrintInfo) ?? NSPrintInfo()
         let op = printOperation(body, info: info)
         op.showsPrintPanel = true
@@ -93,7 +93,7 @@ public final class ExportManager: ExportServicing {
         let source = "tell application \"Notes\" to make new note with properties {body:\"\(html)\"}"
         var error: NSDictionary?
         NSAppleScript(source: source)?.executeAndReturnError(&error)
-        guard let error else { HUD.show("Sent to Apple Notes"); return }
+        guard let error else { HUD.show("Sent to Apple Notes", kind: .success); return }
         let code = error[NSAppleScript.errorNumber] as? Int ?? 0
         if code == -1743 {
             Alerts.error("Jotter isn't allowed to control Notes.",
@@ -128,7 +128,7 @@ public final class ExportManager: ExportServicing {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             try text.write(to: url, atomically: true, encoding: .utf8)
-            HUD.show("Note exported")
+            HUD.show("Note exported", kind: .success)
         } catch {
             Alerts.error("Couldn't save the note.", error)
         }
@@ -146,7 +146,7 @@ public final class ExportManager: ExportServicing {
         let op = printOperation(text, info: info)
         op.showsPrintPanel = false
         op.showsProgressPanel = false
-        if op.run() { HUD.show("PDF exported") } else { Alerts.error("Failed to export PDF") }
+        if op.run() { HUD.show("PDF exported", kind: .success) } else { Alerts.error("Failed to export PDF") }
     }
 
     /// A paginated text view in the editor font, black on white.
@@ -156,10 +156,10 @@ public final class ExportManager: ExportServicing {
         info.topMargin = 54; info.bottomMargin = 54; info.leftMargin = 54; info.rightMargin = 54
         let width = info.paperSize.width - info.leftMargin - info.rightMargin
         let view = NSTextView(frame: NSRect(x: 0, y: 0, width: width, height: 10))
-        let size = CGFloat(Defaults[.fontSize])
-        let font = NSFont(name: Defaults[.fontName], size: size) ?? .monospacedSystemFont(ofSize: size, weight: .regular)
+        let font = Typography.font()
         let style = NSMutableParagraphStyle()
-        style.lineSpacing = CGFloat(Defaults[.lineSpacing])
+        style.minimumLineHeight = Typography.lineHeight(for: font)
+        style.maximumLineHeight = style.minimumLineHeight
         view.textStorage?.setAttributedString(NSAttributedString(string: text, attributes: [
             .font: font, .foregroundColor: NSColor.black, .paragraphStyle: style,
         ]))

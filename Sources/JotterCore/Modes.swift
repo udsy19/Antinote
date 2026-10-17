@@ -64,11 +64,15 @@ public struct NoteAnalysis: Sendable, Equatable {
     /// Arguments after the keyword on the first line (e.g. "25m" for `timer 25m`).
     public var arguments: String
     public var annotations: [LineAnnotation]
-    /// e.g. "Sum: 1,240" / "Average: 12.5" / "12 lines · 87 words · 512 characters".
+    /// e.g. "Total: 1,240" / "Average: 12.5" / "12 lines · 87 words · 512 characters".
     public var summary: String?
+    /// Math variables: 0-based line index → the (lowercased) name that line defines.
+    public var definitions: [Int: String]
 
-    public init(mode: NoteMode, arguments: String = "", annotations: [LineAnnotation] = [], summary: String? = nil) {
+    public init(mode: NoteMode, arguments: String = "", annotations: [LineAnnotation] = [], summary: String? = nil,
+                definitions: [Int: String] = [:]) {
         self.mode = mode; self.arguments = arguments; self.annotations = annotations; self.summary = summary
+        self.definitions = definitions
     }
     public static let plain = NoteAnalysis(mode: .plain)
 }
@@ -77,7 +81,7 @@ public struct LineAnnotation: Sendable, Equatable {
     public enum Kind: String, Sendable { case result, error, info }
     /// 0-based line index in the note.
     public var line: Int
-    /// Text drawn right-aligned on that line (e.g. "= 42", "€ 38.20").
+    /// Text drawn right after the line's end (e.g. "42", "€38.20").
     public var text: String
     public var kind: Kind
     /// Numeric value, when the line produced one (used by sums and variables).

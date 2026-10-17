@@ -78,7 +78,7 @@ final class CommandPalette {
             PaletteItem(title: Defaults[.pinOnTop] ? "Unpin Window" : "Pin Window on Top", symbol: "pin",
                         keywords: "float always on top") {
                 Defaults[.pinOnTop].toggle()
-                HUD.show(Defaults[.pinOnTop] ? "Pinned on top" : "Unpinned", symbol: "pin")
+                HUD.show(Defaults[.pinOnTop] ? "Pinned on top" : "Unpinned")
             },
             PaletteItem(title: "Export All Notes…", symbol: "square.and.arrow.up.on.square", keywords: "backup markdown") {
                 (Services.export as? ExportManager)?.exportAllInteractively()
@@ -105,12 +105,12 @@ final class CommandPalette {
         if note.slot == nil && note.position != 0 {
             items.append(PaletteItem(title: "Promote to Front", symbol: "arrow.up.to.line", keywords: "move top first") {
                 Services.store.promoteToFront(note.id)
-                HUD.show("Promoted note to front")
+                HUD.show("Promoted note to front", kind: .success)
             })
         }
         items.append(PaletteItem(title: "Send to The Void", symbol: "trash", keywords: "delete remove") {
             Services.store.moveToVoid(note.id)
-            HUD.show("Note sent to The Void", symbol: "tornado")
+            HUD.show("Note sent to The Void")
         })
         return items
     }
@@ -167,8 +167,8 @@ final class CommandPalette {
     }
 
     /// Settings tabs (ids are the lower-cased first word of the tab name).
-    static let settingsTabs = ["General", "Appearance", "Writing", "Lists", "Math", "Copy & Paste", "Keywords",
-                               "Timers", "Notes & Storage", "Privacy", "Extensions", "Advanced"]
+    static let settingsTabs = ["General", "Appearance", "Editor", "Notes", "Keywords", "Shortcuts", "Timer", "Export",
+                               "Extensions", "Privacy", "Updates"]
 
     private func settingsItems() -> [PaletteItem] {
         Self.settingsTabs.map { tab in

@@ -185,9 +185,9 @@ public enum InactivityPolicy {
 
 // MARK: - Settings tabs
 
+/// The Settings window's toolbar tabs, in order.
 public enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
-    case general, appearance, writing, lists, math, copyPaste, keywords, timers, shortcuts, extensions
-    case privacy, sync, storage, export, about
+    case general, appearance, editor, notes, keywords, shortcuts, timer, export, extensions, privacy, updates
 
     public var id: String { rawValue }
 
@@ -195,39 +195,31 @@ public enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .general: "General"
         case .appearance: "Appearance"
-        case .writing: "Writing"
-        case .lists: "Lists"
-        case .math: "Math"
-        case .copyPaste: "Copy & Paste"
+        case .editor: "Editor"
+        case .notes: "Notes"
         case .keywords: "Keywords"
-        case .timers: "Timers"
         case .shortcuts: "Shortcuts"
+        case .timer: "Timer"
+        case .export: "Export"
         case .extensions: "Extensions"
         case .privacy: "Privacy"
-        case .sync: "Sync"
-        case .storage: "Storage"
-        case .export: "Export"
-        case .about: "About"
+        case .updates: "Updates"
         }
     }
 
     public var symbol: String {
         switch self {
         case .general: "gearshape"
-        case .appearance: "paintpalette"
-        case .writing: "pencil.line"
-        case .lists: "checklist"
-        case .math: "function"
-        case .copyPaste: "doc.on.clipboard"
-        case .keywords: "textformat"
-        case .timers: "timer"
-        case .shortcuts: "command"
-        case .extensions: "puzzlepiece.extension"
-        case .privacy: "hand.raised"
-        case .sync: "icloud"
-        case .storage: "externaldrive"
+        case .appearance: "swatchpalette"
+        case .editor: "character.cursor.ibeam"
+        case .notes: "doc.on.doc"
+        case .keywords: "wand.and.sparkles"
+        case .shortcuts: "command.square"
+        case .timer: "stopwatch"
         case .export: "square.and.arrow.up"
-        case .about: "info.circle"
+        case .extensions: "puzzlepiece.extension.fill"
+        case .privacy: "eye.slash"
+        case .updates: "arrow.down.circle"
         }
     }
 
@@ -236,12 +228,16 @@ public enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
         guard let raw = name?.trimmingCharacters(in: .whitespaces).lowercased(), !raw.isEmpty else { return nil }
         let key = raw.filter { $0.isLetter }
         let aliases: [String: SettingsTab] = [
-            "copypaste": .copyPaste, "copyandpaste": .copyPaste, "paste": .copyPaste, "clipboard": .copyPaste,
             "theme": .appearance, "themes": .appearance, "visual": .appearance, "icon": .appearance,
+            "paper": .appearance, "font": .appearance,
+            "writing": .editor, "lists": .editor, "list": .editor, "copypaste": .editor, "copyandpaste": .editor,
+            "copy": .editor, "paste": .editor, "clipboard": .editor, "links": .editor, "vim": .editor,
+            "storage": .notes, "advanced": .notes, "backups": .notes, "backup": .notes, "void": .notes,
+            "sync": .notes, "icloud": .notes, "lock": .notes, "slots": .notes,
+            "math": .keywords, "currency": .keywords, "currencies": .keywords, "keyword": .keywords,
             "keyboard": .shortcuts, "hotkey": .shortcuts, "keys": .shortcuts,
-            "advanced": .storage, "notes": .storage, "backups": .storage, "backup": .storage, "void": .storage,
-            "icloud": .sync, "network": .privacy, "lock": .privacy, "currency": .math, "currencies": .math,
-            "timer": .timers, "pomodoro": .timers, "list": .lists, "keyword": .keywords, "extension": .extensions,
+            "timers": .timer, "pomodoro": .timer, "extension": .extensions, "network": .privacy,
+            "about": .updates, "version": .updates, "update": .updates,
         ]
         if let tab = SettingsTab.allCases.first(where: { $0.rawValue.lowercased() == key }) { self = tab; return }
         if let tab = aliases[key] { self = tab; return }

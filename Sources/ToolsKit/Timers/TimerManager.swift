@@ -6,6 +6,8 @@ import UserNotifications
 extension Defaults.Keys {
     /// Timer state by note UUID string (survives relaunches).
     static let toolsKitTimers = Key<[String: TimerRun]>("toolsKit.timers", default: [:])
+    /// Pomodoro breaks sat out without peeking.
+    static let toolsKitNoPeekStreak = Key<NoPeekStreak>("toolsKit.noPeekStreak", default: NoPeekStreak())
 }
 
 public extension Notification.Name {
@@ -46,9 +48,9 @@ public final class TimerManager: NSObject, TimerServicing, NSMenuDelegate {
                                      breakMinutes: Defaults[.pomodoroBreakMinutes])
         switch parsed {
         case let .failure(error):
-            HUD.show(error.message, symbol: "exclamationmark.triangle.fill")
+            HUD.show(error.message, kind: .warning)
         case let .success(.control(control)):
-            guard runs[noteID] != nil else { HUD.show("No timer running", symbol: "timer"); return }
+            guard runs[noteID] != nil else { HUD.show("No timer running"); return }
             switch control {
             case .togglePause: togglePause(noteID: noteID)
             case .reset: reset(noteID: noteID)
@@ -61,7 +63,7 @@ public final class TimerManager: NSObject, TimerServicing, NSMenuDelegate {
                 return
             }
             runs[noteID] = TimerRun(spec: spec, now: now)
-            HUD.show(spec.startMessage, symbol: "timer")
+            HUD.show(spec.startMessage, kind: .success)
             if spec.kind == .breathe { TimerOverlay.shared.showBreathing() }
             changed(noteID)
         }
@@ -172,32 +174,48 @@ public final class TimerManager: NSObject, TimerServicing, NSMenuDelegate {
     private func announce(_ event: TimerEvent, run: TimerRun, noteID: UUID) {
         let name = run.spec.name
         let title: String, message: String, sound: String
-        var live: (() -> String?)?
         switch event {
         case .finished:
-            title = name.isEmpty ? "Time's up" : name
+            title = name.isEmpty ? "Time’s up" : name
             message = "Your countdown timer is over."
             sound = "Glass"
-        case let .workEnded(n):
+        case .workEnded:
             title = "Work Session Complete"
-            message = "Session \(n) done\(name.isEmpty ? "" : " · \(name)"). Break time remaining:"
+            message = "Take some time for yourself."
             sound = "Hero"
-            live = { [weak self] in
-                guard let self, let run = self.runs[noteID], let left = run.snapshot(at: self.clock()).remaining,
-                      case .rest = run.snapshot(at: self.clock()).phase else { return nil }
-                return TimerFormat.clock(left.rounded(.up))
-            }
         case .breakEnded:
-            title = "Next work session started."
-            message = name.isEmpty ? "Back at it." : name
+            if TimerOverlay.shared.breakNoteID == noteID { Defaults[.toolsKitNoPeekStreak].breakCompleted() }
+            title = "Break’s over"
+            message = BreakContent.backToWork.randomElement() ?? ""
             sound = "Ping"
         }
         if Defaults[.timerSounds] { NSSound(named: NSSound.Name(sound))?.play() }
         let style = Defaults[.timerAlertStyle]
         if style != .notification {
-            TimerOverlay.shared.showAlert(title: title, message: message, encouragement: Encouragement.random(), live: live)
+            switch event {
+            case .workEnded: TimerOverlay.shared.showBreak(breakScreen(noteID: noteID))
+            case .finished: TimerOverlay.shared.showAlert(title: title, subtitle: "Countdown", message: message)
+            case let .breakEnded(n):
+                TimerOverlay.shared.showAlert(title: title, subtitle: name.isEmpty ? "Session \(n + 1)" : name, message: message)
+            }
         }
         if style != .fullScreen { TimerNotifier.post(title: title, body: message) }
+    }
+
+    /// The break screen for the pomodoro on `noteID`.
+    private func breakScreen(noteID: UUID) -> TimerOverlay.Break {
+        TimerOverlay.Break(
+            noteID: noteID,
+            fact: BreakContent.randomFact(),
+            remaining: { [weak self] in
+                guard let self, let snap = self.runs[noteID]?.snapshot(at: self.clock()), case .rest = snap.phase else { return nil }
+                return snap.remaining
+            },
+            isPaused: { [weak self] in self?.runs[noteID]?.isPaused ?? false },
+            togglePause: { [weak self] in self?.togglePause(noteID: noteID) },
+            end: { [weak self] in self?.stop(noteID: noteID) },
+            peek: { Defaults[.toolsKitNoPeekStreak].peeked() },
+            streak: { Defaults[.toolsKitNoPeekStreak] })
     }
 
     // MARK: Menu bar
@@ -304,21 +322,6 @@ public final class TimerManager: NSObject, TimerServicing, NSMenuDelegate {
               arguments.split(separator: " ").first?.lowercased() != keyword else { return arguments }
         return keyword + " " + arguments
     }
-}
-
-/// Short, original lines for the completion overlay.
-enum Encouragement {
-    static let lines = [
-        "Nice work. Roll your shoulders back.",
-        "Done. Grab a glass of water.",
-        "Look at something far away for twenty seconds.",
-        "Small steps still add up.",
-        "You showed up for it. That counts.",
-        "Unclench your jaw. Breathe out slowly.",
-        "Stand up, stretch, then decide what is next.",
-        "One thing finished beats three half-started.",
-    ]
-    static func random() -> String { lines.randomElement() ?? "" }
 }
 
 /// System notifications (only from a real app bundle — `UNUserNotificationCenter` needs one).

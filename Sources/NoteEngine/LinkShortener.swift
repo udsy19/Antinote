@@ -2,11 +2,12 @@ import Foundation
 
 /// Link Shrink: readable short forms of URLs, and URL detection in plain text.
 public enum LinkShortener {
-    /// `https://github.com/owner/repo/pull/42` → `github.com/…/pull/42`.
+    /// `https://github.com/owner/repo/pull/42` → `+github.com/...ull/42+`: a "+", the host, "/...", the last six
+    /// characters of the path, then "+". Addresses that are short already keep their whole path between the "+"s.
     public static func shorten(_ address: String) -> String {
         var s = address.trimmingCharacters(in: .whitespacesAndNewlines)
         if let scheme = s.range(of: "://") { s = String(s[scheme.upperBound...]) }
-        else if s.lowercased().hasPrefix("mailto:") { return String(s.dropFirst(7)) }
+        else if s.lowercased().hasPrefix("mailto:") { return "+" + s.dropFirst(7) + "+" }
         if s.lowercased().hasPrefix("www.") { s.removeFirst(4) }
         if let hash = s.firstIndex(of: "#") { s = String(s[..<hash]) }
         var query = false
@@ -17,18 +18,10 @@ public enum LinkShortener {
         while s.hasSuffix("/") { s.removeLast() }
         let parts = s.split(separator: "/").map { String($0).removingPercentEncoding ?? String($0) }
         guard let host = parts.first else { return address }
-        let path = Array(parts.dropFirst())
-        let suffix = query ? "?…" : ""
-        let full = ([host] + path).joined(separator: "/")
-        if full.count <= 24 || path.isEmpty { return full + suffix }
-        var ending = path[path.count - 1]
-        var endingCount = 1
-        if path.count >= 2, ending.count <= 4 || Int(ending) != nil {
-            ending = path[path.count - 2] + "/" + ending
-            endingCount = 2
-        }
-        if ending.count > 28 { ending = String(ending.prefix(25)) + "…" }
-        return host + (endingCount == path.count ? "/" : "/…/") + ending + suffix
+        let tail = parts.dropFirst().joined(separator: "/") + (query ? "?…" : "")
+        let full = tail.isEmpty ? host : host + "/" + tail
+        if full.count <= 24 || tail.count <= 6 { return "+" + full + "+" }
+        return "+" + host + "/..." + tail.suffix(6) + "+"
     }
 
     public struct DetectedLink: Equatable, Sendable {

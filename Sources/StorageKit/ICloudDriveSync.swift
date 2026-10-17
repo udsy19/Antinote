@@ -193,10 +193,10 @@ enum PreferencesSync {
     static let keyNames: Set<String> = Set(([
         .appPresence, .globalHotkey, .pinOnTop, .restorePinState, .hideOnFocusLoss, .newNoteAfterMinutes,
         .swipeNavigation, .swipeSensitivity, .showLatestNoteIndicator, .showNoteDates, .alwaysShowSlotsBar, .forceRTL,
-        .lightTheme, .darkTheme, .paperType, .paperOpacity, .fontName, .fontSize, .lineSpacing, .translucent, .appIcon,
+        .lightTheme, .darkTheme, .paperType, .paperOpacity, .fontName, .textSize, .doubleFontSize, .lineSpacing, .translucent, .appIcon,
         .vimMode, .keepIndentOnReturn, .allowTextReplacements, .shortenLinks, .detectLinks,
         .defaultListStyle, .checkedItemBehavior, .listContinuity,
-        .primaryCurrency, .secondaryCurrency, .significantDigits, .autoUpdateRates, .preventEditingAnswers, .customRates,
+        .primaryCurrency, .secondaryCurrency, .decimalPlaces, .showCurrencySymbol, .autoUpdateRates, .preventEditingAnswers, .customRates,
         .cleanPaste, .pasteRemoveMarkdown, .pasteRemoveBullets, .pasteRemoveNumbering, .pasteRemoveLeadingWhitespace,
         .pasteRemoveEmptyLines, .copyWholeNoteWhenNoSelection, .cutLineWhenNoSelection, .skipKeywordWhenCopying,
         .copyListItemsUnchecked, .skipListMarkersWhenCopying, .extraKeywords,

@@ -39,7 +39,7 @@ enum AppIcons {
     static func select(_ id: String) {
         Defaults[.appIcon] = id
         apply()
-        HUD.show("App icon updated", symbol: "app.badge")
+        HUD.show("App icon updated")
     }
 
     /// Copies the chosen image into Application Support and selects it.
