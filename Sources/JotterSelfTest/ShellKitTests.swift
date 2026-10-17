@@ -5,29 +5,39 @@ import ShellKit
 /// Append cases with `SelfTest.cases.append(("name", { check(..., "msg") }))`.
 func registerShellKitTests() {
     SelfTest.cases.append(("ShellKit.swipeAccumulator", {
-        var s = SwipeAccumulator(sensitivity: 0)          // threshold 30
-        check(s.threshold == 30, "lowest sensitivity threshold")
-        check(SwipeAccumulator(sensitivity: 1).threshold == 200, "highest sensitivity threshold")
-        check(SwipeAccumulator(sensitivity: 5).threshold == 200, "sensitivity is clamped")
+        var s = SwipeAccumulator(sensitivity: 0)          // threshold 20
+        check(s.threshold == 20, "lightest sensitivity threshold")
+        check(SwipeAccumulator(sensitivity: 0.5).threshold == 70, "default threshold")
+        check(SwipeAccumulator(sensitivity: 1).threshold == 120, "firmest threshold")
+        check(SwipeAccumulator(sensitivity: 5).threshold == 120, "sensitivity is clamped")
         check(s.feed(phase: .began, fingerDX: 2, fingerDY: 0) == .pass, "below axis-lock distance passes")
         check(s.feed(phase: .changed, fingerDX: 10, fingerDY: 1) == .consume, "horizontal gesture is consumed")
-        check(s.feed(phase: .changed, fingerDX: 20, fingerDY: 0) == .navigate(.previous), "fingers right → previous")
+        check(s.feed(phase: .changed, fingerDX: 10, fingerDY: 0) == .navigate(.previous), "fingers right → previous")
         check(s.feed(phase: .changed, fingerDX: 50, fingerDY: 0) == .consume, "fires only once per gesture")
-        check(s.feed(phase: .momentum, fingerDX: 40, fingerDY: 0) == .consume, "momentum of a swipe is swallowed")
         check(s.feed(phase: .ended, fingerDX: 0, fingerDY: 0) == .consume, "end of horizontal gesture consumed")
+        check(s.feed(phase: .momentum, fingerDX: 40, fingerDY: 0) == .consume, "momentum after firing is swallowed")
 
         check(s.feed(phase: .began, fingerDX: -8, fingerDY: 0) == .consume, "new gesture locks horizontal")
-        check(s.feed(phase: .changed, fingerDX: -25, fingerDY: 0) == .navigate(.next), "fingers left → next")
+        check(s.feed(phase: .changed, fingerDX: -15, fingerDY: 0) == .navigate(.next), "fingers left → next")
         _ = s.feed(phase: .ended, fingerDX: 0, fingerDY: 0)
 
         check(s.feed(phase: .began, fingerDX: 3, fingerDY: 10) == .pass, "vertical scroll passes")
         check(s.feed(phase: .changed, fingerDX: 80, fingerDY: 0) == .pass, "axis stays vertical for the gesture")
+        _ = s.feed(phase: .ended, fingerDX: 0, fingerDY: 0)
         check(s.feed(phase: .momentum, fingerDX: 80, fingerDY: 0) == .pass, "vertical momentum passes")
+
+        // A quick flick: short finger travel, the rest arrives as momentum.
+        var flick = SwipeAccumulator(sensitivity: 0.5)
+        _ = flick.feed(phase: .began, fingerDX: -10, fingerDY: 0)
+        check(flick.feed(phase: .changed, fingerDX: -30, fingerDY: 0) == .consume, "flick below threshold")
+        check(flick.feed(phase: .ended, fingerDX: 0, fingerDY: 0) == .consume, "flick lift")
+        check(flick.feed(phase: .momentum, fingerDX: -40, fingerDY: 0) == .navigate(.next), "momentum completes a flick")
+        check(flick.feed(phase: .momentum, fingerDX: -40, fingerDY: 0) == .consume, "flick fires once")
 
         var firm = SwipeAccumulator(sensitivity: 1)
         _ = firm.feed(phase: .began, fingerDX: 10, fingerDY: 0)
-        check(firm.feed(phase: .changed, fingerDX: 150, fingerDY: 0) == .consume, "firm needs a longer swipe")
-        check(firm.feed(phase: .changed, fingerDX: 45, fingerDY: 0) == .navigate(.previous), "firm fires at 200")
+        check(firm.feed(phase: .changed, fingerDX: 100, fingerDY: 0) == .consume, "firm needs a longer swipe")
+        check(firm.feed(phase: .changed, fingerDX: 15, fingerDY: 0) == .navigate(.previous), "firm fires at 120")
     }))
 
     SelfTest.cases.append(("ShellKit.deckNavigator", {

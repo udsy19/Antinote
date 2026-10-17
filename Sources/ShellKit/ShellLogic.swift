@@ -31,7 +31,8 @@ public struct SwipeAccumulator: Sendable {
     public init(sensitivity: Double) { self.sensitivity = sensitivity }
 
     public static let axisLockDistance = 6.0
-    public var threshold: Double { 30 + 170 * min(max(sensitivity, 0), 1) }
+    /// Finger travel (points) before a swipe switches notes: 20 at the lightest setting, 70 by default, 120 at the firmest.
+    public var threshold: Double { 20 + 100 * min(max(sensitivity, 0), 1) }
 
     /// `fingerDX` is positive when the fingers move right (independent of natural scrolling).
     public mutating func feed(phase: Phase, fingerDX: Double, fingerDY: Double) -> Outcome {
@@ -43,11 +44,12 @@ public struct SwipeAccumulator: Sendable {
             dx += fingerDX; dy += fingerDY
             return decide()
         case .ended:
-            let wasHorizontal = horizontal == true
-            dx = 0; dy = 0; fired = false
-            return wasHorizontal ? .consume : .pass
-        case .momentum:
+            // State is kept until the next gesture: a quick flick finishes its travel in the momentum phase.
             return horizontal == true ? .consume : .pass
+        case .momentum:
+            guard horizontal == true else { return .pass }
+            dx += fingerDX
+            return decide()
         }
     }
 

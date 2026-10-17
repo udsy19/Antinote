@@ -622,7 +622,7 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
 
     /// Feeds trackpad scrolls to the swipe recogniser; true when the event belongs to a horizontal swipe.
     private func swallowsScroll(_ event: NSEvent) -> Bool {
-        guard event.window === window, Defaults[.swipeNavigation], event.hasPreciseScrollingDeltas else { return false }
+        guard Defaults[.swipeNavigation], event.hasPreciseScrollingDeltas, isOverMainWindow(event) else { return false }
         let phase: SwipeAccumulator.Phase
         if !event.momentumPhase.isEmpty {
             phase = .momentum
@@ -644,6 +644,13 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         case .consume: return true
         case .navigate(let direction): navigate(direction); return true
         }
+    }
+
+    /// Scrolls that target the note window. Some scroll events (e.g. from other input sources) carry no window,
+    /// so fall back to "pointer is over the key note window".
+    private func isOverMainWindow(_ event: NSEvent) -> Bool {
+        if let w = event.window { return w === window }
+        return window.isVisible && window.frame.contains(NSEvent.mouseLocation)
     }
 
     // MARK: - Locking
