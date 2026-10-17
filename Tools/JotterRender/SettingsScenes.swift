@@ -12,7 +12,18 @@ extension Scenes {
                     "extensions", "privacy", "updates"]
         return tabs.map { tab in Scene(name: "settings-\(tab)", size: size) { settingsWindow(tab) } }
             + [Scene(name: "settings-notes-dark", size: size, dark: true) { settingsWindow("notes") }]
+            + tabs.map { tab in
+                let height = fullHeights[tab] ?? 1100
+                return Scene(name: "settings-full-\(tab)", size: NSSize(width: size.width, height: height)) {
+                    snapshot(SettingsPreview.page(tab: tab, height: height))
+                }
+            }
     }
+
+    /// Tall enough to show every section of each tab.
+    private static let fullHeights: [String: CGFloat] = [
+        "appearance": 1900, "editor": 1900, "notes": 1600, "keywords": 3300, "privacy": 1100, "general": 1250,
+    ]
 
     private static func settingsWindow(_ tab: String) -> NSView {
         let window = SettingsPreview.window(tab: tab)

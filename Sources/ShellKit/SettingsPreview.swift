@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 
 /// Offscreen Settings windows for rendering (JotterRender). The window is never shown.
 public enum SettingsPreview {
@@ -7,5 +8,13 @@ public enum SettingsPreview {
         let (window, controller) = SettingsWindow.makeWindow(autosave: false)
         controller.selectedTabViewItemIndex = SettingsTab(routing: tab).flatMap { SettingsTab.allCases.firstIndex(of: $0) } ?? 0
         return window
+    }
+
+    /// One tab's form alone, `height` points tall, so every section shows (the window only shows the top).
+    @MainActor public static func page(tab: String, height: CGFloat) -> NSView {
+        let page = SettingsWindow.page(SettingsTab(routing: tab) ?? .general)
+        let view = NSHostingView(rootView: page.frame(width: SettingsWindow.contentSize.width, height: height))
+        view.frame = NSRect(x: 0, y: 0, width: SettingsWindow.contentSize.width, height: height)
+        return view
     }
 }

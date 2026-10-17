@@ -20,7 +20,8 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
     private let storage = NSTextStorage()
     private let scrollView = NSScrollView()
     private let undo = UndoManager()
-    private let modeLabel = PillLabel(fontSize: 10, weight: .semibold, monospaced: true)
+    /// The Vim mode ("NORMAL", "VISUAL LINE") in grey at the bottom left, centred in a 30 pt strip.
+    private let modeLabel = NSTextField(labelWithString: "")
     private let pill = PillView()
     private let dropOverlay = DropOverlayView()
     private let linkTip = LinkTipView()
@@ -100,6 +101,8 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
         scrollView.findBarPosition = .belowContent
         dropOverlay.isHidden = true
         modeLabel.isHidden = true
+        modeLabel.font = .monospacedSystemFont(ofSize: 10, weight: .semibold)
+        modeLabel.textColor = .gray
         linkTip.isHidden = true
         for v in [scrollView, modeLabel, pill, dropOverlay] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
@@ -111,8 +114,8 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
             scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             scrollView.topAnchor.constraint(equalTo: view.topAnchor),
             scrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-            modeLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 14),
-            modeLabel.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -10),
+            modeLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 10),
+            modeLabel.centerYAnchor.constraint(equalTo: view.bottomAnchor, constant: -15),
             pill.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             pill.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -PillView.bottomInset),
             pill.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor, multiplier: 0.8),
@@ -379,33 +382,33 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
         let bold = NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask)
         let italic = NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask)
         let advance = ("m" as NSString).size(withAttributes: [.font: font]).width
-        // List notes: tighter wrapped lines, extra space between items.
+        let size = Defaults[.textSize], double = Defaults[.doubleFontSize], paper = Defaults[.paperType]
+        // List notes: tighter lines with space between items on blank paper; ruled lines on other papers.
         let isList = mode == .list
-        let lineHeight = isList ? font.pointSize * 1.35 : Typography.lineHeight(for: font)
+        let lineHeight = Typography.lineHeight(for: font, multiple: isList ? Gutter.listLineMultiple(paper: paper) : 1.4)
         let rtl = Defaults[.forceRTL]
         let para = NSMutableParagraphStyle()
         para.minimumLineHeight = lineHeight
         para.maximumLineHeight = lineHeight
-        para.paragraphSpacing = isList ? font.pointSize * 0.65 : 0
+        para.paragraphSpacing = isList ? Gutter.listParagraphSpacing(size, paper: paper) : 0
         para.tabStops = []
-        para.defaultTabInterval = advance * 4
+        para.defaultTabInterval = 28
         para.baseWritingDirection = rtl ? .rightToLeft : .natural
         let text = NSColor(hex: theme.typeMain), light = NSColor(hex: theme.typeLight)
         let lines = EditorLogic.Lines.ranges(s)
         let hasKeyword = mode != .plain
         let full = NSRange(location: 0, length: s.length)
 
-        // The text starts 44 pt in (scaled with the font) and, at the regular line pitch, the first line's
-        // capitals sit ~37 pt down; list notes keep that inset, so their tighter first line sits a little higher.
+        // The text box starts 30 pt down, after the gutter.
         let baselineOffset = self.baselineOffset(font: font, lineHeight: lineHeight)
-        let regularBaseline = self.baselineOffset(font: font, lineHeight: Typography.lineHeight(for: font))
-        let inset = NSSize(width: Gutter.inset(font),
-                           height: max(4, (27 + 10 * Gutter.scale(font) - regularBaseline + font.capHeight).rounded()))
+        let inset = NSSize(width: Gutter.inset(size, double: double), height: Gutter.top)
         if textView.textContainerInset != inset { textView.textContainerInset = inset }
 
         var model = RenderModel()
         model.theme = theme
-        model.paper = Defaults[.paperType]
+        model.textSize = size
+        model.doubleSize = double
+        model.paper = paper
         model.paperOpacity = Defaults[.paperOpacity]
         model.lineHeight = lineHeight
         model.baselineOffset = baselineOffset
@@ -511,7 +514,7 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
             }
             model.markers.append((marker, kind, i))
             let hang = para.mutableCopy() as! NSMutableParagraphStyle
-            hang.headIndent = item.indent.reduce(0) { $0 + ($1 == "\t" ? advance * 4 : advance) }
+            hang.headIndent = item.indent.reduce(0) { x, c in c == "\t" ? ((x / 28).rounded(.down) + 1) * 28 : x + advance }
             storage.addAttribute(.paragraphStyle, value: hang, range: line)
         }
 
@@ -635,13 +638,12 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
         let theme = Theme.current
         let background = NSColor(hex: theme.background)
         textView.insertionPointColor = NSColor(hex: theme.accent1Main)
-        textView.selectedTextAttributes = [.backgroundColor: NSColor(hex: theme.typeHighlight)]
+        textView.selectedTextAttributes = [.foregroundColor: NSColor(hex: theme.typeMain),
+                                           .backgroundColor: NSColor(hex: theme.typeHighlight)]
         textView.backgroundColor = background
         scrollView.backgroundColor = background
         (scrollView.verticalScroller as? ThinScroller)?.knobColor = NSColor(hex: theme.typeHighlight)
         textView.isAutomaticTextReplacementEnabled = Defaults[.allowTextReplacements]
-        modeLabel.fill = NSColor(hex: theme.typeHyperLight)
-        modeLabel.label.textColor = NSColor(hex: theme.typeLight)
         dropOverlay.theme = theme
         if !Defaults[.vimMode] { vim.reset() }
         updateModeLabel()
@@ -651,7 +653,7 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
     private func updateModeLabel() {
         let on = Defaults[.vimMode]
         modeLabel.isHidden = !on
-        modeLabel.label.stringValue = vim.status
+        modeLabel.stringValue = vim.status
         let block = on && vim.mode != .insert
         if textView.model.blockCaret != block { textView.model.blockCaret = block }
     }

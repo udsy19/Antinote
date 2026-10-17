@@ -18,6 +18,8 @@ public final class ToolsPanels: PanelServicing {
 
     public func showVoid() { void.show() }
 
+    public func emptyVoid() { VoidModel().emptyVoid() }
+
     public func showSearch() { showSearch(query: "") }
 
     public func showSearch(query: String) {
@@ -54,12 +56,18 @@ public final class ToolsPanels: PanelServicing {
 @MainActor
 public enum ToolsPreviews {
     /// The Search pane listing `notes` (front first) as a list or as cards, dated against `now`.
-    public static func search(notes: [Note], query: String = "", cards: Bool = false, now: Date = Date()) -> NSView {
+    /// With `selecting`, Select mode is on with the first two results picked.
+    public static func search(notes: [Note], query: String = "", cards: Bool = false, selecting: Bool = false,
+                              now: Date = Date()) -> NSView {
         let pane = SearchPane(source: .init(deck: { notes }, archived: { [] }, now: { now }))
         pane.setLayout(cards ? .cards : .list)
         pane.query = query
+        if selecting { pane.select(notes.prefix(2).map(\.id)) }
         return pane
     }
+
+    /// The Void listing `notes` (deleted notes, newest first).
+    public static func void(notes: [Note], now: Date = Date()) -> NSView { VoidView.preview(notes: notes, now: now) }
 
     /// The pomodoro break screen with a fixed fact, time left and streak.
     public static func breakScreen(fact: String, remaining: TimeInterval, streak: NoPeekStreak) -> NSView {

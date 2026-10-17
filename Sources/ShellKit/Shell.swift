@@ -85,7 +85,10 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         let root = NSView()
         titleBar = TitleBarView(target: self)
         titleBar.onHoverChange = { [weak self] revealed in
-            self?.window.trafficLights.forEach { $0.animator().alphaValue = revealed ? 1 : 0 }
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = HoverBar.fadeDuration
+                self?.window.trafficLights.forEach { $0.animator().alphaValue = revealed ? 1 : 0 }
+            }
         }
         slotsBar = SlotsBarView()
         slotsBar.onSelect = { [weak self] slot in self?.slotChipClicked(slot) }
@@ -96,7 +99,7 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         effectView.state = .followsWindowActiveState
         tintView.wantsLayer = true
         latestDot.wantsLayer = true
-        latestDot.layer?.cornerRadius = 2.5
+        latestDot.layer?.cornerRadius = Self.latestDotSize / 2
 
         // The note fills the window; the bars float over it.
         for v in [effectView, tintView, paneContainer, latestDot, bottomBar, slotsBar, titleBar] as [NSView] {
@@ -118,13 +121,12 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
             bottomBar.heightAnchor.constraint(equalToConstant: BottomBarView.height),
             bottomBar.bottomAnchor.constraint(equalTo: root.bottomAnchor),
             slotsBar.centerXAnchor.constraint(equalTo: root.centerXAnchor),
-            slotsBar.widthAnchor.constraint(equalTo: root.widthAnchor, multiplier: 0.55),
             slotsBar.heightAnchor.constraint(equalToConstant: SlotsBarView.height),
             slotsBarBottom,
-            latestDot.widthAnchor.constraint(equalToConstant: 5),
-            latestDot.heightAnchor.constraint(equalToConstant: 5),
-            latestDot.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -10),
-            latestDot.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -10),
+            latestDot.widthAnchor.constraint(equalToConstant: Self.latestDotSize),
+            latestDot.heightAnchor.constraint(equalToConstant: Self.latestDotSize),
+            latestDot.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -Self.latestDotInset),
+            latestDot.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -Self.latestDotInset),
         ]
         NSLayoutConstraint.activate(constraints)
         window.contentView = root
@@ -534,7 +536,7 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         let slotsInUse = !b.isEmpty || openSlot != nil
         let showSlots = Defaults[.alwaysShowSlotsBar] || slotsBarFlash || (bottomBar.isRevealed && slotsInUse)
         slotsBar.isShown = showSlots
-        slotsBarBottom.constant = bottomBar.isRevealed ? -(BottomBarView.height + 6) : -SlotsBarView.bottomInset
+        slotsBarBottom.constant = bottomBar.isRevealed ? -BottomBarView.height : -SlotsBarView.bottomInset
 
         let id = pane(role).noteID
         let note = id.flatMap { store.note($0) }
@@ -558,11 +560,17 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
             }
         }
         if pane(role).isShowingLock { parts.append("Locked") } else if note?.isReadOnly == true { parts.append("Read-only") }
-        bottomBar.update(text: parts.joined(separator: "  ·  "), theme: theme)
+        bottomBar.update(parts: parts, theme: theme)
+        let quick = Defaults[.quickExportDestination]
+        bottomBar.exportButton.refreshTooltip(label: quick.map { "Quick Export (\(ChromeText.shortName($0.displayName)))" } ?? "Export")
         latestDot.isHidden = !(latest && Defaults[.showLatestNoteIndicator]) || bottomBar.isRevealed
         latestDot.layer?.backgroundColor = NSColor(hex: theme.accent1Main).cgColor
         titleBar.setPinned(Defaults[.pinOnTop])
     }
+
+    /// The latest-note dot: 5 pt in `accent1Main`, 16 pt in from the bottom-right corner.
+    static let latestDotSize: CGFloat = 5
+    static let latestDotInset: CGFloat = 16
 
     /// Shows the slot bar for two seconds after a slot is used.
     private func flashSlotsBar() {
@@ -663,6 +671,8 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
     private func checkRelock() {
         if relock.expireIfNeeded(now: Date(), minutes: Defaults[.relockAfterMinutes]) { rerenderPanes() }
     }
+
+    @objc func relockNotes(_ sender: Any?) { relockAll() }
 
     func relockAll() {
         relock.relockAll()
@@ -776,16 +786,16 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
             pane(activeRole).clear()
             store.deletePermanently(id)
         } else {
-            guard Alerts.confirm("Move this note to The Void?",
-                                 info: "You can recover it from File → Recover from The Void… until The Void is emptied.",
-                                 confirmTitle: "Move to The Void", suppressionID: "shellKit.moveToVoid") else { return }
+            guard Alerts.confirm("Delete Note?", info: "Impermanence will set you free.", confirmTitle: "Send to The Void",
+                                 suppressionID: "shellKit.moveToVoid") else { return }
             store.moveToVoid(id)
-            HUD.show("Note banished to The Void")
+            HUD.show("Note banished to void")
         }
         validateVisibleNotes()
     }
 
     @objc func recoverFromVoid(_ sender: Any?) { Services.panels?.showVoid() }
+    @objc func emptyVoid(_ sender: Any?) { Services.panels?.emptyVoid() }
     @objc func searchAllNotes(_ sender: Any?) { Services.panels?.showSearch() }
     @objc func showCommandPalette(_ sender: Any?) { Services.panels?.showCommandPalette() }
 
@@ -889,13 +899,13 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         NSApp.activate()
     }
 
-    /// The bottom bar's Export button: the enabled destinations, Quick Export and Print.
-    @objc func showExportMenu(_ sender: NSView) {
+    /// The bottom bar's Export button: Quick Export when a destination is chosen; otherwise a menu of the enabled
+    /// destinations and Print.
+    @objc func exportFromBar(_ sender: NSView) {
+        if Defaults[.quickExportDestination] != nil { quickExport(sender); return }
         let menu = MainMenu.exportMenu(target: self)
         menu.addItem(.separator())
-        for (title, action) in [("Quick Export", #selector(quickExport(_:))), ("Print…", #selector(printNote(_:)))] {
-            menu.addItem(withTitle: title, action: action, keyEquivalent: "").target = self
-        }
+        menu.addItem(withTitle: "Print...", action: #selector(printNote(_:)), keyEquivalent: "").target = self
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.maxY + 4), in: sender)
     }
 
@@ -904,13 +914,11 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         let note = currentNoteID.flatMap { Services.store?.note($0) }
         switch item.action {
-        case #selector(togglePin(_:)): item.state = Defaults[.pinOnTop] ? .on : .off
         case #selector(toggleSlotsBar(_:)): item.state = Defaults[.alwaysShowSlotsBar] ? .on : .off
-        case #selector(toggleSplit(_:)): item.state = isSplit ? .on : .off
         case #selector(toggleSplitHorizontal(_:)): item.state = Defaults[.shellKitSplitHorizontal] ? .on : .off; return isSplit
         case #selector(swapPanes(_:)): return isSplit
-        case #selector(toggleLock(_:)): item.title = note?.isLocked == true ? "Unlock Note…" : "Lock Note"; return note != nil
-        case #selector(toggleReadOnly(_:)): item.state = note?.isReadOnly == true ? .on : .off; return note != nil
+        case #selector(toggleLock(_:)), #selector(toggleReadOnly(_:)): return note != nil   // MenuState sets their titles
+        case #selector(relockNotes(_:)): return !relock.unlocked.isEmpty
         case #selector(removeFromSlot(_:)): return note?.slot != nil
         case #selector(assignSlotItem(_:)): item.state = note?.slot == item.tag ? .on : .off; return note != nil
         case #selector(openSlotItem(_:)): item.state = activeRole == .slot && openSlot == item.tag ? .on : .off

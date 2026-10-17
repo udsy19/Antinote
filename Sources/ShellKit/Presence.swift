@@ -22,6 +22,8 @@ final class Presence: NSObject {
         Defaults.publisher(.globalHotkey).sink { [weak self] in self?.registerHotkey($0) }.store(in: &cancellables)
         Defaults.publisher(.pinOnTop).sink { [weak self] _ in self?.applyLevel() }.store(in: &cancellables)
         Defaults.publisher(.launchAtLogin).sink { Self.applyLaunchAtLogin($0) }.store(in: &cancellables)
+        NotificationCenter.default.publisher(for: MenuBarTimer.didChange)
+            .sink { [weak self] _ in MainActor.assumeIsolated { self?.showTimerText() } }.store(in: &cancellables)
         updateStatusItem()
         applyFrameAutosave()
     }
@@ -52,27 +54,47 @@ final class Presence: NSObject {
         }
         guard statusItem == nil else { return }
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.image = NSImage(systemSymbolName: "note.text", accessibilityDescription: "Jotter")
+        item.button?.image = AppIcons.menuBarIcon
         item.button?.target = self
         item.button?.action = #selector(statusItemClicked(_:))
         item.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        item.button?.imagePosition = .imageLeading
+        item.button?.font = .monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
         statusItem = item
+        showTimerText()
     }
 
+    /// A running timer's time left sits next to the icon ("△ 04:37"); the item is square otherwise.
+    private func showTimerText() {
+        guard let statusItem else { return }
+        let text = MenuBarTimer.text
+        statusItem.button?.title = text.map { " " + $0 } ?? ""
+        statusItem.length = text == nil ? NSStatusItem.squareLength : NSStatusItem.variableLength
+    }
+
+    /// Left click shows or hides Jotter; right click (or ⌃-click) opens the status menu.
     @objc private func statusItemClicked(_ sender: NSStatusBarButton) {
         let event = NSApp.currentEvent
         if event?.type == .rightMouseUp || event?.modifierFlags.contains(.control) == true {
-            let menu = NSMenu()
-            menu.addItem(withTitle: "New Note", action: #selector(Shell.newNote(_:)), keyEquivalent: "").target = shell
-            menu.addItem(withTitle: "Settings…", action: #selector(Shell.openSettings(_:)), keyEquivalent: "").target = shell
-            menu.addItem(.separator())
-            menu.addItem(withTitle: "Quit Jotter", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
-            statusItem?.menu = menu
+            statusItem?.menu = statusMenu()
             sender.performClick(nil)
             statusItem?.menu = nil
         } else {
             shell.toggleMain()
         }
+    }
+
+    /// Settings, Create New Note, Export Note, Quit.
+    func statusMenu() -> NSMenu {
+        let menu = NSMenu()
+        menu.addItem(withTitle: "Settings", action: #selector(Shell.openSettings(_:)), keyEquivalent: ",").target = shell
+        menu.addItem(withTitle: "Create New Note", action: #selector(Shell.newNote(_:)), keyEquivalent: "n").target = shell
+        let export = NSMenuItem(title: "Export Note", action: nil, keyEquivalent: "")
+        export.submenu = MainMenu.exportMenu(target: shell)
+        menu.addItem(export)
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        return menu
     }
 
     /// Places the window right under the status item (pseudo-menu-bar mode).

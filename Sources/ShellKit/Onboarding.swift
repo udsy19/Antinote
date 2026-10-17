@@ -18,7 +18,7 @@ enum Onboarding {
 
     /// Front (newest) note first; going to the previous note walks down the list.
     static var tutorialNotes: [String] {
-        let previous = key("Previous Note", "⌘[")
+        let previous = key("Show Previous Note", "⌘[")
         return [
             """
             Welcome to Jotter!
@@ -94,6 +94,26 @@ enum Onboarding {
             [←]
             """,
             """
+            list: Weekend
+            [ ] Every line becomes something to tick off
+
+            # Headers split a list into sections
+            [ ] Water the plants
+            [ ] Return the library books
+            [ ] Click a box, or press \(key("Check Off Current Line", "⇧⌘K")), to check it
+            [x] Like this one
+
+            [←] Great job!
+            """,
+            """
+            count
+            Count tallies lines, words and characters.
+            Mango
+            Papaya
+            Dragon fruit
+            [←] Keep going
+            """,
+            """
             sum
 
             “sum” adds up every number in the note.
@@ -111,27 +131,7 @@ enum Onboarding {
             Tuesday 6 hours
             Wednesday 8.25 hours
 
-            [←] Nearly there!
-            """,
-            """
-            count
-            Count tallies lines, words and characters.
-            Mango
-            Papaya
-            Dragon fruit
-            [←] Keep going
-            """,
-            """
-            list: Weekend
-            [ ] Every line becomes something to tick off
-
-            # Headers split a list into sections
-            [ ] Water the plants
-            [ ] Return the library books
-            [ ] Click a box, or press \(key("Toggle Checklist Item", "⇧⌘M")), to check it
-            [x] Like this one
-
-            [←] Well done!
+            [←] Almost at the end!
             """,
             """
             Timers live in notes. Start a new note with “timer 5” on the first line and press Return.
@@ -172,36 +172,34 @@ enum Onboarding {
             """
             That's the tour!
 
-            \(key("Search All Notes…", "⇧⌘F"))  Search every note
-            \(key("Pin on Top", "⇧⌘P"))  Keep Jotter above other windows
-            \(key("Move to The Void", "⌘⌫"))  Send a note to The Void
-            \(key("First Note", "⇧⌘L"))  Jump to the latest note
-            \(key("Promote to Front", "⇧⌘T"))  Bring a note to the front
+            \(key("Search All Notes", "⌘F"))  Search every note
+            \(key("Pin Jotter to Top", "⌘P"))  Keep Jotter above other windows
+            \(key("Delete Note", "⌘D"))  Send a note to The Void
+            \(key("Jump to Front", "⌘1"))  Jump to the latest note
+            \(key("Move Note to Front", "⇧⌘1"))  Bring a note to the front
 
             Hover over the top of the window for more buttons.
 
             Settings (\(key("Settings…", "⌘,"))) has themes, keywords, privacy switches and plenty more.
 
-            When you're ready, start your first note with \(key("New Note", "⌘N")).
+            When you're ready, start your first note with \(key("Create New Note", "⌘N")).
 
             Happy jotting!
             """,
         ]
     }
 
-    static let slottedNote = """
-    Slot 1
+    /// One note per slot, named for the god of its planet (Mercury → Hermes … Pluto → Hades).
+    static let slottedNotes: [String] = [
+        "# Hermes\n\nThe first of nine slotted notes. Slotted notes stay put while the deck moves on.",
+        "# Aphrodite", "# Gaia", "# Ares", "# Zeus", "# Cronus", "# Ouranos", "# Poseidon", "# Hades",
+    ]
 
-    Slotted notes stay put while the rest of the deck moves on. ⌘1…⌘9 open them, ⌘0 goes back to the deck, \
-    ⌃⌘1…⌃⌘9 put the current note in a slot.
-    """
-
-    /// Adds the tutorial notes to the front of the deck (and the slotted example when slot 1 is free).
+    /// Adds the tutorial notes to the front of the deck and fills every free slot with its slotted note.
     static func seedTutorial() {
         let store = Services.store!
-        if !store.deck.contains(where: { $0.slot == 0 }) {
-            let note = store.create(content: slottedNote)
-            store.setSlot(0, for: note.id)
+        for (slot, text) in slottedNotes.enumerated() where !store.deck.contains(where: { $0.slot == slot }) {
+            store.setSlot(slot, for: store.create(content: text).id)
         }
         // `create` puts each note at the front, so add them oldest first.
         for text in tutorialNotes.reversed() { store.create(content: text) }

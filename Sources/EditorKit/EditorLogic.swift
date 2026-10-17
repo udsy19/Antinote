@@ -419,3 +419,35 @@ extension EditorLogic {
         }
     }
 }
+
+// MARK: - Drawing geometry
+
+extension EditorLogic {
+    /// The caret inside the line rect AppKit hands to `drawInsertionPoint` (flipped): 2 pt wide, cap height
+    /// + 7.8 pt tall, its foot on the bottom of the line less the font's leading.
+    public static func caretRect(lineRect: CGRect, capHeight: CGFloat, leading: CGFloat) -> CGRect {
+        let height = capHeight + 7.8
+        return CGRect(x: lineRect.minX, y: lineRect.maxY - leading - height, width: 2, height: height)
+    }
+
+    /// The `backgroundFade` fill behind a fenced code block: its line fragments grown 4 pt sideways and 2 pt
+    /// up and down (3 pt corners).
+    public static func codeBlockRect(lines: CGRect) -> CGRect { lines.insetBy(dx: -4, dy: -2) }
+
+    /// The fill behind an inline `code` span: its glyph box 2 pt wider each side, 0.8 pt shorter top and
+    /// bottom, nudged 3 pt down (flipped) so it sits on the baseline (3 pt corners).
+    public static func inlineCodeRect(glyphs: CGRect) -> CGRect {
+        glyphs.insetBy(dx: -2, dy: 0.8).offsetBy(dx: 0, dy: 3)
+    }
+
+    /// The `::` list's action badge: its symbol and theme colour role.
+    public static func actionBadge(_ action: String) -> (symbol: String, role: KeyPath<Theme, String>) {
+        switch action.lowercased() {
+        case "insert": ("arrow.down.to.line", \.accent3Main)
+        case "replaceline": ("arrow.left.arrow.right", \.accent1Main)
+        case "replaceall": ("doc.text.fill", \.accent2Main)
+        case "openurl": ("link", \.accent2Main)
+        default: ("questionmark.circle", \.typeLight)
+        }
+    }
+}

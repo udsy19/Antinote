@@ -9,61 +9,91 @@ final class SearchResultView: NSView {
     var onOpen: (() -> Void)?
     var onPromote: (() -> Void)? { didSet { promote.isHidden = onPromote == nil } }
     var onDelete: (() -> Void)? { didSet { delete.isHidden = onDelete == nil } }
-    var isSelectedRow = false { didSet { updateBackground() } }
-    var isPicked = false { didSet { updateBackground() } }
+    var isSelectedRow = false { didSet { updateAppearance() } }
+    var isPicked = false { didSet { updateAppearance() } }
 
     private let layoutMode: SearchPane.Layout
     private let colors: Colors
+    private let sizes: SearchPane.Sizes
     private let text = NSTextField(wrappingLabelWithString: "")
     private let meta = NSTextField(labelWithString: "")
-    private let promote = SquareIconButton(symbol: "arrow.up.to.line", toolTip: "Promote to front")
-    private let delete = SquareIconButton(symbol: "trash", toolTip: "Delete")
+    private let promote: SquareIconButton
+    private let delete: SquareIconButton
+    private var hovered = false { didSet { updateAppearance() } }
+    /// List rows: the preview without colours, re-tinted when the row is selected.
+    private var listPreview: String?
+    private var query = ""
 
-    /// Inner padding of list rows (the selection background extends this far around the text).
-    static let rowPadding: CGFloat = 6
-    static let cardFontSize: CGFloat = 9
-    static let listFontSize: CGFloat = 11
+    /// Cards: inner padding, fixed height and corner radius.
+    static let cardPadding: CGFloat = 10
+    static let cardHeight: CGFloat = 190
+    static let cardRadius: CGFloat = 10
 
-    init(note: Note, query: String, layout: SearchPane.Layout, colors: Colors, theme: Theme, meta metaText: String) {
+    init(note: Note, query: String, layout: SearchPane.Layout, colors: Colors, theme: Theme, sizes: SearchPane.Sizes,
+         meta metaText: String) {
         noteID = note.id
         layoutMode = layout
         self.colors = colors
+        self.sizes = sizes
+        self.query = query
+        promote = SquareIconButton(symbol: "arrow.up.to.line", toolTip: "Promote to front", iconSize: sizes.icon)
+        delete = SquareIconButton(symbol: "trash", toolTip: "Delete note", iconSize: sizes.icon)
         super.init(frame: .zero)
         configure()
         meta.stringValue = metaText
-        text.attributedStringValue = layout == .list
-            ? Self.highlighted(SearchModel.listPreview(note.content), query: query, size: Self.listFontSize, colors: colors)
-            : Self.card(note.content, query: query, colors: colors, theme: theme)
-        text.maximumNumberOfLines = layout == .list ? 3 : 0
-        meta.font = Typography.font(size: layout == .list ? 9 : Self.cardFontSize)
-        promote.apply(colors, onCard: layout == .cards)
-        delete.apply(colors, onCard: layout == .cards)
+        if layout == .list {
+            listPreview = SearchModel.listPreview(note.content)
+            text.maximumNumberOfLines = 3
+            meta.font = Typography.font(size: sizes.meta)
+        } else {
+            text.attributedStringValue = Self.card(note.content, query: query, colors: colors, theme: theme, size: sizes.card)
+            text.maximumNumberOfLines = 0
+            meta.font = Typography.font(size: sizes.card)
+            layer?.cornerRadius = Self.cardRadius
+        }
+        promote.apply(colors)
+        delete.apply(colors)
         promote.onClick = { [weak self] in self?.onPromote?() }
         delete.onClick = { [weak self] in self?.onDelete?() }
-        if layout == .cards {
-            layer?.cornerRadius = 10
-            layer?.borderWidth = 1
-        }
-        updateBackground()
+        updateAppearance()
     }
 
-    /// The "Create a note starting with …" row shown when nothing matches.
-    init(createWith query: String, colors: Colors) {
+    /// The "Create a note starting with …" capsule shown when nothing matches.
+    init(createWith query: String, colors: Colors, sizes: SearchPane.Sizes) {
         noteID = UUID()
         layoutMode = .list
         self.colors = colors
+        self.sizes = sizes
+        promote = SquareIconButton(symbol: "arrow.up.to.line", toolTip: "", iconSize: sizes.icon)
+        delete = SquareIconButton(symbol: "trash", toolTip: "", iconSize: sizes.icon)
         super.init(frame: .zero)
         configure()
-        let font = Typography.font(size: Self.listFontSize)
-        let s = NSMutableAttributedString(string: "Create a note starting with ", attributes: [.font: font, .foregroundColor: colors.light])
-        s.append(NSAttributedString(string: "“\(query)”", attributes: [.font: font, .foregroundColor: colors.main]))
+        let font = Typography.font(size: sizes.text)
+        let s = NSMutableAttributedString()
+        if let glyph = NSImage(systemSymbolName: "return", accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: sizes.text, weight: .regular)) {
+            let attachment = NSTextAttachment()
+            attachment.image = glyph
+            attachment.bounds = NSRect(x: 0, y: font.descender / 2, width: glyph.size.width, height: glyph.size.height)
+            s.append(NSAttributedString(attachment: attachment))
+            s.append(NSAttributedString(string: "  "))
+        }
+        s.append(NSAttributedString(string: "Create a note starting with “\(query)”"))
+        s.addAttributes([.font: font, .foregroundColor: colors.main], range: NSRange(location: 0, length: s.length))
         text.attributedStringValue = s
-        text.maximumNumberOfLines = 2
-        meta.stringValue = "Return to create"
+        text.maximumNumberOfLines = 1
+        text.lineBreakMode = .byTruncatingTail
+        meta.isHidden = true
         promote.isHidden = true
         delete.isHidden = true
-        isSelectedRow = true
+        isCreateRow = true
+        layer?.backgroundColor = colors.hyperLight.cgColor
     }
+
+    private var isCreateRow = false
+
+    /// The natural width of the row's text (the create capsule hugs it).
+    var intrinsicWidth: CGFloat { text.attributedStringValue.size().width.rounded(.up) }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
@@ -72,75 +102,91 @@ final class SearchResultView: NSView {
         text.isSelectable = false
         text.lineBreakMode = .byWordWrapping
         text.cell?.truncatesLastVisibleLine = true
-        meta.font = Typography.font(size: 9)
-        meta.textColor = colors.superlight
+        meta.textColor = colors.light.withAlphaComponent(0.5)
         meta.lineBreakMode = .byTruncatingTail
         for v in [text, meta, promote, delete] as [NSView] { addSubview(v) }
     }
 
-    private func updateBackground() {
-        let fill: NSColor
-        if isPicked {
-            fill = colors.highlight
-        } else if layoutMode == .cards {
-            fill = colors.hyperLight
-        } else {
-            fill = isSelectedRow ? colors.hyperLight.withAlphaComponent(0.6) : .clear
-        }
-        layer?.backgroundColor = fill.cgColor
-        layer?.cornerRadius = layoutMode == .cards ? 10 : 6
-        if layoutMode == .cards {
-            layer?.borderColor = (isSelectedRow ? colors.light : colors.superlight).cgColor
+    /// List rows: the preview is `typeLight`, or `typeMain` on the keyboard selection; hovered or selected rows get a
+    /// faint `typeLight` wash. Cards: `typeHyperLight` with a 1 pt `typeLight` border (2 pt `typeMain` when selected).
+    private func updateAppearance() {
+        guard !isCreateRow else { return }
+        switch layoutMode {
+        case .list:
+            if let preview = listPreview {
+                text.attributedStringValue = Self.highlighted(preview, query: query, size: sizes.text,
+                                                              color: isSelectedRow ? colors.main : colors.light, colors: colors)
+            }
+            let wash = isPicked ? colors.highlight : (hovered || isSelectedRow ? colors.light.withAlphaComponent(0.08) : .clear)
+            layer?.backgroundColor = wash.cgColor
+        case .cards:
+            layer?.backgroundColor = (isPicked ? colors.highlight : colors.hyperLight).cgColor
+            layer?.borderWidth = isSelectedRow ? 2 : 1
+            layer?.borderColor = (isSelectedRow ? colors.main : colors.light.withAlphaComponent(0.15)).cgColor
         }
     }
 
     // MARK: Layout
 
-    private var buttonsWidth: CGFloat { promote.isHidden && delete.isHidden ? 0 : 2 * SquareIconButton.side + 6 }
+    private var buttonsWidth: CGFloat {
+        let side = promote.side
+        return promote.isHidden && delete.isHidden ? 0 : (promote.isHidden || delete.isHidden ? side : 2 * side + 6)
+    }
+
+    static let listInset: CGFloat = 12
 
     func fittingHeight(width: CGFloat) -> CGFloat {
-        let p = Self.rowPadding
-        let textWidth = width - 2 * p - buttonsWidth - (buttonsWidth > 0 ? 12 : 0)
+        if isCreateRow { return (text.intrinsicContentSize.height + 16).rounded(.up) }
+        let p = sizes.rowPadding
+        let textWidth = width - 2 * Self.listInset - buttonsWidth - (buttonsWidth > 0 ? 12 : 0)
         let textHeight = text.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: textWidth, height: 1000)).height ?? 16
-        return (p + textHeight + 3 + meta.intrinsicContentSize.height + p).rounded(.up)
+        return (p + textHeight + 4 + meta.intrinsicContentSize.height + p).rounded(.up)
     }
 
     override var isFlipped: Bool { true }
 
     override func layout() {
         super.layout()
-        let side = SquareIconButton.side
+        if isCreateRow {
+            layer?.cornerRadius = bounds.height / 2
+            let h = text.intrinsicContentSize.height
+            text.frame = NSRect(x: 14, y: ((bounds.height - h) / 2).rounded(), width: bounds.width - 28, height: h)
+            return
+        }
+        let side = promote.side
         switch layoutMode {
         case .list:
-            let p = Self.rowPadding
-            let textWidth = bounds.width - 2 * p - buttonsWidth - (buttonsWidth > 0 ? 12 : 0)
+            let p = sizes.rowPadding, inset = Self.listInset
+            let textWidth = bounds.width - 2 * inset - buttonsWidth - (buttonsWidth > 0 ? 12 : 0)
             let textHeight = text.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: textWidth, height: 1000)).height ?? 16
-            text.frame = NSRect(x: p, y: p, width: textWidth, height: textHeight)
-            meta.frame = NSRect(x: p, y: p + textHeight + 3, width: textWidth, height: meta.intrinsicContentSize.height)
+            text.frame = NSRect(x: inset, y: p, width: textWidth, height: textHeight)
+            meta.frame = NSRect(x: inset, y: p + textHeight + 4, width: textWidth, height: meta.intrinsicContentSize.height)
             let y = ((bounds.height - side) / 2).rounded()
-            delete.frame = NSRect(x: bounds.width - p - side, y: y, width: side, height: side)
+            delete.frame = NSRect(x: bounds.width - inset - side, y: y, width: side, height: side)
             promote.frame = NSRect(x: delete.frame.minX - 6 - side, y: y, width: side, height: side)
         case .cards:
-            let pad: CGFloat = 9
+            let pad = Self.cardPadding
             let bottom = bounds.height - pad - side
             delete.frame = NSRect(x: bounds.width - pad - side, y: bottom, width: side, height: side)
-            promote.frame = NSRect(x: delete.frame.minX - 5 - side, y: bottom, width: side, height: side)
+            promote.frame = NSRect(x: delete.frame.minX - 6 - side, y: bottom, width: side, height: side)
             let metaHeight = meta.intrinsicContentSize.height
             let metaRight = buttonsWidth > 0 ? (promote.isHidden ? delete.frame.minX : promote.frame.minX) - 4 : bounds.width - pad
-            var textBottom = bottom - 6
-            if meta.attributedStringValue.size().width <= metaRight - pad {
-                meta.frame = NSRect(x: pad, y: bottom + (side - metaHeight) / 2, width: max(0, metaRight - pad), height: metaHeight)
-            } else {
-                // Narrow cards: the date gets its own line above the buttons.
-                meta.frame = NSRect(x: pad, y: bottom - 4 - metaHeight, width: bounds.width - 2 * pad, height: metaHeight)
-                textBottom = meta.frame.minY - 4
-            }
-            let top = min(22, (bounds.height * 0.13).rounded())
-            text.frame = NSRect(x: pad, y: top, width: bounds.width - 2 * pad, height: max(0, textBottom - top))
+            meta.frame = NSRect(x: pad, y: bottom + (side - metaHeight) / 2, width: max(0, metaRight - pad), height: metaHeight)
+            text.frame = NSRect(x: pad, y: pad, width: bounds.width - 2 * pad, height: max(0, bottom - 6 - pad))
         }
     }
 
     // MARK: Events
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+                                       owner: self))
+    }
+
+    override func mouseEntered(with event: NSEvent) { hovered = true }
+    override func mouseExited(with event: NSEvent) { hovered = false }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         let local = convert(point, from: superview)
@@ -157,22 +203,25 @@ final class SearchResultView: NSView {
     // MARK: Text
 
     /// `text` in the editor monospace with every occurrence of `query` on a `typeHighlight` background.
-    static func highlighted(_ text: String, query: String, size: CGFloat, colors: Colors) -> NSAttributedString {
+    static func highlighted(_ text: String, query: String, size: CGFloat, color: NSColor, colors: Colors) -> NSAttributedString {
         let result = NSMutableAttributedString(string: text, attributes: [
-            .font: Typography.font(size: size), .foregroundColor: colors.main,
+            .font: Typography.font(size: size), .foregroundColor: color,
         ])
         highlight(query, in: result, colors: colors)
         return result
     }
 
-    /// A miniature note: the keyword in its keyword colour, list markers removed, line breaks kept.
-    static func card(_ content: String, query: String, colors: Colors, theme: Theme) -> NSAttributedString {
-        let font = Typography.font(size: cardFontSize)
+    /// A miniature note: the first line in bold with its keyword in the keyword colour, list markers removed, line
+    /// breaks kept.
+    static func card(_ content: String, query: String, colors: Colors, theme: Theme, size: CGFloat) -> NSAttributedString {
+        let font = Typography.font(size: size)
+        let bold = NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask)
         let lines = content.components(separatedBy: "\n").prefix(16).map(SearchModel.stripMarker)
         let result = NSMutableAttributedString(string: lines.joined(separator: "\n"), attributes: [
             .font: font, .foregroundColor: colors.main,
         ])
         if let first = lines.first {
+            result.addAttribute(.font, value: bold, range: NSRange(location: 0, length: (first as NSString).length))
             let detected = NoteMode.detect(firstLine: first)
             if detected.mode != .plain, let r = first.range(of: detected.keyword, options: .caseInsensitive) {
                 result.addAttribute(.foregroundColor, value: NSColor(hex: theme.keyword(detected.mode)),
@@ -198,16 +247,18 @@ final class SearchResultView: NSView {
     }
 }
 
-/// A 22 pt square icon button (promote / delete).
+/// A promote / delete button: the glyph (medium weight) on a `typeLight` 15 % square with 4 pt corners, 12 pt larger
+/// than the glyph.
 @MainActor
 final class SquareIconButton: NSButton {
-    static let side: CGFloat = 22
+    let side: CGFloat
     var onClick: (() -> Void)?
 
-    init(symbol: String, toolTip: String) {
-        super.init(frame: NSRect(x: 0, y: 0, width: Self.side, height: Self.side))
+    init(symbol: String, toolTip: String, iconSize: CGFloat) {
+        side = iconSize + 12
+        super.init(frame: NSRect(x: 0, y: 0, width: side, height: side))
         image = NSImage(systemSymbolName: symbol, accessibilityDescription: toolTip)
-        symbolConfiguration = .init(pointSize: 10.5, weight: .medium)
+        symbolConfiguration = .init(pointSize: iconSize, weight: .medium)
         isBordered = false
         bezelStyle = .regularSquare
         imagePosition = .imageOnly
@@ -216,36 +267,92 @@ final class SquareIconButton: NSButton {
         target = self
         action = #selector(fire)
         wantsLayer = true
-        layer?.cornerRadius = 5
+        layer?.cornerRadius = 4
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
     @objc private func fire() { onClick?() }
 
-    func apply(_ c: Colors, onCard: Bool) {
+    func apply(_ c: Colors) {
         contentTintColor = c.main
-        layer?.backgroundColor = (onCard ? c.superlight.withAlphaComponent(0.55) : c.hyperLight).cgColor
+        layer?.backgroundColor = c.light.withAlphaComponent(0.15).cgColor
     }
 }
 
-/// A floating capsule with an optional icon and label ("✓ Select", "Ephemeral"), `background` fill and a soft
-/// shadow.
+/// A floating capsule holding toolbar items: `typeHyperLight` fill, a 1 pt `typeLight` 20 % border and a soft shadow
+/// (black 18 %, radius 8, 2 pt down).
 @MainActor
-final class CapsuleButton: NSView {
+final class ToolbarCapsule: NSView {
+    let stack = NSStackView()
+
+    init(horizontalPadding: CGFloat, verticalPadding: CGFloat = 5) {
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.masksToBounds = false
+        layer?.borderWidth = 1
+        layer?.shadowOpacity = 0.18
+        layer?.shadowRadius = 8
+        layer?.shadowOffset = CGSize(width: 0, height: -2)
+        stack.orientation = .horizontal
+        stack.spacing = 0
+        stack.alignment = .centerY
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: horizontalPadding),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -horizontalPadding),
+            stack.topAnchor.constraint(equalTo: topAnchor, constant: verticalPadding),
+            stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -verticalPadding),
+        ])
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    override func layout() {
+        super.layout()
+        layer?.cornerRadius = bounds.height / 2
+    }
+
+    func apply(_ c: Colors) {
+        layer?.backgroundColor = c.hyperLight.cgColor
+        layer?.borderColor = c.light.withAlphaComponent(0.2).cgColor
+        layer?.shadowColor = NSColor.black.cgColor
+        for case let item as ToolbarItem in stack.arrangedSubviews { item.apply(c) }
+        for v in stack.arrangedSubviews where v.identifier == ToolbarCapsule.dividerID {
+            v.layer?.backgroundColor = c.light.withAlphaComponent(0.35).cgColor
+        }
+        for case let label as NSTextField in stack.arrangedSubviews { label.textColor = c.light }
+    }
+
+    static let dividerID = NSUserInterfaceItemIdentifier("ToolbarCapsuleDivider")
+
+    /// A 16 pt hairline between groups of items.
+    static func divider() -> NSView {
+        let v = NSView()
+        v.identifier = dividerID
+        v.wantsLayer = true
+        v.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([v.widthAnchor.constraint(equalToConstant: 1), v.heightAnchor.constraint(equalToConstant: 16)])
+        return v
+    }
+}
+
+/// An item in a toolbar capsule: an SF Symbol and an optional label in the editor monospace, padded 10 × 6 pt. A
+/// selected item is a `typeMain` capsule with its glyph in the background colour.
+@MainActor
+final class ToolbarItem: NSView {
     var action: (() -> Void)?
+    var isSelected = false { didSet { if let c = colors { apply(c) } } }
+    var isDimmed = false { didSet { if let c = colors { apply(c) } } }
     private let icon = NSImageView()
     private let label = NSTextField(labelWithString: "")
     private let stack = NSStackView()
+    private var colors: Colors?
 
-    init(symbol: String, title: String?) {
+    init(symbol: String, title: String?, size: CGFloat) {
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.cornerRadius = SearchPane.toolbarHeight / 2
-        layer?.shadowOpacity = 0.14
-        layer?.shadowRadius = 6
-        layer?.shadowOffset = CGSize(width: 0, height: -1)
-        icon.symbolConfiguration = .init(pointSize: 12, weight: .regular)
-        label.font = .systemFont(ofSize: 13)
+        icon.symbolConfiguration = .init(pointSize: size, weight: .regular)
+        label.font = Typography.font(size: size)
         stack.orientation = .horizontal
         stack.spacing = 6
         stack.addArrangedSubview(icon)
@@ -253,10 +360,10 @@ final class CapsuleButton: NSView {
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
         NSLayoutConstraint.activate([
-            heightAnchor.constraint(equalToConstant: SearchPane.toolbarHeight),
-            stack.centerYAnchor.constraint(equalTo: centerYAnchor),
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: title == nil ? 9 : 13),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: title == nil ? -9 : -15),
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            stack.topAnchor.constraint(equalTo: topAnchor, constant: 6),
+            stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
         ])
         set(symbol: symbol, title: title)
     }
@@ -269,81 +376,22 @@ final class CapsuleButton: NSView {
         setAccessibilityLabel(title ?? toolTip)
     }
 
+    override func layout() {
+        super.layout()
+        layer?.cornerRadius = bounds.height / 2
+    }
+
     func apply(_ c: Colors) {
-        layer?.backgroundColor = c.background.cgColor
-        layer?.shadowColor = NSColor.black.cgColor
-        icon.contentTintColor = c.main
-        label.textColor = c.main
+        colors = c
+        let ink = (isSelected ? c.background : c.main).withAlphaComponent(isDimmed ? 0.4 : 1)
+        layer?.backgroundColor = (isSelected ? c.main : .clear).cgColor
+        icon.contentTintColor = ink
+        label.textColor = ink
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? { isHidden || !frame.contains(point) ? nil : self }
     override func mouseDown(with event: NSEvent) {}
     override func mouseUp(with event: NSEvent) {
         if bounds.contains(convert(event.locationInWindow, from: nil)) { action?() }
-    }
-}
-
-/// The list / grid switch: a capsule with two segments; the selected one has a `typeMain` fill.
-@MainActor
-final class LayoutSwitch: NSView {
-    var selected = 0 { didSet { update() } }
-    var onChange: ((Int) -> Void)?
-    private let segments = [NSImageView(), NSImageView()]
-    private let thumb = NSView()
-    private var colors: Colors?
-    static let segment = NSSize(width: 34, height: 22)
-
-    init() {
-        super.init(frame: .zero)
-        wantsLayer = true
-        layer?.cornerRadius = SearchPane.toolbarHeight / 2
-        layer?.shadowOpacity = 0.14
-        layer?.shadowRadius = 6
-        layer?.shadowOffset = CGSize(width: 0, height: -1)
-        thumb.wantsLayer = true
-        thumb.layer?.cornerRadius = Self.segment.height / 2
-        addSubview(thumb)
-        for (i, symbol) in ["list.bullet", "square.grid.2x2"].enumerated() {
-            segments[i].image = NSImage(systemSymbolName: symbol, accessibilityDescription: i == 0 ? "List" : "Cards")
-            segments[i].symbolConfiguration = .init(pointSize: 11.5, weight: .regular)
-            addSubview(segments[i])
-        }
-        toolTip = "List or cards"
-        NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant: 2 * Self.segment.width + 8),
-            heightAnchor.constraint(equalToConstant: SearchPane.toolbarHeight),
-        ])
-    }
-    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
-
-    override func layout() {
-        super.layout()
-        let y = (bounds.height - Self.segment.height) / 2
-        for (i, v) in segments.enumerated() {
-            v.frame = NSRect(x: 4 + CGFloat(i) * Self.segment.width, y: y, width: Self.segment.width, height: Self.segment.height)
-        }
-        thumb.frame = segments[selected].frame
-    }
-
-    func apply(_ c: Colors) {
-        colors = c
-        layer?.backgroundColor = c.background.cgColor
-        layer?.shadowColor = NSColor.black.cgColor
-        thumb.layer?.backgroundColor = c.main.cgColor
-        update()
-    }
-
-    private func update() {
-        guard let c = colors else { return }
-        for (i, v) in segments.enumerated() { v.contentTintColor = i == selected ? c.reverse : c.main }
-        needsLayout = true
-    }
-
-    override func mouseDown(with event: NSEvent) {}
-    override func mouseUp(with event: NSEvent) {
-        let p = convert(event.locationInWindow, from: nil)
-        guard let i = segments.firstIndex(where: { $0.frame.contains(p) }), i != selected else { return }
-        selected = i
-        onChange?(i)
     }
 }

@@ -70,7 +70,7 @@ final class CommandPalette {
             PaletteItem(title: "New Note", symbol: "square.and.pencil", trailing: "⌘N", keywords: "create add") {
                 Services.windows.show(noteID: Services.store.create(content: "").id)
             },
-            PaletteItem(title: "Search All Notes", symbol: "magnifyingglass", trailing: "⇧⌘F", keywords: "find") {
+            PaletteItem(title: "Search All Notes", symbol: "magnifyingglass", trailing: "⌘F", keywords: "find") {
                 Services.panels.showSearch()
             },
             PaletteItem(title: "The Void", detail: "Recover or erase deleted notes", symbol: "tornado",
@@ -99,7 +99,7 @@ final class CommandPalette {
             PaletteItem(title: "Export to \(destination.displayName)", symbol: "square.and.arrow.up",
                         keywords: "share send") { Services.export.export(note, to: destination) }
         }
-        items.append(PaletteItem(title: "Print Note", symbol: "printer", trailing: "⌘P", keywords: "pdf paper") {
+        items.append(PaletteItem(title: "Print Note", symbol: "printer", trailing: "⇧⌘P", keywords: "pdf paper") {
             (Services.export as? ExportManager)?.print(note)
         })
         if note.slot == nil && note.position != 0 {

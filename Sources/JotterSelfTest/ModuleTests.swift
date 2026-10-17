@@ -6,4 +6,9 @@ func registerModuleTests() {
     registerEditorKitTests()
     registerShellKitTests()
     registerToolsKitTests()
+    registerSettingsParityTests()
+    registerMenusParityTests()
+    registerToolsParityTests()
+    registerChromeParityTests()
+    registerEditorParityTests()
 }

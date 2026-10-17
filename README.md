@@ -70,7 +70,7 @@ and it's plain text again. Add your own keywords in **Settings → Keywords**.
 
 ### `list` · `todo` · `checklist` · `tasks`
 
-Every line becomes a checkbox. Click to tick it, or press <kbd>⇧⌘M</kbd>. Return continues the list.
+Every line becomes a checkbox. Click to tick it, or press <kbd>⇧⌘K</kbd>. Return continues the list.
 
 ```text
 list: Saturday
@@ -79,7 +79,7 @@ list: Saturday
 [ ] call grandma
 ```
 
-Checkboxes, bullets (`- `) and numbers (`1. `) also work inline in any note. <kbd>⌃⇧⌘M</kbd> cycles between them.
+Checkboxes, bullets (`- `) and numbers (`1. `) also work inline in any note. <kbd>⇧⌘M</kbd> cycles between them.
 
 ### `math` · `calc`
 
@@ -178,18 +178,18 @@ API keys you granted it.
 <details>
 <summary><b>Everything else</b></summary>
 
-- **The deck.** Notes pile up newest first. Swipe or press <kbd>⌘[</kbd> / <kbd>⌘]</kbd>; <kbd>⇧⌘L</kbd> jumps to
+- **The deck.** Notes pile up newest first. Swipe or press <kbd>⌘[</kbd> / <kbd>⌘]</kbd>; <kbd>⌘1</kbd> jumps to
   the newest. Optionally start a fresh note after a while away.
-- **Nine slots.** Keep notes on <kbd>⌘1</kbd>…<kbd>⌘9</kbd> (<kbd>⌃⌘1</kbd>…<kbd>⌃⌘9</kbd> to assign) and open
-  one next to the deck in split view (<kbd>⌃⌘S</kbd>).
+- **Nine slots.** Keep notes in nine slots (<kbd>⌃⌘1</kbd>…<kbd>⌃⌘9</kbd> to assign; turn on <kbd>⌘1</kbd>…<kbd>⌘9</kbd>
+  in **Settings → Shortcuts** to jump to them) and open one next to the deck in split view (<kbd>⇧⌘T</kbd>).
 - **The Void.** Deleted notes stay recoverable for 1, 7, 30 or 90 days, or forever. Daily automatic backups, with
   restore.
 - **Locked notes.** Lock a note behind Touch ID or your password; it relocks after a few minutes away.
   Read-only and archived notes too.
 - **Command palette and search.** <kbd>⌘K</kbd> runs any command, inserts keywords and extensions;
-  <kbd>⇧⌘F</kbd> searches every note, archived ones included.
+  <kbd>⌘F</kbd> searches every note, archived ones included.
 - **Export.** Apple Notes, Obsidian, Bear, Markdown, plain text, PDF and print. Quick Export with
-  <kbd>⇧⌘E</kbd>, or export every note as Markdown plus a re-importable JSON file.
+  <kbd>⌘S</kbd>, or export every note as Markdown plus a re-importable JSON file.
 - **Encrypted sync.** Optional sync through your own iCloud Drive; notes are sealed with AES-GCM on your Mac
   first.
 - **Writing.** Vim mode, find & replace, move and duplicate lines, strikethrough, link shortening, paste cleanup
@@ -203,7 +203,7 @@ API keys you granted it.
 
 ## Keyboard shortcuts
 
-The global hotkey is <kbd>⌥A</kbd> by default (change it in **Settings → General**). Every menu shortcut is also
+The global hotkey is <kbd>⌥A</kbd> by default (change it in **Settings → Shortcuts**). Every menu shortcut is also
 listed in **Settings → Shortcuts**.
 
 | Shortcut | Action |
@@ -211,31 +211,31 @@ listed in **Settings → Shortcuts**.
 | <kbd>⌥A</kbd> | Show or hide Jotter (global) |
 | <kbd>⌘N</kbd> | New note |
 | <kbd>⌘[</kbd> / <kbd>⌘]</kbd> | Previous / next note |
-| <kbd>⇧⌘L</kbd> | Newest note |
-| <kbd>⌘1</kbd>…<kbd>⌘9</kbd> · <kbd>⌘0</kbd> | Open a slotted note · back to the deck |
+| <kbd>⌘1</kbd> | Jump to the newest note |
+| <kbd>⇧⌘1</kbd> | Move the note to the front |
 | <kbd>⌃⌘1</kbd>…<kbd>⌃⌘9</kbd> | Put the current note in a slot |
+| <kbd>⌘1</kbd>…<kbd>⌘9</kbd> · <kbd>⌘0</kbd> | Open a slotted note · back to the deck (when turned on in Settings → Shortcuts) |
+| <kbd>⌘T</kbd> · <kbd>⇧⌘T</kbd> | Swap ephemeral and slotted · split screen |
+| <kbd>⌘F</kbd> | Search all notes |
 | <kbd>⌘K</kbd> | Command palette |
-| <kbd>⇧⌘F</kbd> | Search all notes |
-| <kbd>⌘F</kbd> · <kbd>⌥⌘F</kbd> | Find · find & replace (<kbd>⌘G</kbd> / <kbd>⇧⌘G</kbd> next / previous) |
+| <kbd>⇧⌘F</kbd> | Find and replace (<kbd>⌘G</kbd> / <kbd>⇧⌘G</kbd> next / previous) |
 | <kbd>⌃Space</kbd> | Extension autocomplete |
-| <kbd>⇧⌘M</kbd> | Toggle checklist item |
-| <kbd>⌃⇧⌘M</kbd> | Cycle list style |
+| <kbd>⇧⌘K</kbd> | Check off the current line |
+| <kbd>⇧⌘M</kbd> | Cycle list type |
 | <kbd>⌥⌘]</kbd> / <kbd>⌥⌘[</kbd> | Indent / outdent |
-| <kbd>⌥⌘↑</kbd> / <kbd>⌥⌘↓</kbd> | Move line up / down |
-| <kbd>⌥⇧⌘↑</kbd> / <kbd>⌥⇧⌘↓</kbd> | Duplicate line up / down |
+| <kbd>⌥↑</kbd> / <kbd>⌥↓</kbd> | Move line up / down |
+| <kbd>⌥⇧↑</kbd> / <kbd>⌥⇧↓</kbd> | Duplicate line up / down |
 | <kbd>⇧⌘X</kbd> | Strikethrough |
 | <kbd>⌥⌘C</kbd> | Copy the whole note |
 | <kbd>⌘L</kbd> | Select line |
 | <kbd>⌥⌘L</kbd> | Expand all links |
-| <kbd>⌘⌫</kbd> · <kbd>⇧⌘⌫</kbd> | Move to The Void · recover from The Void |
-| <kbd>⇧⌘T</kbd> | Promote to front |
-| <kbd>⌃⌘L</kbd> | Lock / unlock note |
+| <kbd>⌘D</kbd> | Delete note (to The Void) |
+| <kbd>⇧⌘L</kbd> | Lock / unlock note |
 | <kbd>⇧⌘R</kbd> | Read-only |
 | <kbd>⇧⌘A</kbd> | Archive |
-| <kbd>⇧⌘E</kbd> | Quick Export |
-| <kbd>⌘P</kbd> | Print |
-| <kbd>⇧⌘P</kbd> | Pin on top |
-| <kbd>⌃⌘S</kbd> | Split view |
+| <kbd>⌘S</kbd> | Quick Export (once a destination is chosen) |
+| <kbd>⇧⌘P</kbd> | Print |
+| <kbd>⌘P</kbd> | Pin on top |
 | <kbd>⌘=</kbd> · <kbd>⌘-</kbd> · <kbd>⌥⌘0</kbd> | Bigger · smaller · default text size |
 | <kbd>⌘,</kbd> | Settings |
 

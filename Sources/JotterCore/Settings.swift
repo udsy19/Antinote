@@ -42,9 +42,9 @@ public enum TextSize: String, Codable, CaseIterable, Sendable {
     public var displayName: String { rawValue.uppercased() }
     public var points: CGFloat {
         switch self {
-        case .xs: 11
-        case .s: 12.5
-        case .m: 13.5
+        case .xs: 10
+        case .s: 12
+        case .m: 14
         case .l: 16
         case .xl: 18
         }

@@ -3,6 +3,8 @@
 This is a pixel-level reference for rebuilding the Antinote (antinote.io, v2.0–2.1.x, macOS) interface in Jotter.
 It covers what things look like. Behaviour belongs in the per-kit specs (`editorkit.md`, `shellkit.md`, ...).
 
+> `ui-parity.md` has the values read from the shipping app's binary. Where the two disagree, `ui-parity.md` wins.
+
 ## Evidence tags
 
 - **[V]** Verified from an image or video frame: antinote.io feature videos, changelog images, theme screenshots,

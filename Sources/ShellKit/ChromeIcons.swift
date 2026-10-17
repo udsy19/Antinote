@@ -1,18 +1,21 @@
 import AppKit
 
-/// Line-art glyphs for the window chrome, drawn in code: thin rounded strokes, each with a small "sparkle".
+/// Line-art glyphs for the window chrome, drawn in code: 1.5-unit rounded strokes on a 30-unit canvas, each with a
+/// small "sparkle". The canvas is drawn at 22 pt inside a 30 pt button (4 pt inset), so strokes land at ~1.1 pt.
 /// Template images (tinted by the button that shows them).
 enum ChromeIcon: CaseIterable {
     case settings, search, new, pin, previous, next, front, export, delete
 
-    /// Glyph box in points (the hit target around it is larger). Glyphs are designed on a 16-unit grid.
-    static let size: CGFloat = 13
+    /// The design canvas, in units.
+    static let canvas: CGFloat = 30
+    /// The drawn glyph box in points (the button is 30 pt, the glyph inset 4 pt on every side).
+    static let size: CGFloat = 22
 
     var image: NSImage {
         let s = Self.size
         let image = NSImage(size: NSSize(width: s, height: s), flipped: true) { _ in
             let scale = NSAffineTransform()
-            scale.scale(by: s / 16)
+            scale.scale(by: s / Self.canvas)
             scale.concat()
             NSColor.black.set()
             self.draw()
@@ -22,7 +25,7 @@ enum ChromeIcon: CaseIterable {
         return image
     }
 
-    private func stroke(_ path: NSBezierPath, width: CGFloat = 1.45) {
+    private func stroke(_ path: NSBezierPath, width: CGFloat = 1.5) {
         path.lineWidth = width
         path.lineCapStyle = .round
         path.lineJoinStyle = .round
@@ -38,96 +41,117 @@ enum ChromeIcon: CaseIterable {
         return p
     }
 
-    private func dot(_ x: CGFloat, _ y: CGFloat, _ d: CGFloat = 1.3) {
+    private func dot(_ x: CGFloat, _ y: CGFloat, _ d: CGFloat = 2) {
         NSBezierPath(ovalIn: NSRect(x: x - d / 2, y: y - d / 2, width: d, height: d)).fill()
     }
 
     /// A tiny four-point star.
-    private func sparkle(_ x: CGFloat, _ y: CGFloat, _ r: CGFloat = 1.6) {
+    private func sparkle(_ x: CGFloat, _ y: CGFloat, _ r: CGFloat = 1.3) {
         let p = NSBezierPath()
+        let k = r * 0.25
         p.move(to: NSPoint(x: x, y: y - r))
-        p.curve(to: NSPoint(x: x + r, y: y), controlPoint1: NSPoint(x: x + r * 0.15, y: y - r * 0.15),
-                controlPoint2: NSPoint(x: x + r * 0.15, y: y - r * 0.15))
-        p.curve(to: NSPoint(x: x, y: y + r), controlPoint1: NSPoint(x: x + r * 0.15, y: y + r * 0.15),
-                controlPoint2: NSPoint(x: x + r * 0.15, y: y + r * 0.15))
-        p.curve(to: NSPoint(x: x - r, y: y), controlPoint1: NSPoint(x: x - r * 0.15, y: y + r * 0.15),
-                controlPoint2: NSPoint(x: x - r * 0.15, y: y + r * 0.15))
-        p.curve(to: NSPoint(x: x, y: y - r), controlPoint1: NSPoint(x: x - r * 0.15, y: y - r * 0.15),
-                controlPoint2: NSPoint(x: x - r * 0.15, y: y - r * 0.15))
+        p.curve(to: NSPoint(x: x + r, y: y), controlPoint1: NSPoint(x: x + k, y: y - k), controlPoint2: NSPoint(x: x + k, y: y - k))
+        p.curve(to: NSPoint(x: x, y: y + r), controlPoint1: NSPoint(x: x + k, y: y + k), controlPoint2: NSPoint(x: x + k, y: y + k))
+        p.curve(to: NSPoint(x: x - r, y: y), controlPoint1: NSPoint(x: x - k, y: y + k), controlPoint2: NSPoint(x: x - k, y: y + k))
+        p.curve(to: NSPoint(x: x, y: y - r), controlPoint1: NSPoint(x: x - k, y: y - k), controlPoint2: NSPoint(x: x - k, y: y - k))
         p.fill()
     }
 
-    private func ring(_ center: NSPoint, _ r: CGFloat) -> NSBezierPath {
-        NSBezierPath(ovalIn: NSRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2))
+    private func ring(_ x: CGFloat, _ y: CGFloat, _ r: CGFloat) -> NSBezierPath {
+        NSBezierPath(ovalIn: NSRect(x: x - r, y: y - r, width: r * 2, height: r * 2))
+    }
+
+    /// Strokes `path` in the background first (a knockout gap around a line that crosses another), then for real.
+    private func strokeWithGap(_ path: NSBezierPath, width: CGFloat = 1.5, gap: CGFloat = 1) {
+        let ctx = NSGraphicsContext.current
+        let saved = ctx?.compositingOperation ?? .sourceOver
+        ctx?.compositingOperation = .clear
+        stroke(path, width: width + gap * 2)
+        ctx?.compositingOperation = saved
+        stroke(path, width: width)
     }
 
     private func draw() {
         switch self {
         case .settings:
-            // Three sliders with knobs at different positions.
-            for (y, knob) in [(CGFloat(3.5), CGFloat(10)), (8, 12.5), (12.5, 4.5)] {
-                stroke(line([(1.5, y), (knob - 2, y)]))
-                stroke(line([(knob + 2, y), (14.5, y)]))
-                stroke(ring(NSPoint(x: knob, y: y), 2))
+            // Three sliders; each line breaks at its knob, a ring with a pinhole.
+            for (y, knob) in [(CGFloat(9.25), CGFloat(15.25)), (15.25, 20), (20.75, 12)] {
+                stroke(line([(6.75, y), (knob - 2.5, y)]))
+                stroke(line([(knob + 2.5, y), (23.25, y)]))
+                stroke(ring(knob, y, 1.75), width: 1.9)
             }
-            dot(1.6, 6)
+            dot(7, 12)
         case .search:
-            // A magnifier whose lens is a ringed planet.
-            let c = NSPoint(x: 7, y: 7)
-            stroke(ring(c, 4.4))
+            // A magnifier whose lens is a ringed planet: the ring's back half hides behind the lens, its front
+            // half crosses it with a small gap.
+            let c = NSPoint(x: 14.75, y: 13.5)
+            stroke(ring(c.x, c.y, 6.8))
+            let ellipse = NSRect(x: c.x - 8.9, y: 14.5 - 1.6, width: 17.8, height: 3.2)
             NSGraphicsContext.saveGraphicsState()
-            let outside = NSBezierPath(rect: NSRect(x: -2, y: -2, width: 20, height: 20))
-            outside.append(ring(c, 4.4).reversed)
+            let outside = NSBezierPath(rect: NSRect(x: 0, y: 0, width: 30, height: 30))
+            outside.append(ring(c.x, c.y, 6.8).reversed)
             outside.addClip()
-            let orbit = NSBezierPath(ovalIn: NSRect(x: -6.8, y: -1.7, width: 13.6, height: 3.4))
-            var t = AffineTransform(translationByX: c.x, byY: c.y + 0.4)
-            t.rotate(byDegrees: -8)
-            orbit.transform(using: t)
-            stroke(orbit, width: 1.2)
+            stroke(NSBezierPath(ovalIn: ellipse))
             NSGraphicsContext.restoreGraphicsState()
-            stroke(line([(10.2, 10.6), (12.8, 14.2)]))
-            sparkle(14.4, 10.6, 1.4)
+            NSGraphicsContext.saveGraphicsState()
+            NSBezierPath(rect: NSRect(x: 0, y: 14.5, width: 30, height: 15.5)).addClip()
+            strokeWithGap(NSBezierPath(ovalIn: ellipse), gap: 0.6)
+            NSGraphicsContext.restoreGraphicsState()
+            stroke(line([(18.6, 20.6), (20.6, 24)]))
+            sparkle(21.9, 19.4, 1.1)
         case .new:
-            // A rounded square with a pen stroke out of its top-right corner.
-            let square = NSBezierPath(roundedRect: NSRect(x: 1.5, y: 2.5, width: 11, height: 11), xRadius: 2.8, yRadius: 2.8)
-            stroke(square)
-            stroke(line([(6.8, 9.2), (13.2, 2.8)]))
-            sparkle(14.6, 1.2, 1.2)
+            // A rounded square with a pen stroke from its centre into the top-right corner.
+            stroke(NSBezierPath(roundedRect: NSRect(x: 6.75, y: 6.75, width: 16.5, height: 16.5), xRadius: 3.5, yRadius: 3.5))
+            stroke(line([(14.9, 15.1), (22, 8)]))
+            sparkle(24.4, 5.2, 1.3)
         case .pin:
-            // A pushpin from the side over a baseline.
-            stroke(ring(NSPoint(x: 8, y: 4.8), 3.1))
-            stroke(line([(8, 7.9), (8, 13.4)]))
-            stroke(line([(2.8, 13.6), (13.2, 13.6)]))
-            dot(10.8, 11.6)
+            // A pushpin seen from the side, standing on a baseline.
+            stroke(ring(15.25, 10.75, 4.5))
+            stroke(line([(15, 15.5), (15, 22.5)]))
+            stroke(line([(6.75, 23.25), (23.25, 23.25)]))
+            dot(18.5, 20.5)
         case .previous:
-            stroke(line([(2.5, 8), (8.6, 4.6), (8.6, 11.4)], close: true))
-            stroke(line([(12, 2.5), (12, 13.5)]))
-            dot(9.6, 2.4)
+            // ◁ joined to a bar on its right.
+            stroke(line([(7.75, 15), (14.75, 11.25), (14.75, 18.75)], close: true))
+            stroke(line([(14.75, 15), (19.5, 15)]), width: 1)
+            stroke(line([(19.5, 6.75), (19.5, 23)]), width: 1.25)
+            dot(16.5, 6.75)
         case .next:
-            stroke(line([(4, 2.5), (4, 13.5)]))
-            stroke(line([(7.4, 4.6), (13.5, 8), (7.4, 11.4)], close: true))
-            dot(1.8, 13.4)
+            // A bar joined to ▷ on its right.
+            stroke(line([(10.75, 6.75), (10.75, 23.25)]), width: 1.25)
+            stroke(line([(10.75, 15), (15.25, 15)]), width: 1)
+            stroke(line([(15.25, 11.25), (21.75, 15), (15.25, 18.75)], close: true))
+            dot(7.75, 22.75)
         case .front:
-            stroke(line([(0.8, 8), (8.8, 8)]))
-            stroke(line([(4, 3.5), (4, 12.5)]))
-            stroke(line([(6.6, 3.5), (6.6, 12.5)]))
-            stroke(line([(9.2, 4.6), (15.2, 8), (9.2, 11.4)], close: true))
+            // A line through a short and a tall bar into ▷: jump to the front of the stack.
+            stroke(line([(5, 15), (19.75, 15)]), width: 1)
+            stroke(line([(11.5, 10.75), (11.5, 19.25)]), width: 1.25)
+            stroke(line([(15, 6.75), (15, 23.25)]), width: 1.25)
+            stroke(line([(19.75, 11.25), (26.25, 15), (19.75, 18.75)], close: true))
         case .export:
-            stroke(NSBezierPath(roundedRect: NSRect(x: 2.5, y: 8.5, width: 11, height: 6), xRadius: 2, yRadius: 2))
-            stroke(line([(8, 6.3), (8, 11)]))
-            stroke(line([(5.6, 6.3), (8, 1.8), (10.4, 6.3)], close: true))
+            // △ on a stem rising out of a rounded box; the stem ends in a dot.
+            stroke(line([(15, 5.75), (18.75, 11.75), (11.25, 11.75)], close: true))
+            stroke(NSBezierPath(roundedRect: NSRect(x: 6.75, y: 13.75, width: 16.5, height: 9), xRadius: 2.5, yRadius: 2.5))
+            stroke(line([(15, 12.5), (15, 16.5)]), width: 1.25)
+            dot(15, 18.4)
         case .delete:
-            // A trash can: lid with a handle, a tapered body and three slots.
-            stroke(line([(1.8, 4.2), (14.2, 4.2)]))
-            stroke(line([(6.2, 4.2), (6.2, 2.4), (9.8, 2.4), (9.8, 4.2)]))
-            stroke(line([(3.2, 4.2), (4.2, 14), (11.8, 14), (12.8, 4.2)]))
-            for x in [6.2, 8, 9.8] as [CGFloat] { stroke(line([(x, 7.2), (x, 11)]), width: 1.1) }
-            dot(8, 0.9)
+            // A bin: a double-lined lid with a handle dot, a round-bottomed body and three slots.
+            dot(15, 4.75)
+            stroke(NSBezierPath(roundedRect: NSRect(x: 5.25, y: 7.25, width: 19.5, height: 2), xRadius: 1, yRadius: 1))
+            let body = NSBezierPath()
+            body.move(to: NSPoint(x: 6.75, y: 10))
+            body.line(to: NSPoint(x: 6.75, y: 21.5))
+            body.appendArc(withCenter: NSPoint(x: 10.75, y: 21.5), radius: 4, startAngle: 180, endAngle: 90, clockwise: true)
+            body.line(to: NSPoint(x: 19.25, y: 25.5))
+            body.appendArc(withCenter: NSPoint(x: 19.25, y: 21.5), radius: 4, startAngle: 90, endAngle: 0, clockwise: true)
+            body.line(to: NSPoint(x: 23.25, y: 10))
+            stroke(body)
+            for x in [11.25, 14.75, 18.75] as [CGFloat] { stroke(line([(x, 15), (x, 19)])) }
         }
     }
 }
 
-/// The nine slots are the planets, Mercury to Pluto, drawn at their relative sizes.
+/// The nine slots are the planets, Mercury to Pluto, each drawn on a 30-unit canvas at its relative size.
 enum Planet: Int, CaseIterable {
     case mercury, venus, earth, mars, jupiter, saturn, uranus, neptune, pluto
 
@@ -145,65 +169,100 @@ enum Planet: Int, CaseIterable {
         }
     }
 
-    /// Body diameter in points (measured against the 24 pt bar).
-    var diameter: CGFloat {
+    /// The body on the canvas: centre and diameter in units.
+    private var body: (x: CGFloat, y: CGFloat, d: CGFloat) {
         switch self {
-        case .mercury: 2.2
-        case .pluto: 2
-        case .venus: 6.8
-        case .earth: 6
-        case .mars: 5
-        case .jupiter: 12.5
-        case .saturn: 8.5
-        case .uranus: 6
-        case .neptune: 6.4
+        case .mercury: (14.5, 15, 4)
+        case .venus: (15, 15, 8.5)
+        case .earth: (15.4, 14.75, 10.5)
+        case .mars: (15, 15, 8.5)
+        case .jupiter: (15, 15, 23.5)
+        case .saturn: (15, 14.75, 14.5)
+        case .uranus: (15, 14.75, 12)
+        case .neptune: (15, 14.75, 12)
+        case .pluto: (14.75, 14.75, 3)
         }
     }
 
-    /// Draws the planet centred at `c` in `color`; details are cut out with `cutout` (the bar's fill).
-    func draw(at c: NSPoint, color: NSColor, cutout: NSColor) {
-        let d = diameter
-        let body = NSRect(x: c.x - d / 2, y: c.y - d / 2, width: d, height: d)
+    /// Draws the planet's 30-unit canvas into `rect` (y down) in `color`. Details are cut out of the body
+    /// (transparent), so whatever is behind shows through.
+    func draw(in rect: NSRect, color: NSColor) {
+        guard let ctx = NSGraphicsContext.current else { return }
+        NSGraphicsContext.saveGraphicsState()
+        ctx.cgContext.beginTransparencyLayer(auxiliaryInfo: nil)
+        let xf = NSAffineTransform()
+        xf.translateX(by: rect.minX, yBy: rect.minY)
+        xf.scale(by: rect.width / 30)
+        xf.concat()
         color.setFill()
         color.setStroke()
-        switch self {
-        case .saturn, .uranus:
-            NSBezierPath(ovalIn: body).fill()
-            let ring = self == .saturn
-                ? NSBezierPath(ovalIn: NSRect(x: -8, y: -1.9, width: 16, height: 3.8))
-                : NSBezierPath(ovalIn: NSRect(x: -1.5, y: -5.6, width: 3, height: 11.2))
-            var t = AffineTransform(translationByX: c.x, byY: c.y)
-            t.rotate(byDegrees: self == .saturn ? 8 : -10)
-            ring.transform(using: t)
-            ring.lineWidth = self == .saturn ? 1.2 : 0.5
-            ring.stroke()
-        default:
-            NSBezierPath(ovalIn: body).fill()
+        let b = body
+        let disc = NSBezierPath(ovalIn: NSRect(x: b.x - b.d / 2, y: b.y - b.d / 2, width: b.d, height: b.d))
+
+        func knockout(_ draw: () -> Void) {
+            ctx.compositingOperation = .clear
+            draw()
+            ctx.compositingOperation = .sourceOver
         }
-        cutout.setStroke()
-        cutout.setFill()
+        switch self {
+        case .saturn:
+            // A tilted ring: its back half hides behind the body, its front half crosses it with a gap.
+            var t = AffineTransform(translationByX: 15, byY: 14.6)
+            t.rotate(byDegrees: -12.2)
+            let ring = NSBezierPath(ovalIn: NSRect(x: -12.9, y: -2.4, width: 25.8, height: 4.8))
+            ring.transform(using: t)
+            ring.lineWidth = 1.2
+            ring.stroke()
+            disc.fill()
+            NSGraphicsContext.saveGraphicsState()
+            let front = NSBezierPath()
+            front.move(to: NSPoint(x: -14, y: 0))
+            front.line(to: NSPoint(x: 14, y: 0))
+            front.line(to: NSPoint(x: 14, y: 8))
+            front.line(to: NSPoint(x: -14, y: 8))
+            front.close()
+            front.transform(using: t)
+            front.addClip()
+            knockout { ring.lineWidth = 2.6; ring.stroke() }
+            ring.lineWidth = 1.2
+            ring.stroke()
+            NSGraphicsContext.restoreGraphicsState()
+        case .uranus:
+            // A thin, nearly upright ring behind the body.
+            var t = AffineTransform(translationByX: 14.75, byY: 14.9)
+            t.rotate(byDegrees: 8.2)
+            let ring = NSBezierPath(ovalIn: NSRect(x: -1.3, y: -10.4, width: 2.6, height: 20.8))
+            ring.transform(using: t)
+            ring.lineWidth = 0.55
+            ring.stroke()
+            disc.fill()
+        default:
+            disc.fill()
+        }
         switch self {
         case .venus:
+            // A wavy cloud band across the middle.
             let wave = NSBezierPath()
-            wave.move(to: NSPoint(x: body.minX, y: c.y))
-            wave.curve(to: NSPoint(x: body.maxX, y: c.y), controlPoint1: NSPoint(x: c.x - 1, y: c.y + 3),
-                       controlPoint2: NSPoint(x: c.x + 1, y: c.y - 3))
-            wave.lineWidth = 0.7
-            wave.stroke()
+            wave.move(to: NSPoint(x: 10.5, y: 15.2))
+            wave.curve(to: NSPoint(x: 19.5, y: 15.4), controlPoint1: NSPoint(x: 13.5, y: 13.9), controlPoint2: NSPoint(x: 16, y: 16.4))
+            wave.lineWidth = 0.6
+            knockout { wave.stroke() }
         case .earth:
-            color.setFill()
-            NSBezierPath(ovalIn: NSRect(x: body.minX - 1.8, y: body.minY - 1.2, width: 1.2, height: 1.2)).fill()
+            NSBezierPath(ovalIn: NSRect(x: 7.75, y: 11, width: 1.5, height: 1.5)).fill()
         case .mars:
-            for y in [body.minY + 0.9, body.maxY - 0.9] {
+            // Polar caps: short cuts near the top and bottom.
+            for y in [11.9, 18.1] as [CGFloat] {
                 let cap = NSBezierPath()
-                cap.move(to: NSPoint(x: c.x - 1.5, y: y))
-                cap.line(to: NSPoint(x: c.x + 1.5, y: y))
+                cap.move(to: NSPoint(x: 13.4, y: y))
+                cap.line(to: NSPoint(x: 16.4, y: y))
                 cap.lineWidth = 0.5
-                cap.stroke()
+                knockout { cap.stroke() }
             }
         case .jupiter:
-            NSBezierPath(ovalIn: NSRect(x: c.x + 1.4, y: c.y - 4.4, width: 2.8, height: 2.8)).fill()
+            knockout { NSBezierPath(ovalIn: NSRect(x: 17.1, y: 16.2, width: 3.6, height: 3.6)).fill() }
         default: break
         }
+        ctx.cgContext.endTransparencyLayer()
+        NSGraphicsContext.restoreGraphicsState()
     }
 }

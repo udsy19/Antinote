@@ -32,7 +32,7 @@ public enum Alerts {
         let ok = a.addButton(withTitle: confirmTitle)
         if destructive { ok.hasDestructiveAction = true }
         a.addButton(withTitle: cancelTitle)
-        if suppressionID != nil { a.showsSuppressionButton = true; a.suppressionButton?.title = "Don't ask again" }
+        if suppressionID != nil { a.showsSuppressionButton = true; a.suppressionButton?.title = "Don't ask again." }
         NSApp.activate(ignoringOtherApps: true)
         let result = a.runModal() == .alertFirstButtonReturn
         if result, let id = suppressionID, a.suppressionButton?.state == .on { Defaults[.suppressedWarnings].insert(id) }
@@ -77,8 +77,8 @@ public enum PillKind: Sendable {
     }
 }
 
-/// A message pill: a capsule of bold monospace text in `typeReverse`. It fades in (150 ms), holds and fades
-/// out (300 ms); it never takes clicks.
+/// A message pill: a capsule of editor-font text in `typeReverse`, padded 15 × 5 pt, in its kind's colour. It fades
+/// in (100 ms), holds for one second plus 50 ms per character and fades out (500 ms); it never takes clicks.
 @MainActor
 public final class PillView: NSView {
     public static let bottomInset: CGFloat = 20
@@ -94,49 +94,47 @@ public final class PillView: NSView {
         label.translatesAutoresizingMaskIntoConstraints = false
         addSubview(label)
         NSLayoutConstraint.activate([
-            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
-            label.topAnchor.constraint(equalTo: topAnchor, constant: 3.5),
-            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -3.5),
+            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 15),
+            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -15),
+            label.topAnchor.constraint(equalTo: topAnchor, constant: 5),
+            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -5),
         ])
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
     public override func layout() {
         super.layout()
-        layer?.cornerRadius = min(bounds.height / 2, 10)
+        layer?.cornerRadius = bounds.height / 2
     }
 
-    /// Bold editor monospace at 11 pt.
-    public static var font: NSFont {
-        NSFontManager.shared.convert(Typography.font(size: 11), toHaveTrait: .boldFontMask)
-    }
+    /// How long a message stays up: one second plus 50 ms per character.
+    public nonisolated static func duration(for message: String) -> TimeInterval { 1 + 0.05 * Double(message.count) }
 
     /// Sets the text and colours without animating (used directly by offscreen renders).
     public func configure(_ text: String, kind: PillKind, theme: Theme) {
         label.stringValue = text
-        label.font = Self.font
+        label.font = Typography.font()
         label.alignment = text.contains("\n") ? .left : .center
         label.textColor = NSColor(hex: theme.typeReverse)
         layer?.backgroundColor = kind.fill(theme).cgColor
     }
 
-    /// Shows `text` for `duration` seconds, then fades out.
-    public func show(_ text: String, kind: PillKind = .info, theme: Theme, duration: TimeInterval = 2.2,
+    /// Shows `text` for `duration` seconds (by default `duration(for:)`), then fades out.
+    public func show(_ text: String, kind: PillKind = .info, theme: Theme, duration: TimeInterval? = nil,
                      completion: (@MainActor @Sendable () -> Void)? = nil) {
         configure(text, kind: kind, theme: theme)
         hideWork?.cancel()
-        NSAnimationContext.runAnimationGroup { $0.duration = 0.15; animator().alphaValue = 1 }
+        NSAnimationContext.runAnimationGroup { $0.duration = 0.1; animator().alphaValue = 1 }
         let work = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                NSAnimationContext.runAnimationGroup({ $0.duration = 0.3; self.animator().alphaValue = 0 }) {
+                NSAnimationContext.runAnimationGroup({ $0.duration = 0.5; self.animator().alphaValue = 0 }) {
                     MainActor.assumeIsolated { completion?() }
                 }
             }
         }
         hideWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + (duration ?? Self.duration(for: text)), execute: work)
     }
 
     public override func hitTest(_ point: NSPoint) -> NSView? { nil }

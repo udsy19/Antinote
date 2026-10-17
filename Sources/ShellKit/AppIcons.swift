@@ -62,6 +62,25 @@ enum AppIcons {
         }
     }
 
+    /// The status-item glyph: an outlined equilateral triangle (1.5 pt stroke, mitred corners) in a 16 pt template.
+    static let menuBarIcon: NSImage = {
+        let image = NSImage(size: NSSize(width: 16, height: 16), flipped: true) { _ in
+            let triangle = NSBezierPath()
+            triangle.move(to: NSPoint(x: 8.25, y: 3))
+            triangle.line(to: NSPoint(x: 14.45, y: 14))
+            triangle.line(to: NSPoint(x: 2.05, y: 14))
+            triangle.close()
+            triangle.lineWidth = 1.5
+            triangle.lineJoinStyle = .miter
+            NSColor.black.setStroke()
+            triangle.stroke()
+            return true
+        }
+        image.isTemplate = true
+        image.accessibilityDescription = "Jotter"
+        return image
+    }()
+
     /// A rounded tile with a gradient, a sheet of paper with a folded corner, ruled lines and a checkbox.
     static func image(for style: Style, size: CGFloat = 512) -> NSImage {
         NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in

@@ -8,7 +8,8 @@ import JotterCore
 @MainActor
 final class SettingsWindow: NSObject {
     static let shared = SettingsWindow()
-    static let contentSize = NSSize(width: 780, height: 560)
+    /// The reference sizes its tab view 800 × 500 pt.
+    static let contentSize = NSSize(width: 800, height: 500)
 
     private var window: NSWindow?
     private var tabs: NSTabViewController?
@@ -59,7 +60,7 @@ final class SettingsWindow: NSObject {
         return (w, controller)
     }
 
-    @ViewBuilder private static func page(_ tab: SettingsTab) -> some View {
+    @ViewBuilder static func page(_ tab: SettingsTab) -> some View {
         switch tab {
         case .general: GeneralSettings()
         case .appearance: AppearanceSettings()

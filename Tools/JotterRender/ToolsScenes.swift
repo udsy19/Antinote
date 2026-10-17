@@ -30,12 +30,23 @@ extension Scenes {
             Scene(name: "search-cards-dark", size: window, dark: true) {
                 ToolsPreviews.search(notes: SearchDemo.notes, cards: true, now: SearchDemo.now)
             },
+            Scene(name: "search-cards-two-column", size: NSSize(width: 560, height: 440)) {
+                ToolsPreviews.search(notes: SearchDemo.notes, cards: true, now: SearchDemo.now)
+            },
+            Scene(name: "search-select", size: window) {
+                ToolsPreviews.search(notes: SearchDemo.notes, selecting: true, now: SearchDemo.now)
+            },
+            Scene(name: "void-list", size: NSSize(width: 450, height: 520)) {
+                ToolsPreviews.void(notes: SearchDemo.voided, now: SearchDemo.now)
+            },
+            Scene(name: "void-empty", size: NSSize(width: 450, height: 520)) { ToolsPreviews.void(notes: []) },
             Scene(name: "timer-break", size: alert) {
                 ToolsPreviews.breakScreen(fact: "Ostriches can outrun most horses.", remaining: 291,
                                           streak: NoPeekStreak(current: 0, best: 0))
             },
             Scene(name: "timer-countdown", size: alert) {
-                ToolsPreviews.timerAlert(title: "Time’s up", subtitle: "Countdown", message: "Your countdown timer is over.")
+                ToolsPreviews.timerAlert(title: "Timer Complete", subtitle: "Wildlife fact-file",
+                                         message: "Ostriches can outrun most horses.")
             },
         ]
     }
@@ -57,6 +68,18 @@ enum SearchDemo {
              hoursAgo: 60 * 24),
         note("code: swift\nstatic func spacing(size: Int) -> CGFloat {\n    size * 2\n}", hoursAgo: 80 * 24),
     ]
+
+    /// Notes in The Void, deleted a few hours to days before now.
+    static let voided: [Note] = [
+        ("Call the plumber about the upstairs sink", 3.0),
+        ("list\n[x] batteries\n[ ] light bulbs\n[ ] tape", 26.0),
+        ("", 50.0),
+        ("math\nrent: $1,450\nsplit: rent / 3 =", 24.0 * 6),
+    ].map { text, hours in
+        var n = note(text, hoursAgo: hours + 24)
+        n.deletedAt = now.addingTimeInterval(-hours * 3600)
+        return n
+    }
 
     private static func note(_ text: String, hoursAgo: Double) -> Note {
         let date = now.addingTimeInterval(-hoursAgo * 3600)

@@ -52,7 +52,7 @@ move to the previous or next note.", "Swipe sensitivity", "Higher values require
 - `swipeNavigation` off disables swipes (⌘[ / ⌘] keep working).
 - Inactivity (`newNoteAfterMinutes`, 0 = never): when the window is shown after being hidden at least that
   long, Jotter shows the front note if it is empty, otherwise creates a new note.
-- Go to First Note (⇧⌘L) jumps to the front.
+- Jump to Front (⌘1) jumps to the front.
 - The current note ID survives relaunches (`shellKitCurrentNote`).
 
 ## Slots
@@ -101,20 +101,24 @@ unpinned.", "Restore pin state on open", "Launch Antinote at login", "Pin Antino
 
 ## Menus
 
-The menu table (`MenuCatalog`) is the single source for the menu bar and the Settings → Shortcuts list.
-App: About, Settings… ⌘,, Hide ⌘H, Hide Others ⌥⌘H, Show All, Quit ⌘Q.
-File: New Note ⌘N, Move to The Void ⌘⌫, Recover from The Void… ⇧⌘⌫, Export ▸ (enabled destinations),
-Quick Export ⇧⌘E, Print ⌘P, Close Window ⌘W.
-Edit: Undo/Redo, Cut/Copy/Paste, Select All, Copy All ⌥⌘C, Select Line ⌘L, Find ⌘F, Find & Replace ⌥⌘F,
-Find Next ⌘G, Find Previous ⇧⌘G, Expand All Links, Extension Autocomplete ⌃Space.
-Note: Toggle Checklist Item ⇧⌘M, Cycle List Style ⌃⇧⌘M, Indent ⌥⌘], Outdent ⌥⌘[, Move Line Up/Down ⌥⌘↑/↓,
-Duplicate Line Up/Down ⇧⌥⌘↑/↓, Strikethrough ⇧⌘X, Promote to Front ⇧⌘T, Assign to Slot ▸ (⌃⌘1…9,
-Remove from Slot), Lock/Unlock ⌃⌘L, Read-Only ⇧⌘R, Archive ⇧⌘A.
-View: Increase/Decrease/Reset Text Size ⌘= ⌘− ⌥⌘0, Pin on Top ⇧⌘P, Always Show Slots Bar, Split View ⌃⌘S,
-Split Horizontally, Swap Panes.
-Go: Previous Note ⌘[, Next Note ⌘], First Note ⇧⌘L, Ephemeral Notes ⌘0, Slot 1…9 ⌘1…⌘9,
-Search All Notes ⇧⌘F, Command Palette ⌘K.
-Window: Minimize ⌘M, Zoom, Bring All to Front. Help: Show Tutorial Notes, Keyboard Shortcuts.
+`MainMenu.build` is the single source for the menu bar and the Settings → Shortcuts list. Order, titles and
+default keys follow the reference app's command table (see `ui-parity.md`).
+App: About, Settings… ⌘,, Services, Hide ⌘H, Hide Others ⌥⌘H, Show All, Quit ⌘Q.
+File: Create New Note ⌘N, Move Note to Front ⇧⌘1, Search All Notes ⌘F, Command Palette… ⌘K, Find and Replace ⇧⌘F,
+Toggle Split Screen ⇧⌘T, Swap Ephemeral vs. Slotted ⌘T, Make Read-Only/Allow Editing ⇧⌘R, Archive/Unarchive ⇧⌘A,
+Lock/Unlock ⇧⌘L, Relock Notes, Delete Note ⌘D, Recover Notes from The Void..., Empty The Void, Print... ⇧⌘P,
+Export Note ▸ (Quick Export ⌘S when a destination is chosen, then files, then "Send to …" apps), Close Window ⌘W.
+Edit: Undo/Redo, Cut/Copy/Paste, Select All, Copy All ⌥⌘C, Select Line ⌘L, Find Next ⌘G, Find Previous ⇧⌘G,
+Check Off Current Line ⇧⌘K, Cycle List Type ⇧⌘M, Indent ⌥⌘], Outdent ⌥⌘[, Move Line Up/Down ⌥↑/⌥↓, Duplicate
+Line Up/Down ⌥⇧↑/⌥⇧↓, Markdown: Strikethrough ⇧⌘X, Expand All Links ⌥⌘L, Extension Autocomplete ⌃Space.
+Appearance: Increase/Decrease/Reset Text Size ⌘= ⌘- ⌥⌘0, Always Show Slots Bar, Split Horizontally, Enter Full
+Screen ⌃⌘F.
+Navigate: Jump to Front ⌘1, Show Previous Note ⌘[, Show Next Note ⌘], Go to Slot 1…9 ⌘1…⌘9 and Ephemeral Notes
+⌘0 (only while `shellKitSlotNumberShortcuts` is on; ⌘1 then leaves Jump to Front), Assign to Slot ▸ (⌃⌘1…9,
+Remove from Slot).
+Support / Help: Show Tutorial Notes, Keyboard Shortcuts. Window: Pin Jotter to Top/Unpin from Top ⌘P, Hide/Show
+Jotter ⌘O, Minimize ⌘M, Zoom, Bring All to Front.
+Toggle items change their titles with state instead of showing checkmarks.
 
 ## Locked notes
 

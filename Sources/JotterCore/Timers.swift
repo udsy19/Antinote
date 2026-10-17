@@ -192,3 +192,17 @@ public enum TimerFormat {
         return parts.joined(separator: " ")
     }
 }
+
+/// The running timer's time left for the status-bar item ("04:37"), or nil when nothing should show there.
+/// The timer publishes it; the app's single status item displays it.
+@MainActor
+public enum MenuBarTimer {
+    public static let didChange = Notification.Name("JotterMenuBarTimerDidChange")
+    public private(set) static var text: String?
+
+    public static func update(_ text: String?) {
+        guard text != self.text else { return }
+        self.text = text
+        NotificationCenter.default.post(name: didChange, object: nil)
+    }
+}

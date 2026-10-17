@@ -17,12 +17,11 @@ public extension Notification.Name {
 
 /// Runs the timers of `timer` notes: one per note, any number of notes at once.
 @MainActor
-public final class TimerManager: NSObject, TimerServicing, NSMenuDelegate {
+public final class TimerManager: NSObject, TimerServicing {
     private var runs: [UUID: TimerRun] = [:]
     private let clock: () -> Date
     private var lastTick: Date
     private var ticker: Timer?
-    private var statusItem: NSStatusItem?
     private var cancellables: Set<AnyCancellable> = []
 
     public init(clock: @escaping () -> Date = Date.init) {
@@ -31,7 +30,7 @@ public final class TimerManager: NSObject, TimerServicing, NSMenuDelegate {
         super.init()
         restore()
         Defaults.changes.filter { $0 == Defaults.Keys.timerInMenuBar.name }
-            .sink { [weak self] _ in self?.refreshStatusItem() }
+            .sink { [weak self] _ in self?.refreshMenuBarText() }
             .store(in: &cancellables)
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil,
                                                queue: .main) { [weak self] _ in
@@ -128,7 +127,7 @@ public final class TimerManager: NSObject, TimerServicing, NSMenuDelegate {
     private func changed(_ noteID: UUID) {
         save()
         scheduleTicker()
-        refreshStatusItem()
+        refreshMenuBarText()
         NotificationCenter.default.post(name: .jotterTimersDidChange, object: noteID)
     }
 
@@ -156,7 +155,7 @@ public final class TimerManager: NSObject, TimerServicing, NSMenuDelegate {
             NotificationCenter.default.post(name: .jotterTimersDidChange, object: id)
         }
         lastTick = now
-        refreshStatusItem()
+        refreshMenuBarText()
         if !runs.values.contains(where: { !$0.isPaused && !$0.isFinished(at: now) }) {
             save()
             scheduleTicker()
@@ -176,7 +175,7 @@ public final class TimerManager: NSObject, TimerServicing, NSMenuDelegate {
         let title: String, message: String, sound: String
         switch event {
         case .finished:
-            title = name.isEmpty ? "Time’s up" : name
+            title = name.isEmpty ? "Timer Complete" : name
             message = "Your countdown timer is over."
             sound = "Glass"
         case .workEnded:
@@ -185,7 +184,7 @@ public final class TimerManager: NSObject, TimerServicing, NSMenuDelegate {
             sound = "Hero"
         case .breakEnded:
             if TimerOverlay.shared.breakNoteID == noteID { Defaults[.toolsKitNoPeekStreak].breakCompleted() }
-            title = "Break’s over"
+            title = "Break Over"
             message = BreakContent.backToWork.randomElement() ?? ""
             sound = "Ping"
         }
@@ -194,7 +193,8 @@ public final class TimerManager: NSObject, TimerServicing, NSMenuDelegate {
         if style != .notification {
             switch event {
             case .workEnded: TimerOverlay.shared.showBreak(breakScreen(noteID: noteID))
-            case .finished: TimerOverlay.shared.showAlert(title: title, subtitle: "Countdown", message: message)
+            case .finished:
+                TimerOverlay.shared.showAlert(title: title, subtitle: "Wildlife fact-file", message: BreakContent.randomFact())
             case let .breakEnded(n):
                 TimerOverlay.shared.showAlert(title: title, subtitle: name.isEmpty ? "Session \(n + 1)" : name, message: message)
             }
@@ -230,60 +230,14 @@ public final class TimerManager: NSObject, TimerServicing, NSMenuDelegate {
         return live.max { $0.value.elapsed(at: now) < $1.value.elapsed(at: now) }.map { ($0.key, $0.value) }
     }
 
-    private func refreshStatusItem() {
+    /// The soonest timer's time left, shown next to the status-bar icon ("△ 04:37") when the setting is on.
+    private func refreshMenuBarText() {
         let now = clock()
-        guard Defaults[.timerInMenuBar], let (_, run) = soonest(at: now) else {
-            if let item = statusItem { NSStatusBar.system.removeStatusItem(item); statusItem = nil }
+        guard Defaults[.timerInMenuBar], let (_, run) = soonest(at: now), run.spec.kind != .breathe else {
+            MenuBarTimer.update(nil)
             return
         }
-        if statusItem == nil {
-            let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-            item.button?.image = NSImage(systemSymbolName: "timer", accessibilityDescription: "Timer")
-            item.button?.imagePosition = .imageLeading
-            item.button?.font = .monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-            let menu = NSMenu()
-            menu.delegate = self
-            item.menu = menu
-            statusItem = item
-        }
-        let snap = run.snapshot(at: now)
-        statusItem?.button?.title = run.spec.kind == .breathe ? "" : " " + TimerFormat.clock(snap.seconds)
-        statusItem?.button?.appearsDisabled = snap.isPaused
-    }
-
-    public func menuNeedsUpdate(_ menu: NSMenu) {
-        menu.removeAllItems()
-        let now = clock()
-        for id in runningNoteIDs {
-            guard let run = runs[id] else { continue }
-            let header = NSMenuItem(title: run.statusText(at: now), action: nil, keyEquivalent: "")
-            header.isEnabled = false
-            menu.addItem(header)
-            if !run.isFinished(at: now) {
-                menu.addItem(item(run.isPaused ? "Resume" : "Pause", #selector(menuTogglePause(_:)), id))
-                menu.addItem(item("Show Full Screen", #selector(menuFullScreen(_:)), id))
-            }
-            menu.addItem(item("Open Note", #selector(menuOpenNote(_:)), id))
-            menu.addItem(item("Stop", #selector(menuStop(_:)), id))
-            menu.addItem(.separator())
-        }
-        if menu.items.last?.isSeparatorItem == true { menu.removeItem(at: menu.items.count - 1) }
-    }
-
-    private func item(_ title: String, _ action: Selector, _ id: UUID) -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
-        item.target = self
-        item.representedObject = id
-        item.indentationLevel = 1
-        return item
-    }
-
-    @objc private func menuTogglePause(_ sender: NSMenuItem) { (sender.representedObject as? UUID).map(togglePause) }
-    @objc private func menuFullScreen(_ sender: NSMenuItem) { (sender.representedObject as? UUID).map(showFullScreen) }
-    @objc private func menuStop(_ sender: NSMenuItem) { (sender.representedObject as? UUID).map(stop) }
-    @objc private func menuOpenNote(_ sender: NSMenuItem) {
-        guard let id = sender.representedObject as? UUID, Services.windows != nil else { return }
-        Services.windows.show(noteID: id)
+        MenuBarTimer.update(TimerFormat.clock(run.snapshot(at: now).seconds))
     }
 
     // MARK: Persistence
@@ -299,7 +253,7 @@ public final class TimerManager: NSObject, TimerServicing, NSMenuDelegate {
             if run.pausedByQuit { run.resume(at: now) }
             runs[id] = run
         }
-        refreshStatusItem()
+        refreshMenuBarText()
     }
 
     private func prepareForQuit() {

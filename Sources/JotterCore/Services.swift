@@ -83,6 +83,8 @@ public protocol WindowServicing: AnyObject {
 public protocol PanelServicing: AnyObject {
     func showCommandPalette()
     func showVoid()
+    /// Asks, then permanently deletes every note in The Void.
+    func emptyVoid()
     func showSearch()
 }
 

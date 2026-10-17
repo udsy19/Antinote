@@ -73,75 +73,51 @@ final class AutoPasteMonitor {
 
 // MARK: - Overlays
 
-/// Small pill label for the Vim mode indicator.
-final class PillLabel: NSView {
-    let label = NSTextField(labelWithString: "")
-    var fill: NSColor = .clear { didSet { layer?.backgroundColor = fill.cgColor } }
-
-    init(fontSize: CGFloat, weight: NSFont.Weight = .medium, monospaced: Bool = false) {
-        super.init(frame: .zero)
-        wantsLayer = true
-        layer?.cornerRadius = 7
-        label.font = monospaced ? .monospacedSystemFont(ofSize: fontSize, weight: weight) : .systemFont(ofSize: fontSize, weight: weight)
-        label.lineBreakMode = .byTruncatingTail
-        label.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(label)
-        NSLayoutConstraint.activate([
-            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
-            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
-            label.topAnchor.constraint(equalTo: topAnchor, constant: 3),
-            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -3),
-        ])
-    }
-    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
-
-    /// Overlays never take clicks from the text.
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
-}
-
-/// Shown over the note while an image is dragged in: a dashed orbit holding a small framed dot, and
-/// "Drop an image to capture text." in `typeLight`.
+/// Shown over the note while an image is dragged in: on the note's background, a 250 pt dashed orbit holding a
+/// small framed dot and "Drop an image to capture text." in the editor font, both in `typeMain`.
 final class DropOverlayView: NSView {
     var theme: Theme = .defaultLight { didSet { needsDisplay = true } }
     override var isFlipped: Bool { true }
 
     override func draw(_ dirtyRect: NSRect) {
-        NSColor(hex: theme.background).withAlphaComponent(0.94).setFill()
+        NSColor(hex: theme.background).setFill()
         bounds.fill()
-        let ink = NSColor(hex: theme.typeLight)
-        let width = bounds.width * 0.45, height = width * 479 / 700
+        let ink = NSColor(hex: theme.typeMain)
+        // Drawn on a 700 × 479 design grid, scaled to fit 250 pt wide.
+        let width = min(250, bounds.width - 40), k = width / 700, height = 479 * k
         let art = NSRect(x: bounds.midX - width / 2, y: bounds.midY - height / 2 - 16, width: width, height: height)
-        // A tilted elliptical orbit, dashed.
-        let orbit = NSBezierPath(ovalIn: NSRect(x: -width / 2, y: -height * 0.28, width: width, height: height * 0.56))
-        var transform = AffineTransform(translationByX: art.midX, byY: art.midY)
-        transform.rotate(byDegrees: -14)
+        // A long dashed orbit rising to the right.
+        let orbit = NSBezierPath(ovalIn: NSRect(x: -350 * k, y: -185 * k, width: 700 * k, height: 370 * k))
+        var transform = AffineTransform(translationByX: art.minX + 381 * k, byY: art.minY + 228 * k)
+        transform.rotate(byDegrees: -24.4)
         orbit.transform(using: transform)
-        orbit.lineWidth = 1.5
-        orbit.setLineDash([5, 4], count: 2, phase: 0)
+        orbit.lineWidth = 6 * k
+        orbit.setLineDash([18 * k, 12 * k], count: 2, phase: 0)
         ink.setStroke()
         orbit.stroke()
-        // The "image": a small rounded square with a dot, riding the orbit.
-        let side = width * 0.16
-        let frame = NSRect(x: art.minX + width * 0.08, y: art.midY - side * 0.2, width: side, height: side)
+        // The "image": a square holding a large dot, sitting on the orbit's lower-left end.
+        let frame = NSRect(x: art.minX + 3 * k, y: art.minY + 323 * k, width: 153 * k, height: 153 * k)
         NSColor(hex: theme.background).setFill()
-        let square = NSBezierPath(roundedRect: frame, xRadius: side * 0.18, yRadius: side * 0.18)
+        let square = NSBezierPath(roundedRect: frame, xRadius: 6 * k, yRadius: 6 * k)
         square.fill()
-        square.lineWidth = 1.5
+        square.lineWidth = 6 * k
         square.stroke()
         ink.setFill()
-        let d = side * 0.3
+        let d = 63 * k
         NSBezierPath(ovalIn: NSRect(x: frame.midX - d / 2, y: frame.midY - d / 2, width: d, height: d)).fill()
         let text = "Drop an image to capture text." as NSString
-        let attrs: [NSAttributedString.Key: Any] = [.font: Typography.font(size: 12), .foregroundColor: ink]
-        let size = text.size(withAttributes: attrs)
-        text.draw(at: NSPoint(x: bounds.midX - size.width / 2, y: art.maxY + 18), withAttributes: attrs)
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = .center
+        let attrs: [NSAttributedString.Key: Any] = [.font: Typography.font(), .foregroundColor: ink, .paragraphStyle: paragraph]
+        text.draw(with: NSRect(x: 20, y: art.maxY + 16, width: bounds.width - 40, height: bounds.height - art.maxY - 16),
+                  options: [.usesLineFragmentOrigin], attributes: attrs)
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
-/// The link hover tip: the full address and the click hints in bold white monospace on a `typeLight` rounded
-/// rectangle.
+/// The link hover tip: the full address and the click hints in the editor font, `typeReverse` on an `accent1Main`
+/// rounded rectangle padded 8 pt, with a soft shadow.
 final class LinkTipView: NSView {
     private let label = NSTextField(wrappingLabelWithString: "")
 
@@ -149,15 +125,20 @@ final class LinkTipView: NSView {
         super.init(frame: frame)
         wantsLayer = true
         layer?.cornerRadius = 6
-        label.font = NSFontManager.shared.convert(Typography.font(size: 10), toHaveTrait: .boldFontMask)
-        label.textColor = .white
+        layer?.masksToBounds = false
+        layer?.shadowColor = NSColor.black.cgColor
+        layer?.shadowOpacity = 0.33
+        layer?.shadowRadius = 5
+        layer?.shadowOffset = CGSize(width: 0, height: -4)
         addSubview(label)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
     /// Places the tip with its top-right corner at `point` (in the superview), kept inside `bounds`.
     func show(_ text: String, theme: Theme, endingAt point: NSPoint, in bounds: NSRect) {
-        layer?.backgroundColor = NSColor(hex: theme.typeLight).withAlphaComponent(0.9).cgColor
+        layer?.backgroundColor = NSColor(hex: theme.accent1Main).cgColor
+        label.font = Typography.font()
+        label.textColor = NSColor(hex: theme.typeReverse)
         label.stringValue = text
         label.preferredMaxLayoutWidth = max(120, bounds.width * 0.8 - 16)
         let size = label.fittingSize
@@ -197,14 +178,18 @@ final class CompletionPanel {
         panel.contentView = list
     }
 
-    /// Shows `items` (or the empty state) under the caret, about 60% as wide as the note window.
+    /// Shows `items` (or the empty state) under the caret, about 60% as wide as the note window; above the caret
+    /// when the caret is in the lower 40% of the window.
     func show(_ items: [ExtensionCommandInfo], below screenRect: NSRect, parent: NSWindow?) {
         list.theme = Theme.current
         list.items = Array(items.prefix(8))
         list.selected = min(list.selected, max(0, list.items.count - 1))
         let width = CompletionListView.width(forWindow: parent?.frame.width ?? 400)
         let height = CompletionListView.height(rows: list.items.count)
-        panel.setFrame(NSRect(x: screenRect.minX - 12, y: screenRect.minY - height - 6, width: width, height: height), display: true)
+        let frame = parent?.frame ?? .zero
+        let above = parent != nil && screenRect.minY < frame.maxY - frame.height * 0.6
+        let y = above ? screenRect.maxY + 6 : screenRect.minY - height - 6
+        panel.setFrame(NSRect(x: screenRect.minX - 12, y: y, width: width, height: height), display: true)
         list.needsDisplay = true
         if !panel.isVisible {
             parent?.addChildWindow(panel, ordered: .above)
@@ -226,11 +211,11 @@ final class CompletionPanel {
     }
 }
 
-/// Rows: a `›` on the selected row, the command name, a faint extension tag and an action badge
-/// ("⇆ replaceLine" in accent 1, "↓ insert" in accent 3); a key-hint footer below.
+/// Rows (12 × 8 pt padding): a bold chevron on the selected row, the command name, a small extension tag and an
+/// action badge (symbol + action on the action's colour); a key-hint footer below a divider.
 final class CompletionListView: NSView {
-    static let rowHeight: CGFloat = 28
-    static let footerHeight: CGFloat = 26
+    static let rowHeight: CGFloat = 34
+    static let footerHeight: CGFloat = 30
     static func height(rows: Int) -> CGFloat { 6 + CGFloat(max(rows, 2)) * rowHeight + footerHeight }
     /// About 60% of the note window, never narrower than 280 pt.
     static func width(forWindow width: CGFloat) -> CGFloat { max(280, width * 0.6) }
@@ -258,56 +243,75 @@ final class CompletionListView: NSView {
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
     override func draw(_ dirtyRect: NSRect) {
-        let mono = Typography.font(size: 12), small = Typography.font(size: 10)
-        let badgeFont = NSFontManager.shared.convert(Typography.font(size: 9), toHaveTrait: .boldFontMask)
-        let main = NSColor(hex: theme.typeMain), faint = NSColor(hex: theme.typeSuperlight), light = NSColor(hex: theme.typeLight)
+        let main = NSColor(hex: theme.typeMain), light = NSColor(hex: theme.typeLight)
         if items.isEmpty {
-            ("No commands found" as NSString).draw(at: NSPoint(x: 26, y: 12), withAttributes: [.font: mono, .foregroundColor: main])
-            ("Try a different search term" as NSString).draw(at: NSPoint(x: 26, y: 12 + Self.rowHeight),
-                                                             withAttributes: [.font: small, .foregroundColor: light])
+            let title = NSAttributedString(string: "No commands found",
+                                           attributes: [.font: NSFont.systemFont(ofSize: 13, weight: .medium), .foregroundColor: main])
+            let detail = NSAttributedString(string: "Try a different search term",
+                                            attributes: [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: light])
+            title.draw(at: NSPoint(x: (bounds.width - title.size().width) / 2, y: 14))
+            detail.draw(at: NSPoint(x: (bounds.width - detail.size().width) / 2, y: 18 + title.size().height))
         }
         for (i, item) in items.enumerated() {
             let row = NSRect(x: 0, y: 3 + CGFloat(i) * Self.rowHeight, width: bounds.width, height: Self.rowHeight)
             if i == selected {
                 NSColor(hex: theme.typeHyperLight).setFill()
                 row.fill()
-                let chevron = NSAttributedString(string: "›", attributes: [.font: NSFont.systemFont(ofSize: 15, weight: .semibold),
-                                                                           .foregroundColor: main])
-                chevron.draw(at: NSPoint(x: 10, y: row.midY - chevron.size().height / 2 - 1))
+                Self.symbol("chevron.right", size: 10, weight: .bold, color: main)
+                    .map { draw($0, centeredAt: NSPoint(x: 12 + 6, y: row.midY)) }
             }
-            let (glyph, fill) = Self.badge(item.action, theme: theme)
-            let badge = NSAttributedString(string: glyph + " " + item.action,
-                                           attributes: [.font: badgeFont, .foregroundColor: NSColor(hex: theme.typeReverse)])
-            let badgeSize = badge.size()
-            let badgeRect = NSRect(x: row.maxX - 10 - badgeSize.width - 10, y: row.midY - 7.5, width: badgeSize.width + 10, height: 15)
+            // The badge, right-aligned: symbol and action name in `typeReverse` on the action's colour.
+            let (symbolName, fill) = Self.badge(item.action, theme: theme)
+            let reverse = NSColor(hex: theme.typeReverse)
+            let label = NSAttributedString(string: item.action,
+                                           attributes: [.font: NSFont.systemFont(ofSize: 10, weight: .medium), .foregroundColor: reverse])
+            let icon = Self.symbol(symbolName, size: 9, weight: .medium, color: reverse)
+            let iconWidth = icon.map { $0.size.width + 4 } ?? 0
+            let badgeRect = NSRect(x: row.maxX - 12 - (label.size().width + iconWidth + 16), y: row.midY - (label.size().height + 6) / 2,
+                                   width: label.size().width + iconWidth + 16, height: label.size().height + 6)
             fill.setFill()
             NSBezierPath(roundedRect: badgeRect, xRadius: 4, yRadius: 4).fill()
-            badge.draw(at: NSPoint(x: badgeRect.minX + 5, y: badgeRect.midY - badgeSize.height / 2))
+            if let icon { draw(icon, centeredAt: NSPoint(x: badgeRect.minX + 8 + icon.size.width / 2, y: badgeRect.midY)) }
+            label.draw(at: NSPoint(x: badgeRect.minX + 8 + iconWidth, y: badgeRect.minY + 3))
 
-            let name = NSAttributedString(string: item.name, attributes: [.font: mono, .foregroundColor: main])
-            let tag = NSAttributedString(string: item.extensionName, attributes: [.font: small, .foregroundColor: faint])
-            let tagX = badgeRect.minX - 10 - tag.size().width
-            let showTag = tagX > 26 + name.size().width + 8
-            if showTag { tag.draw(at: NSPoint(x: tagX, y: row.midY - tag.size().height / 2)) }
-            let nameRect = NSRect(x: 26, y: row.midY - name.size().height / 2, width: (showTag ? tagX : badgeRect.minX) - 34,
+            let name = NSAttributedString(string: item.name, attributes: [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: main])
+            let tag = NSAttributedString(string: item.extensionName, attributes: [.font: NSFont.systemFont(ofSize: 9), .foregroundColor: light])
+            let tagRect = NSRect(x: badgeRect.minX - 8 - (tag.size().width + 8), y: row.midY - (tag.size().height + 4) / 2,
+                                 width: tag.size().width + 8, height: tag.size().height + 4)
+            let nameX: CGFloat = 12 + 12 + 8
+            let showTag = tagRect.minX > nameX + name.size().width + 8
+            if showTag {
+                NSColor(hex: theme.typeHyperLight).setFill()
+                NSBezierPath(roundedRect: tagRect, xRadius: 3, yRadius: 3).fill()
+                tag.draw(at: NSPoint(x: tagRect.minX + 4, y: tagRect.minY + 2))
+            }
+            let nameRect = NSRect(x: nameX, y: row.midY - name.size().height / 2, width: (showTag ? tagRect.minX : badgeRect.minX) - 8 - nameX,
                                   height: name.size().height)
             name.draw(with: nameRect, options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
         }
         let footer = NSRect(x: 0, y: bounds.height - Self.footerHeight, width: bounds.width, height: Self.footerHeight)
-        NSColor(hex: theme.typeHyperLight).setFill()
+        NSColor(hex: theme.typeSuperlight).setFill()
         NSRect(x: 0, y: footer.minY, width: bounds.width, height: 1).fill()
-        let hint = NSAttributedString(string: "↑↓ to navigate · ⇥ or ↩ to select",
-                                      attributes: [.font: NSFont.systemFont(ofSize: 10), .foregroundColor: light])
-        hint.draw(at: NSPoint(x: 18, y: footer.midY - hint.size().height / 2))
+        let hint = NSAttributedString(string: "↑↓ to navigate  •  ⇥ or ⏎ to select",
+                                      attributes: [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: light])
+        hint.draw(at: NSPoint(x: 12, y: footer.midY - hint.size().height / 2))
     }
 
-    /// The badge glyph and fill for a command's action.
+    private func draw(_ image: NSImage, centeredAt c: NSPoint) {
+        let size = image.size
+        image.draw(in: NSRect(x: c.x - size.width / 2, y: c.y - size.height / 2, width: size.width, height: size.height),
+                   from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+    }
+
+    private static func symbol(_ name: String, size: CGFloat, weight: NSFont.Weight, color: NSColor) -> NSImage? {
+        let config = NSImage.SymbolConfiguration(pointSize: size, weight: weight).applying(.init(paletteColors: [color]))
+        return NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(config)
+    }
+
+    /// The badge symbol and fill for a command's action.
     static func badge(_ action: String, theme: Theme) -> (String, NSColor) {
-        switch action {
-        case "insert": ("↓", NSColor(hex: theme.accent3Main))
-        case "openURL": ("↗", NSColor(hex: theme.accent4Main))
-        default: ("⇆", NSColor(hex: theme.accent1Main))
-        }
+        let badge = EditorLogic.actionBadge(action)
+        return (badge.symbol, NSColor(hex: theme[keyPath: badge.role]))
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -329,6 +333,13 @@ public enum EditorPreview {
         list.items = Array(items.prefix(8))
         list.selected = selected
         return list
+    }
+
+    /// The image-drop overlay filling a note window of `size`.
+    @MainActor public static func dropOverlay(size: NSSize) -> NSView {
+        let overlay = DropOverlayView(frame: NSRect(origin: .zero, size: size))
+        overlay.theme = Theme.current
+        return overlay
     }
 
     /// The link hover tip, top-right corner at `point` inside `bounds`.

@@ -16,6 +16,7 @@ enum Scenes {
         }
         scenes.append(Scene(name: "editor-pills", size: window) { pills() })
         scenes.append(Scene(name: "editor-linktip", size: window) { linkTip() })
+        scenes.append(Scene(name: "editor-drop", size: window) { EditorPreview.dropOverlay(size: window) })
         scenes.append(Scene(name: "editor-autocomplete", size: window) { autocomplete() })
         scenes.append(Scene(name: "editor-autocomplete-dark", size: window, dark: true) { autocomplete() })
         return scenes + windows + settings + tools
@@ -34,7 +35,7 @@ enum Scenes {
         let view = editor(Demo.notes[2].1)
         view.frame = NSRect(origin: .zero, size: window)
         let tip = EditorPreview.linkTip("https://docs.gc.gov/ambi/tunnel-manual.pdf\n⌘+Click to open | Click to expand.",
-                                        endingAt: NSPoint(x: 230, y: window.height - 292), in: view.bounds)
+                                        endingAt: NSPoint(x: 230, y: window.height - 300), in: view.bounds)
         view.addSubview(tip)
         return view
     }
@@ -177,13 +178,19 @@ enum Demo {
 @MainActor
 extension Scenes {
     static var windows: [Scene] {
-        [Scene(name: "window-revealed", size: window) { windowFrame(revealed: true) },
-         Scene(name: "window-rest", size: window) { windowFrame(revealed: false) },
-         Scene(name: "window-revealed-dark", size: window, dark: true) { windowFrame(revealed: true) }]
+        let size = WindowPreview.defaultSize
+        return [Scene(name: "window-revealed", size: size) { windowFrame(revealed: true) },
+                Scene(name: "window-rest", size: size) { windowFrame(revealed: false) },
+                Scene(name: "window-revealed-dark", size: size, dark: true) { windowFrame(revealed: true) },
+                // Last: opening a slot changes the shared window's state.
+                Scene(name: "window-slot", size: size) { windowFrame(revealed: true, slot: 1) },
+                Scene(name: "window-locked", size: size) { lockedFrame() }]
+            + chromeGlyphs
     }
 
-    /// Seeds a few notes (the demo math note in front, two slotted notes) and snapshots the window frame.
-    private static func windowFrame(revealed: Bool) -> NSView {
+    /// Seeds a few notes (the demo math note in front, two slotted notes) and snapshots the window frame, showing
+    /// `slot` when given.
+    private static func windowFrame(revealed: Bool, slot: Int? = nil) -> NSView {
         let store = Services.store!
         if store.deck.isEmpty {
             store.setSlot(1, for: store.create(content: "# Aphrodite\nSlot two.").id)
@@ -191,7 +198,19 @@ extension Scenes {
             store.create(content: Demo.notes[2].1)
             store.create(content: Demo.notes[0].1)
         }
-        return Render.drawn(WindowPreview.frameView(revealed: revealed))
+        return Render.drawn(WindowPreview.frameView(revealed: revealed, slot: slot))
+    }
+
+    /// A locked note in slot seven, shown behind its lock screen.
+    private static func lockedFrame() -> NSView {
+        let store = Services.store!
+        if store.deck.first(where: { $0.slot == 6 }) == nil {
+            var note = store.create(content: "# Ouranos\nPrivate.")
+            note.isLocked = true
+            store.update(note)
+            store.setSlot(6, for: note.id)
+        }
+        return windowFrame(revealed: false, slot: 6)
     }
 
     /// Frame views can't be re-parented, so render them (SwiftUI included) into an image view.

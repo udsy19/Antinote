@@ -3,19 +3,26 @@ import Combine
 import JotterCore
 import SwiftUI
 
-/// The Void: deleted notes waiting to be recovered or erased.
+/// The Void: deleted notes waiting to be recovered or erased. A black, always-dark window: "THE VOID" and a count
+/// of lost souls on top, the notes in monospace with outlined restore / destroy buttons, "Empty The Void" and "Return"
+/// along the bottom.
 @MainActor
 final class VoidWindowController {
     private var window: NSWindow?
 
     func show() {
         if window == nil {
-            let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 560),
-                             styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false)
+            let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 450, height: 520),
+                             styleMask: [.titled, .closable, .resizable, .miniaturizable, .fullSizeContentView],
+                             backing: .buffered, defer: false)
             w.title = "The Void"
+            w.titleVisibility = .hidden
+            w.titlebarAppearsTransparent = true
+            w.appearance = NSAppearance(named: .darkAqua)
+            w.backgroundColor = .black
             w.isReleasedWhenClosed = false
-            w.minSize = NSSize(width: 380, height: 320)
-            w.contentViewController = NSHostingController(rootView: VoidView(model: VoidModel()))
+            w.minSize = NSSize(width: VoidView.minSize.width, height: VoidView.minSize.height)
+            w.contentViewController = NSHostingController(rootView: VoidView(model: VoidModel(), close: { [weak w] in w?.close() }))
             w.setFrameAutosaveName("JotterVoidWindow")
             if !w.setFrameUsingName("JotterVoidWindow") { w.center() }
             window = w
@@ -26,20 +33,37 @@ final class VoidWindowController {
 }
 
 @MainActor
-private final class VoidModel: ObservableObject {
+final class VoidModel: ObservableObject {
     @Published var notes: [Note] = []
+    /// "Now" for the "Lost 3 days ago" lines (fixed in renders).
+    let now: () -> Date
     private var cancellable: AnyCancellable?
 
     init() {
+        now = Date.init
         reload()
         cancellable = Services.store?.changes.receive(on: RunLoop.main).sink { [weak self] _ in self?.reload() }
+    }
+
+    /// Fixed notes, for offscreen renders.
+    init(notes: [Note], now: Date) {
+        self.notes = notes
+        self.now = { now }
+    }
+
+    /// "Lost 3 days ago".
+    func lostText(_ note: Note) -> String? {
+        guard let deleted = note.deletedAt else { return nil }
+        let format = RelativeDateTimeFormatter()
+        format.unitsStyle = .full
+        return "Lost " + format.localizedString(for: deleted, relativeTo: now())
     }
 
     func reload() { notes = Services.store?.void ?? [] }
 
     func recover(_ note: Note) {
         Services.store.restoreFromVoid(note.id)
-        HUD.show("Note recovered", kind: .success)
+        HUD.show("Note restored", kind: .success)
     }
 
     func open(_ note: Note) {
@@ -51,54 +75,81 @@ private final class VoidModel: ObservableObject {
         guard Alerts.confirm("Delete from The Void?", info: "There is no recovery beyond The Void.",
                              confirmTitle: "Delete", destructive: true) else { return }
         Services.store.deletePermanently(note.id)
+        HUD.show("Note permanently deleted")
     }
 
     func emptyVoid() {
-        guard !notes.isEmpty else { HUD.show("The Void is already empty"); return }
+        guard !notes.isEmpty else { HUD.show("Nothing to delete"); return }
         let count = notes.count
         guard Alerts.confirm("Empty The Void?",
-                             info: "\(count) note\(count == 1 ? "" : "s") will be erased. There is no recovery beyond The Void.",
+                             info: "This will permanently delete \(count) note\(count == 1 ? "" : "s"). There is no recovery beyond The Void.",
                              confirmTitle: "Empty The Void", destructive: true) else { return }
         for note in notes { Services.store.deletePermanently(note.id) }
-        HUD.show("The Void is empty")
-    }
-
-    var retentionText: String {
-        let days = Defaults[.voidRetentionDays]
-        return days == 0 ? "Notes stay in The Void until you erase them."
-            : "Notes are erased \(days) day\(days == 1 ? "" : "s") after they drift in."
+        HUD.show("Emptied \(count) note\(count == 1 ? "" : "s") from The Void")
     }
 }
 
-private struct VoidView: View {
+/// The Void's palette and type: white text at 55 % and 40 % on black, red (1, 0.4, 0.4) for destroying, monospace
+/// body / caption / medium title 2.
+private enum VoidStyle {
+    static let text = Color(white: 0.55)
+    static let faint = Color(white: 0.4)
+    static let destroy = Color(red: 1, green: 0.4, blue: 0.4)
+    static let body = Font.system(.body, design: .monospaced)
+    static let caption = Font.system(.caption, design: .monospaced)
+    static let title = Font.system(.title2, design: .monospaced).weight(.medium)
+}
+
+struct VoidView: View {
+    static let minSize = CGSize(width: 450, height: 400)
     @ObservedObject var model: VoidModel
+    let close: () -> Void
 
     var body: some View {
-        VStack(spacing: 0) {
-            if model.notes.isEmpty {
-                VStack(spacing: 10) {
-                    Image(systemName: "tornado").font(.system(size: 44, weight: .light)).foregroundStyle(.secondary)
-                    Text("Deleted notes will drift here").font(.title3.weight(.medium))
-                    Text("Recover them, or erase them permanently.").foregroundStyle(.secondary)
+        ZStack {
+            Color.black.ignoresSafeArea()
+            VStack(spacing: 0) {
+                VStack(spacing: 4) {
+                    Text("THE VOID").font(VoidStyle.title).tracking(4).foregroundStyle(VoidStyle.text)
+                    Text("\(model.notes.count) lost souls").font(VoidStyle.caption).foregroundStyle(VoidStyle.faint)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                List(model.notes) { note in
-                    VoidRow(note: note, model: model)
+                .padding()
+                .padding(.top, 12)
+                rule
+                if model.notes.isEmpty {
+                    VStack(spacing: 16) {
+                        Image(systemName: "sparkles").font(.system(size: 48)).foregroundStyle(VoidStyle.faint)
+                        Text("The Void is empty").font(VoidStyle.body).foregroundStyle(VoidStyle.text)
+                        Text("Deleted notes will drift here").font(VoidStyle.caption).foregroundStyle(VoidStyle.faint)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            ForEach(model.notes) { note in VoidRow(note: note, model: model) }
+                        }
+                    }
+                    .scrollContentBackground(.hidden)
                 }
-                .listStyle(.inset)
+                rule
+                HStack(spacing: 12) {
+                    Spacer()
+                    Button("Empty The Void") { model.emptyVoid() }
+                        .buttonStyle(VoidButtonStyle(tint: VoidStyle.destroy))
+                        .opacity(model.notes.isEmpty ? 0.5 : 1)
+                    Button("Return", action: close)
+                        .buttonStyle(VoidButtonStyle(tint: .white))
+                        .keyboardShortcut(.defaultAction)
+                }
+                .font(VoidStyle.caption)
+                .padding()
             }
-            Divider()
-            HStack {
-                Text(model.retentionText).font(.callout).foregroundStyle(.secondary)
-                Spacer()
-                Button("Empty The Void…", role: .destructive) { model.emptyVoid() }
-                    .disabled(model.notes.isEmpty)
-            }
-            .padding(12)
         }
-        .frame(minWidth: 380, minHeight: 320)
+        .frame(minWidth: Self.minSize.width, minHeight: Self.minSize.height)
+        .environment(\.colorScheme, .dark)
     }
+
+    private var rule: some View { VoidStyle.faint.opacity(0.3).frame(height: 1) }
 }
 
 private struct VoidRow: View {
@@ -108,31 +159,71 @@ private struct VoidRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(preview).lineLimit(2).font(.body)
-                if let deleted = note.deletedAt {
-                    Text("Deleted \(deleted.formatted(.relative(presentation: .named)))")
-                        .font(.caption).foregroundStyle(.secondary)
+                Text(preview).font(VoidStyle.body).foregroundStyle(VoidStyle.text).lineLimit(2)
+                if let lost = model.lostText(note) {
+                    Text(lost).font(VoidStyle.caption).foregroundStyle(VoidStyle.faint)
                 }
             }
-            Spacer()
-            Button("Recover") { model.recover(note) }
-            Button { model.delete(note) } label: { Image(systemName: "trash") }
-                .help("Delete permanently")
+            Spacer(minLength: 8)
+            HStack(spacing: 8) {
+                Button { model.recover(note) } label: { Image(systemName: "arrow.uturn.backward") }
+                    .buttonStyle(VoidButtonStyle(tint: .white))
+                    .help("Restore from The Void")
+                Button { model.delete(note) } label: { Image(systemName: "xmark") }
+                    .buttonStyle(VoidButtonStyle(tint: VoidStyle.destroy))
+                    .help("Destroy forever")
+            }
         }
-        .padding(.vertical, 4)
+        .padding(.horizontal)
+        .padding(.vertical, 10)
         .contentShape(Rectangle())
         .onTapGesture(count: 2) { model.open(note) }
         .contextMenu {
-            Button("Recover") { model.recover(note) }
-            Button("Recover and Open") { model.open(note) }
+            Button("Restore") { model.recover(note) }
+            Button("Restore and Open") { model.open(note) }
             Divider()
-            Button("Delete Permanently…", role: .destructive) { model.delete(note) }
+            Button("Destroy Forever…", role: .destructive) { model.delete(note) }
         }
     }
 
     private var preview: String {
         let lines = note.content.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
-        return lines.isEmpty ? "Empty note" : lines.prefix(2).joined(separator: " · ")
+        return lines.isEmpty ? "(Empty vessel)" : lines.prefix(2).joined(separator: " ")
+    }
+}
+
+/// An outlined button in the tint colour: 4 pt corners, a 1 pt border at 25 % (50 % on hover), a 15 % wash on hover,
+/// and a slight shrink while pressed.
+private struct VoidButtonStyle: ButtonStyle {
+    let tint: Color
+
+    func makeBody(configuration: Configuration) -> some View { Outlined(configuration: configuration, tint: tint) }
+
+    private struct Outlined: View {
+        let configuration: Configuration
+        let tint: Color
+        @State private var hovered = false
+
+        var body: some View {
+            configuration.label
+                .foregroundStyle(tint)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(RoundedRectangle(cornerRadius: 4).fill(tint.opacity(hovered ? 0.15 : 0)))
+                .overlay(RoundedRectangle(cornerRadius: 4).stroke(tint.opacity(hovered ? 0.5 : 0.25), lineWidth: 1))
+                .scaleEffect(configuration.isPressed ? 0.95 : 1)
+                .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+                .onHover { hovered = $0 }
+        }
+    }
+}
+
+extension VoidView {
+    /// The Void listing `notes`, for offscreen renders.
+    static func preview(notes: [Note], now: Date) -> NSView {
+        let host = NSHostingView(rootView: VoidView(model: VoidModel(notes: notes, now: now), close: {}))
+        host.appearance = NSAppearance(named: .darkAqua)
+        return host
     }
 }

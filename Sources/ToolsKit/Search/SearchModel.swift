@@ -69,3 +69,38 @@ public enum SearchModel {
 
     private static let markerRegex = try! NSRegularExpression(pattern: #"^\s*((?:[-*] )?\[[ xX]?\] ?)"#)
 }
+
+/// Sizes of the Search pane. Its text runs one size step below the editor's (XS and S share the smallest step) and
+/// doubles with "Double font size"; paddings grow with the size preset.
+public enum SearchMetrics {
+    private static let steps: [CGFloat] = [10, 12, 14, 16, 18]
+
+    private static func step(_ size: TextSize) -> Int { TextSize.allCases.firstIndex(of: size) ?? 2 }
+
+    /// Search field, list results and toolbar labels: XS/S 10, M 12, L 14, XL 16 pt.
+    public static func textSize(_ size: TextSize, doubled: Bool) -> CGFloat {
+        steps[max(0, step(size) - 1)] * (doubled ? 2 : 1)
+    }
+
+    /// The "Edited 6 hours ago" line: XS–M 10, L 12, XL 14 pt.
+    public static func metaSize(_ size: TextSize, doubled: Bool) -> CGFloat {
+        steps[max(0, step(size) - 2)] * (doubled ? 2 : 1)
+    }
+
+    /// Card text keeps the smallest step (10 pt, 20 when doubled).
+    public static func cardTextSize(doubled: Bool) -> CGFloat { steps[0] * (doubled ? 2 : 1) }
+
+    /// Vertical padding of the search field and of list rows: 8, 10, 12, 14, 16 pt.
+    public static func rowPadding(_ size: TextSize) -> CGFloat { CGFloat(8 + 2 * step(size)) }
+
+    /// Promote/delete glyph size; the buttons are 12 pt larger, square.
+    public static func iconSize(doubled: Bool) -> CGFloat { doubled ? 20 : 10 }
+
+    /// Card grid: columns at least 230 and at most 340 pt wide, 12 pt apart, as many as fit `width`.
+    public static func cardColumns(width: CGFloat) -> (count: Int, width: CGFloat) {
+        let spacing: CGFloat = 12, minimum: CGFloat = 230, maximum: CGFloat = 340
+        let count = max(1, Int(((width + spacing) / (minimum + spacing)).rounded(.down)))
+        let column = (width - spacing * CGFloat(count - 1)) / CGFloat(count)
+        return (count, min(maximum, max(0, column)).rounded(.down))
+    }
+}

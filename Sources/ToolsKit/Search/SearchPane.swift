@@ -3,11 +3,24 @@ import Combine
 import JotterCore
 
 /// Search All Notes: replaces the note inside the main window (`WindowServicing.present(inWindow:)`).
-/// A rounded search field on top, results as a list or a 3-column card grid, and a floating toolbar with
-/// Select, the Ephemeral/Slotted scope and the list/grid switch. ↑/↓ move, Return opens, Esc closes.
+/// A rounded search field on top, results as a list or a grid of cards (columns 230–340 pt wide), and two floating
+/// toolbar capsules: Select | Ephemeral/Slotted on the left, list/cards on the right. ↑/↓ move, Return opens, Esc
+/// closes.
 @MainActor
 final class SearchPane: NSView, NSTextFieldDelegate {
     enum Layout: String { case list, cards }
+
+    /// Point sizes for the current text size preset (`SearchMetrics`).
+    struct Sizes {
+        var text, meta, card, icon, rowPadding: CGFloat
+
+        static var current: Sizes {
+            let size = Defaults[.textSize], doubled = Defaults[.doubleFontSize]
+            return Sizes(text: SearchMetrics.textSize(size, doubled: doubled), meta: SearchMetrics.metaSize(size, doubled: doubled),
+                         card: SearchMetrics.cardTextSize(doubled: doubled), icon: SearchMetrics.iconSize(doubled: doubled),
+                         rowPadding: SearchMetrics.rowPadding(size))
+        }
+    }
 
     /// The notes Search looks through. Production reads `Services.store`; renders pass fixed notes.
     struct Source {
@@ -22,15 +35,24 @@ final class SearchPane: NSView, NSTextFieldDelegate {
     private let field = NSTextField()
     private let fieldBox = NSView()
     private let glass = NSImageView()
-    private let escLabel = NSTextField(labelWithString: "esc")
+    private let escLabel = EscLabel()
     private let scroll = NSScrollView()
     private let content = FlippedView()
     private let emptyLabel = NSTextField(labelWithString: "")
-    private let selectButton = CapsuleButton(symbol: "checkmark.circle", title: "Select")
-    private let scopeButton = CapsuleButton(symbol: "wind", title: "Ephemeral")
-    private let promoteSelected = CapsuleButton(symbol: "arrow.up.to.line", title: nil)
-    private let deleteSelected = CapsuleButton(symbol: "trash", title: nil)
-    private let layoutSwitch = LayoutSwitch()
+    private var sizes = Sizes.current
+    private lazy var selectButton = ToolbarItem(symbol: "checkmark.circle", title: "Select", size: sizes.text)
+    private lazy var scopeButton = ToolbarItem(symbol: "wind", title: "Ephemeral", size: sizes.text)
+    private let selectDivider = ToolbarCapsule.divider()
+    private let pickedLabel = NSTextField(labelWithString: "")
+    private lazy var promoteSelected = ToolbarItem(symbol: "arrow.up.to.line", title: nil, size: sizes.text)
+    private lazy var deleteSelected = ToolbarItem(symbol: "trash", title: nil, size: sizes.text)
+    private lazy var listButton = ToolbarItem(symbol: "list.bullet", title: nil, size: sizes.text)
+    private lazy var cardsButton = ToolbarItem(symbol: "square.grid.2x2", title: nil, size: sizes.text)
+    private let leftCapsule = ToolbarCapsule(horizontalPadding: 8)
+    private let rightCapsule = ToolbarCapsule(horizontalPadding: 6)
+    private var fieldHeight: NSLayoutConstraint!
+    /// Cards per row in the last layout (↑/↓ move a whole row).
+    private var cardColumnCount = 1
 
     private var theme = Theme.defaultLight
     private var notes: [Note] = []
@@ -49,10 +71,13 @@ final class SearchPane: NSView, NSTextFieldDelegate {
     }
     private var scope: SearchScope = .ephemeral
 
-    static let sideInset: CGFloat = 12
-    static let fieldTop: CGFloat = 30
-    static let fieldHeight: CGFloat = 28
-    static let toolbarHeight: CGFloat = 30
+    /// The field: 16 pt from the sides, 38 pt from the top, 12 pt above the results; text inset 16 pt.
+    static let sideInset: CGFloat = 16
+    static let fieldTop: CGFloat = 38
+    static let fieldGap: CGFloat = 12
+    /// The toolbar capsules sit 16 pt from the sides and 14 pt from the bottom; results scroll 80 pt clear of them.
+    static let toolbarBottom: CGFloat = 14
+    static let resultsBottom: CGFloat = 80
     /// Rows built at once; refine the query to reach older notes.
     static let maxResults = 200
 
@@ -92,7 +117,6 @@ final class SearchPane: NSView, NSTextFieldDelegate {
 
     func setLayout(_ layout: Layout) {
         layoutMode = layout
-        layoutSwitch.selected = layout == .list ? 0 : 1
         rebuildRows()
     }
 
@@ -101,8 +125,8 @@ final class SearchPane: NSView, NSTextFieldDelegate {
     private func build() {
         fieldBox.wantsLayer = true
         fieldBox.layer?.cornerRadius = 8
+        fieldBox.layer?.cornerCurve = .continuous
         glass.image = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: "Search")
-        glass.symbolConfiguration = .init(pointSize: 12, weight: .regular)
         field.isBordered = false
         field.drawsBackground = false
         field.focusRingType = .none
@@ -110,6 +134,7 @@ final class SearchPane: NSView, NSTextFieldDelegate {
         field.cell?.isScrollable = true
         field.cell?.usesSingleLineMode = true
         escLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+        escLabel.onClick = { [weak self] in self?.close() }
         for v in [glass, field, escLabel] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
             fieldBox.addSubview(v)
@@ -120,39 +145,50 @@ final class SearchPane: NSView, NSTextFieldDelegate {
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
         scroll.automaticallyAdjustsContentInsets = false
-        scroll.contentInsets = NSEdgeInsets(top: 6, left: 0, bottom: Self.toolbarHeight + 26, right: 0)
         emptyLabel.alignment = .center
 
         selectButton.action = { [weak self] in self?.toggleSelecting() }
+        selectButton.toolTip = "Select multiple notes"
         scopeButton.action = { [weak self] in self?.toggleScope() }
+        scopeButton.toolTip = "Show slotted notes instead"
         promoteSelected.action = { [weak self] in self?.promotePicked() }
         promoteSelected.toolTip = "Promote selected to front"
         deleteSelected.action = { [weak self] in self?.deletePicked() }
         deleteSelected.toolTip = "Delete selected"
-        promoteSelected.isHidden = true
-        deleteSelected.isHidden = true
-        layoutSwitch.selected = layoutMode == .list ? 0 : 1
-        layoutSwitch.onChange = { [weak self] index in self?.setLayout(index == 0 ? .list : .cards) }
+        listButton.action = { [weak self] in self?.setLayout(.list) }
+        listButton.toolTip = "List view"
+        cardsButton.action = { [weak self] in self?.setLayout(.cards) }
+        cardsButton.toolTip = "Card view"
+        for v in [selectButton, selectDivider, scopeButton, pickedLabel, promoteSelected, deleteSelected] as [NSView] {
+            leftCapsule.stack.addArrangedSubview(v)
+        }
+        leftCapsule.stack.setCustomSpacing(8, after: selectDivider)
+        leftCapsule.stack.setCustomSpacing(4, after: pickedLabel)
+        rightCapsule.stack.addArrangedSubview(listButton)
+        rightCapsule.stack.addArrangedSubview(cardsButton)
+        for v in [pickedLabel, promoteSelected, deleteSelected] as [NSView] { v.isHidden = true }
+        pickedLabel.lineBreakMode = .byTruncatingTail
+        pickedLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        for v in [scroll, emptyLabel, fieldBox, selectButton, scopeButton, promoteSelected, deleteSelected, layoutSwitch] as [NSView] {
+        for v in [scroll, emptyLabel, fieldBox, leftCapsule, rightCapsule] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
             addSubview(v)
         }
         let inset = Self.sideInset
-        NSLayoutConstraint.activate([
+        fieldHeight = fieldBox.heightAnchor.constraint(equalToConstant: 30)
+        NSLayoutConstraint.activate([fieldHeight] + [
             fieldBox.topAnchor.constraint(equalTo: topAnchor, constant: Self.fieldTop),
             fieldBox.leadingAnchor.constraint(equalTo: leadingAnchor, constant: inset),
             fieldBox.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -inset),
-            fieldBox.heightAnchor.constraint(equalToConstant: Self.fieldHeight),
-            glass.leadingAnchor.constraint(equalTo: fieldBox.leadingAnchor, constant: 10),
-            glass.centerYAnchor.constraint(equalTo: fieldBox.centerYAnchor),
+            glass.leadingAnchor.constraint(equalTo: fieldBox.leadingAnchor, constant: inset),
+            field.centerYAnchor.constraint(equalTo: fieldBox.centerYAnchor),
             field.leadingAnchor.constraint(equalTo: glass.trailingAnchor, constant: 8),
-            field.centerYAnchor.constraint(equalTo: fieldBox.centerYAnchor, constant: -1),
             field.trailingAnchor.constraint(equalTo: escLabel.leadingAnchor, constant: -8),
-            escLabel.trailingAnchor.constraint(equalTo: fieldBox.trailingAnchor, constant: -12),
+            glass.centerYAnchor.constraint(equalTo: fieldBox.centerYAnchor),
+            escLabel.trailingAnchor.constraint(equalTo: fieldBox.trailingAnchor, constant: -inset),
             escLabel.centerYAnchor.constraint(equalTo: fieldBox.centerYAnchor),
 
-            scroll.topAnchor.constraint(equalTo: fieldBox.bottomAnchor, constant: 2),
+            scroll.topAnchor.constraint(equalTo: fieldBox.bottomAnchor, constant: Self.fieldGap),
             scroll.leadingAnchor.constraint(equalTo: leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: trailingAnchor),
             scroll.bottomAnchor.constraint(equalTo: bottomAnchor),
@@ -160,35 +196,39 @@ final class SearchPane: NSView, NSTextFieldDelegate {
             emptyLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
             emptyLabel.widthAnchor.constraint(lessThanOrEqualTo: widthAnchor, constant: -2 * inset),
 
-            selectButton.leadingAnchor.constraint(equalTo: leadingAnchor, constant: inset),
-            selectButton.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -inset),
-            scopeButton.leadingAnchor.constraint(equalTo: selectButton.trailingAnchor, constant: 8),
-            scopeButton.centerYAnchor.constraint(equalTo: selectButton.centerYAnchor),
-            promoteSelected.leadingAnchor.constraint(equalTo: selectButton.trailingAnchor, constant: 8),
-            promoteSelected.centerYAnchor.constraint(equalTo: selectButton.centerYAnchor),
-            deleteSelected.leadingAnchor.constraint(equalTo: promoteSelected.trailingAnchor, constant: 8),
-            deleteSelected.centerYAnchor.constraint(equalTo: selectButton.centerYAnchor),
-            layoutSwitch.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -inset),
-            layoutSwitch.centerYAnchor.constraint(equalTo: selectButton.centerYAnchor),
+            leftCapsule.leadingAnchor.constraint(equalTo: leadingAnchor, constant: inset),
+            leftCapsule.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Self.toolbarBottom),
+            rightCapsule.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -inset),
+            leftCapsule.trailingAnchor.constraint(lessThanOrEqualTo: rightCapsule.leadingAnchor, constant: -8),
+            rightCapsule.centerYAnchor.constraint(equalTo: leftCapsule.centerYAnchor),
         ])
     }
 
+    /// The field: `typeHyperLight` rounded rectangle; the magnifier, placeholder (70 %) and "esc" (40 %) in `typeLight`,
+    /// the query in `typeMain`, all at the Search text size.
     private func applyTheme() {
         theme = Theme.current
+        sizes = Sizes.current
         let c = Colors(theme)
         layer?.backgroundColor = c.background.cgColor
         fieldBox.layer?.backgroundColor = c.hyperLight.cgColor
+        glass.symbolConfiguration = .init(pointSize: sizes.text, weight: .regular)
         glass.contentTintColor = c.light
-        let mono = Typography.font(size: 11)
+        let mono = Typography.font(size: sizes.text)
         field.font = mono
         field.textColor = c.main
-        field.placeholderAttributedString = NSAttributedString(string: "Search", attributes: [.font: mono, .foregroundColor: c.light])
-        escLabel.font = Typography.font(size: 11)
-        escLabel.textColor = c.light
-        emptyLabel.font = Typography.font(size: 12)
-        emptyLabel.textColor = c.light
-        for b in [selectButton, scopeButton, promoteSelected, deleteSelected] { b.apply(c) }
-        layoutSwitch.apply(c)
+        field.placeholderAttributedString = NSAttributedString(string: "Search", attributes: [
+            .font: mono, .foregroundColor: c.light.withAlphaComponent(0.7),
+        ])
+        // Field height: one line of text plus the size-dependent padding above and below.
+        fieldHeight.constant = ceil(mono.ascender - mono.descender + mono.leading) + 2 * sizes.rowPadding
+        escLabel.font = mono
+        escLabel.textColor = c.light.withAlphaComponent(0.4)
+        emptyLabel.font = Typography.font(size: sizes.text)
+        emptyLabel.textColor = c.light.withAlphaComponent(0.5)
+        pickedLabel.font = Typography.font(size: sizes.text)
+        leftCapsule.apply(c)
+        rightCapsule.apply(c)
         rebuildRows()
     }
 
@@ -203,10 +243,12 @@ final class SearchPane: NSView, NSTextFieldDelegate {
         views.forEach { $0.removeFromSuperview() }
         createRow?.removeFromSuperview()
         createRow = nil
+        listButton.isSelected = layoutMode == .list
+        cardsButton.isSelected = layoutMode == .cards
         let c = Colors(theme)
         let q = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         views = notes.enumerated().map { i, note in
-            let v = SearchResultView(note: note, query: q, layout: layoutMode, colors: c, theme: theme,
+            let v = SearchResultView(note: note, query: q, layout: layoutMode, colors: c, theme: theme, sizes: sizes,
                                      meta: SearchModel.meta(modified: note.modified, now: source.now()))
             v.isSelectedRow = showsSelection && i == selected
             v.isPicked = picked.contains(note.id)
@@ -216,14 +258,14 @@ final class SearchPane: NSView, NSTextFieldDelegate {
             content.addSubview(v)
             return v
         }
-        if notes.isEmpty, !q.isEmpty, q.lowercased() != SearchModel.archivedQuery {
-            let row = SearchResultView(createWith: q, colors: c)
+        if notes.isEmpty, !q.isEmpty, q.lowercased() != SearchModel.archivedQuery, scope == .ephemeral {
+            let row = SearchResultView(createWith: q, colors: c, sizes: sizes)
             row.onOpen = { [weak self] in self?.createNote(q) }
             content.addSubview(row)
             createRow = row
         }
-        emptyLabel.stringValue = notes.isEmpty && q.isEmpty
-            ? (scope == .slotted ? "No slotted notes yet" : "No notes yet") : ""
+        emptyLabel.stringValue = !notes.isEmpty || createRow != nil ? ""
+            : !q.isEmpty ? "Nothing found" : (scope == .slotted ? "No slotted notes yet" : "No notes yet")
         emptyLabel.isHidden = emptyLabel.stringValue.isEmpty
         layoutRows()
     }
@@ -233,34 +275,42 @@ final class SearchPane: NSView, NSTextFieldDelegate {
         layoutRows()
     }
 
+    /// List: full-width rows (4 pt in from the sides, 8 pt below the field). Cards: 190 pt cards in columns of
+    /// 230–340 pt, 12 pt apart and 16 pt in from the sides; the grid is centred when columns hit their maximum.
     private func layoutRows() {
         let width = scroll.contentView.bounds.width
         guard width > 0 else { return }
-        let inset = Self.sideInset
-        var y: CGFloat = 0
+        var y: CGFloat
         switch layoutMode {
         case .list:
-            for v in views + [createRow].compactMap({ $0 }) {
+            let inset: CGFloat = 4
+            y = 8
+            for v in views {
                 let h = v.fittingHeight(width: width - 2 * inset)
                 v.frame = NSRect(x: inset, y: y, width: width - 2 * inset, height: h)
-                y += h + 14
+                y += h
             }
         case .cards:
-            let gap: CGFloat = 10, columns: CGFloat = 3
-            let w = ((width - 2 * inset - gap * (columns - 1)) / columns).rounded(.down)
-            let h = max(132, (w * 0.8).rounded())
+            let inset = Self.sideInset, gap: CGFloat = 12
+            let columns = SearchMetrics.cardColumns(width: width - 2 * inset)
+            cardColumnCount = columns.count
+            let gridWidth = CGFloat(columns.count) * columns.width + CGFloat(columns.count - 1) * gap
+            let left = inset + ((width - 2 * inset - gridWidth) / 2).rounded(.down)
+            let h = SearchResultView.cardHeight
+            y = 12
             for (i, v) in views.enumerated() {
-                let col = CGFloat(i % 3), row = CGFloat(i / 3)
-                v.frame = NSRect(x: inset + col * (w + gap), y: row * (h + gap), width: w, height: h)
+                let col = CGFloat(i % columns.count), row = CGFloat(i / columns.count)
+                v.frame = NSRect(x: left + col * (columns.width + gap), y: y + row * (h + gap), width: columns.width, height: h)
             }
-            y = views.isEmpty ? 0 : CGFloat((views.count + 2) / 3) * (h + gap)
-            if let row = createRow {
-                let rh = row.fittingHeight(width: width - 2 * inset)
-                row.frame = NSRect(x: inset, y: y, width: width - 2 * inset, height: rh)
-                y += rh
-            }
+            if !views.isEmpty { y += CGFloat((views.count + columns.count - 1) / columns.count) * (h + gap) - gap }
         }
-        content.frame = NSRect(x: 0, y: 0, width: width, height: max(y, 1))
+        if let row = createRow {
+            let rh = row.fittingHeight(width: width)
+            let rw = min(width - 2 * Self.sideInset, row.intrinsicWidth + 28)
+            row.frame = NSRect(x: ((width - rw) / 2).rounded(), y: y + 8, width: rw, height: rh)
+            y += rh + 8
+        }
+        content.frame = NSRect(x: 0, y: 0, width: width, height: max(y + Self.resultsBottom, 1))
     }
 
     private func scrollSelectedIntoView() {
@@ -283,6 +333,7 @@ final class SearchPane: NSView, NSTextFieldDelegate {
         guard selecting else { return open(id) }
         if picked.contains(id) { picked.remove(id) } else { picked.insert(id) }
         views.first { $0.noteID == id }?.isPicked = picked.contains(id)
+        pickedLabel.stringValue = "\(picked.count) selected"
     }
 
     private func open(_ id: UUID) {
@@ -306,7 +357,7 @@ final class SearchPane: NSView, NSTextFieldDelegate {
     private func delete(_ ids: [UUID]) {
         guard Services.store != nil, !ids.isEmpty else { return }
         for id in ids { Services.store.moveToVoid(id) }
-        HUD.show(ids.count == 1 ? "Note banished to The Void" : "\(ids.count) notes banished to The Void")
+        HUD.show(ids.count == 1 ? "Note banished to void" : "\(ids.count) notes banished to void")
         reload()
     }
 
@@ -320,22 +371,32 @@ final class SearchPane: NSView, NSTextFieldDelegate {
         toggleSelecting()
     }
 
+    /// Select mode: the Select item turns solid and the scope switch gives way to "N selected" plus promote/delete.
     private func toggleSelecting() {
         selecting.toggle()
         picked.removeAll()
-        selectButton.set(symbol: selecting ? "checkmark.circle.fill" : "checkmark.circle", title: selecting ? "Done" : "Select")
+        selectButton.set(symbol: selecting ? "checkmark.circle.fill" : "checkmark.circle", title: "Select")
+        selectButton.isSelected = selecting
         scopeButton.isHidden = selecting
-        promoteSelected.isHidden = !selecting
-        deleteSelected.isHidden = !selecting
+        pickedLabel.stringValue = "0 selected"
+        for v in [pickedLabel, promoteSelected, deleteSelected] as [NSView] { v.isHidden = !selecting }
         views.forEach { $0.isPicked = false }
     }
 
     private func toggleScope() {
         scope = scope == .ephemeral ? .slotted : .ephemeral
-        scopeButton.set(symbol: scope == .ephemeral ? "wind" : "square.stack.3d.up",
+        scopeButton.set(symbol: scope == .ephemeral ? "wind" : "square.grid.3x3.fill",
                         title: scope == .ephemeral ? "Ephemeral" : "Slotted")
+        scopeButton.toolTip = scope == .ephemeral ? "Show slotted notes instead" : "Show ephemeral notes instead"
+        selectButton.isDimmed = scope == .slotted
         selected = 0
         reload()
+    }
+
+    /// Turns Select mode on with `ids` picked.
+    func select(_ ids: [UUID]) {
+        if !selecting { toggleSelecting() }
+        ids.forEach(clicked)
     }
 
     func close() { onClose?() }
@@ -349,7 +410,7 @@ final class SearchPane: NSView, NSTextFieldDelegate {
     }
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
-        let step = layoutMode == .cards ? 3 : 1
+        let step = layoutMode == .cards ? cardColumnCount : 1
         switch selector {
         case #selector(NSResponder.moveUp(_:)): moveSelection(-step)
         case #selector(NSResponder.moveDown(_:)): moveSelection(step)
@@ -366,7 +427,7 @@ final class SearchPane: NSView, NSTextFieldDelegate {
 
 /// Theme colours used by the Search views.
 struct Colors {
-    let background, main, light, superlight, hyperLight, highlight, reverse: NSColor
+    let background, main, light, hyperLight, highlight: NSColor
     let theme: Theme
 
     init(_ theme: Theme) {
@@ -374,15 +435,31 @@ struct Colors {
         background = NSColor(hex: theme.background)
         main = NSColor(hex: theme.typeMain)
         light = NSColor(hex: theme.typeLight)
-        superlight = NSColor(hex: theme.typeSuperlight)
         hyperLight = NSColor(hex: theme.typeHyperLight)
         highlight = NSColor(hex: theme.typeHighlight)
-        reverse = NSColor(hex: theme.typeReverse)
     }
 }
 
 final class FlippedView: NSView {
     override var isFlipped: Bool { true }
+}
+
+/// The "esc" hint at the end of the field; clicking it closes Search.
+final class EscLabel: NSTextField {
+    var onClick: (() -> Void)?
+
+    init() {
+        super.init(frame: .zero)
+        stringValue = "esc"
+        isEditable = false
+        isSelectable = false
+        isBordered = false
+        drawsBackground = false
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
+    override func mouseDown(with event: NSEvent) { onClick?() }
 }
 
 extension Defaults.Keys {

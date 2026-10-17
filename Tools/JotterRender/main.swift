@@ -104,7 +104,7 @@ enum Render {
 
     /// Text views don't draw their caret unless they're first responder in a key window, so draw it here.
     private static func drawCarets(in root: NSView, onto rep: NSBitmapImageRep) {
-        for tv in textViews(in: root) where tv.isEditable && tv.selectedRange().length == 0 && !tv.isHidden {
+        for tv in textViews(in: root) where tv.isEditable && tv.selectedRange().length == 0 && !tv.isHiddenOrHasHiddenAncestor {
             guard let caret = caretRect(tv), let ctx = NSGraphicsContext(bitmapImageRep: rep) else { continue }
             NSGraphicsContext.saveGraphicsState()
             NSGraphicsContext.current = NSGraphicsContext(cgContext: ctx.cgContext, flipped: true)

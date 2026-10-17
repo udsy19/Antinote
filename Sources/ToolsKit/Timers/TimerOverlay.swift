@@ -79,26 +79,15 @@ final class TimerOverlay {
         panel = p
     }
 
-    private static func hosting(_ view: OverlayView) -> NSView {
-        let host = NSHostingView(rootView: view)
-        host.appearance = NSAppearance(named: .darkAqua)
-        return host
-    }
+    private static func hosting(_ view: OverlayView) -> NSView { NSHostingView(rootView: view) }
 
     /// The overlay content for offscreen renders.
     static func preview(_ mode: OverlayView.Mode) -> NSView { hosting(OverlayView(mode: mode, close: {})) }
 }
 
-/// Colours of the overlay (it is always dark, whatever the theme).
-private enum Palette {
-    static let backdrop = Color(red: 0x2B / 255, green: 0x2B / 255, blue: 0x33 / 255)
-    static let title = Color(white: 0xE6 / 255)
-    static let subtitle = Color(white: 0xBD / 255)
-    static let message = Color(white: 0xED / 255)
-    static let caption = Color(white: 0x9A / 255)
-    static let streak = Color(red: 0xF5 / 255, green: 0xD9 / 255, blue: 0x0A / 255)
-}
-
+/// The full-screen surfaces: an ultra-thin material over the whole screen with a centred column (at most 400 pt
+/// wide) of the app mark, a 34 pt bold title, a 10 pt thin tracked caption, a 14 pt message and small standard
+/// buttons, in the system's primary and secondary colours.
 struct OverlayView: View {
     enum Mode {
         case breakTime(TimerOverlay.Break)
@@ -109,127 +98,85 @@ struct OverlayView: View {
 
     @State var mode: Mode
     let close: () -> Void
-    private let accent = Color(nsColor: NSColor(hex: Theme.defaultDark.accent1Main))
+    private var accent: Color { Color(nsColor: NSColor(hex: Theme.current.accent1Main)) }
 
     var body: some View {
         ZStack {
-            Backdrop()
+            Rectangle().fill(.ultraThinMaterial).ignoresSafeArea()
             VStack(spacing: 0) { content }
+                .frame(maxWidth: 400)
                 .padding(40)
         }
-        .environment(\.colorScheme, .dark)
     }
 
     @ViewBuilder private var content: some View {
         switch mode {
         case let .breakTime(model):
             Mark()
-            Spacer().frame(height: 40)
             Title("Break Time")
-            Spacer().frame(height: 10)
-            Subtitle("Wildlife fact-file")
-            Spacer().frame(height: 30)
+            Caption("Wildlife fact-file")
             Message(model.fact)
-            Spacer().frame(height: 18)
-            Text("Break time remaining:").font(.system(size: 13)).foregroundStyle(Palette.caption)
-            Spacer().frame(height: 6)
+            Text("Break time remaining:").font(.system(size: 10)).foregroundStyle(.secondary)
             TimelineView(.periodic(from: .now, by: 0.5)) { _ in
-                HStack(spacing: 14) {
+                HStack(spacing: 8) {
                     Button(action: model.togglePause) {
                         Image(systemName: model.isPaused() ? "play.fill" : "pause.fill")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(Palette.title)
-                            .frame(width: 36, height: 36)
-                            .background(Circle().fill(Color.white.opacity(0.08)))
+                            .font(.system(size: 12, weight: .semibold))
+                            .padding(8)
+                            .background(Circle().fill(Color.secondary.opacity(0.1)))
                     }
-                    .buttonStyle(.plain)
-                    .help(model.isPaused() ? "Resume" : "Pause")
+                    .buttonStyle(.borderless)
+                    .help(model.isPaused() ? "Resume Break" : "Pause Break")
                     Text(TimerFormat.clock((model.remaining() ?? 0).rounded(.up)))
-                        .font(.system(size: 22, weight: .bold, design: .monospaced))
-                        .foregroundStyle(Palette.title)
+                        .font(.system(size: 14, weight: .bold).monospacedDigit())
+                        .frame(width: 50, alignment: .leading)
                 }
             }
-            Spacer().frame(height: 24)
-            HStack(spacing: 40) {
-                Pill("Sneak a peek") { model.peek(); close() }
-                Pill("End Pomodoro") { model.end(); close() }
+            .padding(.bottom, 10)
+            HStack(spacing: 8) {
+                SmallButton("Sneak a peek") { model.peek(); close() }
+                SmallButton("End Pomodoro") { model.end(); close() }
             }
-            Spacer().frame(height: 12)
+            .padding(.bottom, 4)
             let streak = model.streak()
-            (Text("No-Peek Streak: ") + Text("\(streak.current)").bold().foregroundColor(Palette.streak)
-                + Text(" (Best: ") + Text("\(streak.best)").bold().foregroundColor(Palette.streak) + Text(")"))
-                .font(.system(size: 13))
-                .foregroundStyle(Palette.caption)
+            (Text("No-Peek Streak: ") + Text("\(streak.current)").bold().foregroundColor(accent)
+                + Text(" (Best: ") + Text("\(streak.best)").bold().foregroundColor(accent) + Text(")"))
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+                .padding(.bottom, 5)
         case let .alert(title, subtitle, message):
             Mark()
-            Spacer().frame(height: 40)
             Title(title)
-            Spacer().frame(height: 10)
-            Subtitle(subtitle)
-            Spacer().frame(height: 30)
+            Caption(subtitle)
             Message(message)
-            Spacer().frame(height: 28)
-            HStack(spacing: 40) {
-                Pill("Breathe") { mode = .breathe(started: Date()) }
-                Pill("Dismiss", action: close).keyboardShortcut(.defaultAction)
-            }
+            SmallButton("Nice", action: close).keyboardShortcut(.defaultAction)
         case let .breathe(started):
             BreathingCircle(started: started, color: accent)
             Spacer().frame(height: 40)
-            Pill("Done", action: close)
+            SmallButton("Done", action: close)
         case let .live(provider):
             TimelineView(.periodic(from: .now, by: 0.25)) { _ in
                 let live = provider()
                 VStack(spacing: 18) {
                     Text(live?.title ?? "Timer stopped")
                         .font(.system(size: 140, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(Palette.title)
                         .minimumScaleFactor(0.3).lineLimit(1)
-                    Subtitle(live?.subtitle ?? "")
-                    ProgressView(value: live?.progress ?? 0).frame(maxWidth: 420).tint(accent)
+                    Caption(live?.subtitle ?? "")
+                    ProgressView(value: live?.progress ?? 0).frame(maxWidth: 400).tint(accent)
                 }
             }
             Spacer().frame(height: 40)
-            Pill("Dismiss", action: close)
+            SmallButton("Dismiss", action: close)
         }
     }
 }
 
-/// The dark translucent field with soft colour bloom in the lower corners.
-private struct Backdrop: View {
-    var body: some View {
-        ZStack {
-            VisualEffect().ignoresSafeArea()
-            Palette.backdrop.opacity(0.85).ignoresSafeArea()
-            GeometryReader { geo in
-                let r = max(geo.size.width, geo.size.height) * 0.55
-                RadialGradient(colors: [Color(red: 0.36, green: 0.16, blue: 0.78).opacity(0.5), .clear],
-                               center: .bottomTrailing, startRadius: 0, endRadius: r)
-                RadialGradient(colors: [Color(red: 0.24, green: 0.33, blue: 0.45).opacity(0.45), .clear],
-                               center: .bottomLeading, startRadius: 0, endRadius: r * 0.8)
-            }
-            .ignoresSafeArea()
-        }
-    }
-}
-
-private struct VisualEffect: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let v = NSVisualEffectView()
-        v.material = .fullScreenUI
-        v.blendingMode = .behindWindow
-        v.state = .active
-        return v
-    }
-    func updateNSView(_ view: NSVisualEffectView, context: Context) {}
-}
-
-/// Jotter's own app icon as the overlay's mark.
+/// Jotter's own app icon as the overlay's mark (80 pt).
 private struct Mark: View {
     var body: some View {
         Image(nsImage: NSApp?.applicationIconImage ?? NSImage())
             .resizable().interpolation(.high).scaledToFit()
-            .frame(width: 72, height: 72)
+            .frame(width: 80, height: 80)
     }
 }
 
@@ -237,15 +184,16 @@ private struct Title: View {
     let text: String
     init(_ text: String) { self.text = text }
     var body: some View {
-        Text(text).font(.system(size: 44, weight: .bold)).foregroundStyle(Palette.title).multilineTextAlignment(.center)
+        Text(text).font(.system(size: 34, weight: .bold)).multilineTextAlignment(.center).padding(.bottom, 5)
     }
 }
 
-private struct Subtitle: View {
+/// "WILDLIFE FACT-FILE": 10 pt thin capitals tracked 2 pt.
+private struct Caption: View {
     let text: String
     init(_ text: String) { self.text = text }
     var body: some View {
-        Text(text.uppercased()).font(.system(size: 13)).tracking(3).foregroundStyle(Palette.subtitle)
+        Text(text.uppercased()).font(.system(size: 10, weight: .thin)).tracking(2).padding(.bottom, 20)
     }
 }
 
@@ -253,24 +201,20 @@ private struct Message: View {
     let text: String
     init(_ text: String) { self.text = text }
     var body: some View {
-        Text(text).font(.system(size: 20)).foregroundStyle(Palette.message).multilineTextAlignment(.center)
-            .frame(maxWidth: 620)
+        Text(text).font(.system(size: 14)).multilineTextAlignment(.center)
+            .frame(maxWidth: 400).padding(.bottom, 10)
     }
 }
 
-/// A rounded bezel button: 18 pt text on 25 % white.
-private struct Pill: View {
+/// A standard push button with a 12 pt label.
+private struct SmallButton: View {
     let title: String
     let action: () -> Void
     init(_ title: String, action: @escaping () -> Void) { self.title = title; self.action = action }
     var body: some View {
         Button(action: action) {
-            Text(title).font(.system(size: 18)).foregroundStyle(Palette.message)
-                .padding(.horizontal, 16).padding(.vertical, 5)
-                .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.25)))
-                .shadow(color: .black.opacity(0.2), radius: 1, y: 1)
+            Text(title).font(.system(size: 12)).padding(.vertical, 2).padding(.horizontal, 5)
         }
-        .buttonStyle(.plain)
     }
 }
 

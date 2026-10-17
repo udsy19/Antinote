@@ -20,19 +20,50 @@ struct RenderModel {
     /// Baseline distance from the top of a line fragment.
     var baselineOffset: CGFloat = 17
     var font: NSFont = .monospacedSystemFont(ofSize: 14, weight: .regular)
+    var textSize: TextSize = .m
+    var doubleSize = false
     var rightToLeft = false
     var blockCaret = false
     /// AutoPaste is listening: a blinking clipboard sits in the gutter at the first line.
     var autoPasting = false
 }
 
-/// Gutter geometry, scaled with the font (12.5 pt boxes 20.5 pt from the window edge at the default 13.5 pt).
-enum Gutter {
-    static let edge: CGFloat = 20.5
-    static func scale(_ font: NSFont) -> CGFloat { font.pointSize / TextSize.m.points }
+/// Note geometry for a size preset. The text starts after a fixed gutter (32 pt, wider with "Double font size"),
+/// the 8 pt stack spacing and the 5 pt line padding; list markers are centred at a per-size x in that gutter.
+public enum Gutter {
+    /// The text box sits this far below the top of the window.
+    public static let top: CGFloat = 30
+
     /// Distance from the window edge to the text.
-    static func inset(_ font: NSFont) -> CGFloat { edge + 23.5 * scale(font) }
-    static func boxSide(_ font: NSFont) -> CGFloat { 12.5 * scale(font) }
+    public static func inset(_ size: TextSize, double: Bool) -> CGFloat {
+        (double ? [42, 42, 42, 45, 52][size.index] : 32) + 8 + 5
+    }
+
+    /// Horizontal centre of a list marker (checkbox, bullet, number), from the window edge.
+    public static func markerCenter(_ size: TextSize, double: Bool) -> CGFloat {
+        (double ? [34, 30, 30, 30, 32] : [34, 30, 28, 23, 23])[size.index]
+    }
+
+    /// Bullets are a filled circle symbol at 40% of the text size.
+    public static func bulletPointSize(_ fontSize: CGFloat) -> CGFloat { fontSize * 0.4 }
+
+    /// Numbers are right-aligned in a box 1.05 × the text size wide, centred on the marker centre.
+    public static func numberBoxWidth(_ fontSize: CGFloat) -> CGFloat { fontSize * 1.05 }
+
+    /// List notes: tighter lines with paragraph spacing on blank paper; regular lines that follow ruled or
+    /// gridded paper otherwise.
+    public static func listLineMultiple(paper: PaperType) -> CGFloat { paper == .blank ? 1.2 : 1.4 }
+    public static func listParagraphSpacing(_ size: TextSize, paper: PaperType) -> CGFloat {
+        paper == .blank ? [7, 7.5, 9, 12, 16][size.index] : 0
+    }
+
+    /// Paper lines run this far below each text baseline.
+    public static func paperBaselineOffset(_ size: TextSize) -> CGFloat { [-0.24, 0.53, 1, 1.07, 1.15][size.index] }
+}
+
+public extension TextSize {
+    /// Position in the XS…XL ladder.
+    var index: Int { Self.allCases.firstIndex(of: self) ?? 2 }
 }
 
 /// The note's NSTextView (TextKit 1). Keyboard, clipboard, mouse and drag events go to `JotterEditor` first;
@@ -88,12 +119,15 @@ final class EditorTextView: NSTextView {
         return NSPoint(x: x + textContainerOrigin.x, y: frag.minY + lm.location(forGlyphAt: glyph).y + textContainerOrigin.y)
     }
 
-    /// The gutter box of marker `i` (bullets and numbers centre on it too).
+    /// The gutter box of marker `i`: a text-sized square centred on the marker column and the first line's
+    /// capitals (bullets and numbers centre on it too).
     func checkboxRect(_ i: Int) -> NSRect {
         let p = glyphPoint(at: model.markers[i].range.location)
-        let side = Gutter.boxSide(model.font)
+        let side = model.font.pointSize
+        let indent = p.x - textContainerOrigin.x
+        let midX = Gutter.markerCenter(model.textSize, double: model.doubleSize) + indent
         let midY = p.y - model.font.capHeight / 2
-        return NSRect(x: p.x - Gutter.inset(model.font) + Gutter.edge, y: midY - side / 2, width: side, height: side)
+        return NSRect(x: midX - side / 2, y: midY - side / 2, width: side, height: side)
     }
 
     var textEdges: (start: CGFloat, end: CGFloat) {
@@ -116,55 +150,54 @@ final class EditorTextView: NSTextView {
         dirty.fill()
         drawPaper(in: dirty)
         NSColor(hex: theme.backgroundFade).setFill()
-        let (start, end) = textEdges
         for block in model.codeBlocks {
-            var r = rect(for: block)
-            r.origin.x = start - 10
-            r.size.width = end - start + 20
-            r = r.insetBy(dx: 0, dy: -4)
+            let r = EditorLogic.codeBlockRect(lines: lineFragments(for: block))
             guard r.intersects(dirty) else { continue }
-            NSBezierPath(roundedRect: r, xRadius: 6, yRadius: 6).fill()
+            NSBezierPath(roundedRect: r, xRadius: 3, yRadius: 3).fill()
         }
-        let font = model.font
         for span in model.inlineCode {
-            let base = glyphPoint(at: span.location).y
-            var r = rect(for: span)
-            r.origin.y = base - font.ascender - 1
-            r.size.height = font.ascender - font.descender + 2
-            r = r.insetBy(dx: -3, dy: 0)
+            let r = EditorLogic.inlineCodeRect(glyphs: rect(for: span))
             guard r.intersects(dirty) else { continue }
-            NSBezierPath(roundedRect: r, xRadius: 4, yRadius: 4).fill()
+            NSBezierPath(roundedRect: r, xRadius: 3, yRadius: 3).fill()
         }
     }
 
-    /// Lines follow the text rows; grids and dots sit on a 20 pt (large: 40 pt) lattice from the top-left.
+    /// The union of the line fragments (full container width) holding `range`, in view coordinates.
+    private func lineFragments(for range: NSRange) -> NSRect {
+        guard let lm = layoutManager else { return .zero }
+        let glyphs = lm.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+        var union = NSRect.null
+        lm.enumerateLineFragments(forGlyphRange: glyphs) { frag, _, _, _, _ in union = union.union(frag) }
+        return union.isNull ? .zero : union.offsetBy(dx: textContainerOrigin.x, dy: textContainerOrigin.y)
+    }
+
+    /// Paper follows the text: ruled lines and dot rows run just under each baseline at the line pitch; the
+    /// large grid uses the line pitch and the small grid half of it, from the window's left edge.
     private func drawPaper(in rect: NSRect) {
         guard model.paper != .blank, model.lineHeight > 4 else { return }
         NSColor(hex: model.theme.grid(model.paperOpacity)).setFill()
         let hairline = 1 / max(window?.backingScaleFactor ?? 2, 1)
-        switch model.paper {
-        case .blank: break
-        case .lines:
-            let step = model.lineHeight, top = textContainerOrigin.y
-            var y = top + max(1, ((rect.minY - top) / step).rounded(.down)) * step
-            while y <= rect.maxY + step { NSRect(x: rect.minX, y: y, width: rect.width, height: hairline).fill(); y += step }
-        case .smallGrid, .bigGrid:
-            let step: CGFloat = model.paper == .smallGrid ? 20 : 40
-            var y = (rect.minY / step).rounded(.down) * step
-            while y <= rect.maxY { NSRect(x: rect.minX, y: y, width: rect.width, height: hairline).fill(); y += step }
-            var x = (rect.minX / step).rounded(.down) * step
-            while x <= rect.maxX { NSRect(x: x, y: rect.minY, width: hairline, height: rect.height).fill(); x += step }
-        case .dots:
-            let step: CGFloat = 20, d: CGFloat = 1.5
-            var y = (rect.minY / step).rounded(.down) * step
-            while y <= rect.maxY + step {
-                var x = (rect.minX / step).rounded(.down) * step
-                while x <= rect.maxX + step {
-                    NSBezierPath(ovalIn: NSRect(x: x - d / 2, y: y - d / 2, width: d, height: d)).fill(); x += step
+        let pitch = model.paper == .smallGrid ? model.lineHeight / 2 : model.lineHeight
+        let phase = textContainerOrigin.y + model.baselineOffset + Gutter.paperBaselineOffset(model.textSize)
+        var y = phase + ((rect.minY - phase) / pitch).rounded(.down) * pitch
+        while y <= rect.maxY + pitch {
+            switch model.paper {
+            case .blank: break
+            case .lines, .smallGrid, .bigGrid:
+                NSRect(x: rect.minX, y: y, width: rect.width, height: hairline).fill()
+            case .dots:
+                let d: CGFloat = 1.5
+                var x = (rect.minX / pitch).rounded(.down) * pitch
+                while x <= rect.maxX + pitch {
+                    NSBezierPath(ovalIn: NSRect(x: x - d / 2, y: y - d / 2, width: d, height: d)).fill()
+                    x += pitch
                 }
-                y += step
             }
+            y += pitch
         }
+        guard model.paper == .smallGrid || model.paper == .bigGrid else { return }
+        var x = (rect.minX / pitch).rounded(.down) * pitch
+        while x <= rect.maxX { NSRect(x: x, y: rect.minY, width: hairline, height: rect.height).fill(); x += pitch }
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -179,42 +212,41 @@ final class EditorTextView: NSTextView {
         drawAutoPasteGlyph()
     }
 
+    /// Checkboxes are the `square` / `checkmark.square` symbols at the text size: `typeMain`, `accent2Secondary`
+    /// once checked, `accent2Main` (unchecked) or `typeMain` (checked) under the pointer. Bullets are a small
+    /// `circle.fill`; numbers are right-aligned text in a box around the marker column.
     private func drawMarkers(_ dirtyRect: NSRect) {
         let theme = model.theme, font = model.font
-        let s = Gutter.scale(font)
         for (i, m) in model.markers.enumerated() {
             let box = checkboxRect(i)
             guard box.insetBy(dx: -40, dy: -4).intersects(dirtyRect) else { continue }
             switch m.kind {
             case .checkbox(let checked):
-                let stroke: NSColor = checked
-                    ? NSColor(hex: theme.accent2Secondary).withAlphaComponent(0.5)
-                    : NSColor(hex: hoveredMarker == i ? theme.accent2Main : theme.typeMain)
-                let path = NSBezierPath(roundedRect: box.insetBy(dx: 0.7, dy: 0.7), xRadius: 2 * s, yRadius: 2 * s)
-                path.lineWidth = max(1, 1.4 * s)
-                stroke.setStroke()
-                path.stroke()
-                if checked {
-                    let tick = NSBezierPath()
-                    tick.move(to: NSPoint(x: box.minX + box.width * 0.27, y: box.minY + box.height * 0.50))
-                    tick.line(to: NSPoint(x: box.minX + box.width * 0.44, y: box.minY + box.height * 0.69))
-                    tick.line(to: NSPoint(x: box.minX + box.width * 0.75, y: box.minY + box.height * 0.30))
-                    tick.lineWidth = max(0.8, 1.0 * s)
-                    tick.lineCapStyle = .round
-                    tick.lineJoinStyle = .round
-                    tick.stroke()
-                }
+                let hovered = hoveredMarker == i
+                let color = checked ? (hovered ? theme.typeMain : theme.accent2Secondary) : (hovered ? theme.accent2Main : theme.typeMain)
+                drawSymbol(checked ? "checkmark.square" : "square", pointSize: font.pointSize, color: NSColor(hex: color),
+                           centeredIn: box)
             case .bullet:
-                let d = 5 * s
-                NSColor(hex: theme.typeMain).setFill()
-                NSBezierPath(ovalIn: NSRect(x: box.midX - d / 2, y: box.midY - d / 2, width: d, height: d)).fill()
+                drawSymbol("circle.fill", pointSize: Gutter.bulletPointSize(font.pointSize), color: NSColor(hex: theme.typeMain),
+                           centeredIn: box)
             case .number(let label):
                 let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor(hex: theme.typeMain)]
                 let width = (label as NSString).size(withAttributes: attrs).width
+                let right = box.midX + Gutter.numberBoxWidth(font.pointSize) / 2
                 let p = glyphPoint(at: m.range.location)
-                (label as NSString).draw(at: NSPoint(x: p.x - 6 * s - width, y: p.y - font.ascender), withAttributes: attrs)
+                (label as NSString).draw(at: NSPoint(x: right - width, y: p.y - font.ascender), withAttributes: attrs)
             }
         }
+    }
+
+    private func drawSymbol(_ name: String, pointSize: CGFloat, color: NSColor, centeredIn box: NSRect) {
+        guard let symbol = NSImage(systemSymbolName: name, accessibilityDescription: nil) else { return }
+        let config = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .regular)
+            .applying(.init(paletteColors: [color]))
+        let image = symbol.withSymbolConfiguration(config) ?? symbol
+        let size = image.size
+        image.draw(in: NSRect(x: box.midX - size.width / 2, y: box.midY - size.height / 2, width: size.width, height: size.height),
+                   from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
     }
 
     private func drawAnnotations(_ dirtyRect: NSRect) {
@@ -261,9 +293,10 @@ final class EditorTextView: NSTextView {
     }
 
     private var autoPasteGlyphRect: NSRect {
-        let side = Gutter.boxSide(model.font) + 2
+        let side = model.font.pointSize + 2
         let baseline = textContainerOrigin.y + model.baselineOffset
-        return NSRect(x: Gutter.edge - 1, y: baseline - model.font.capHeight / 2 - side / 2, width: side, height: side)
+        return NSRect(x: Gutter.markerCenter(model.textSize, double: model.doubleSize) - side / 2,
+                      y: baseline - model.font.capHeight / 2 - side / 2, width: side, height: side)
     }
 
     private func drawAutoPasteGlyph() {
@@ -295,7 +328,7 @@ final class EditorTextView: NSTextView {
 
     // MARK: Caret
 
-    /// A 2 pt rounded caret spanning ascender to descender; a block in Vim normal mode.
+    /// A 2 pt rounded caret, cap height + 7.8 pt tall, standing on the bottom of the line; a block in Vim normal mode.
     override func drawInsertionPoint(in rect: NSRect, color: NSColor, turnedOn flag: Bool) {
         let font = (typingAttributes[.font] as? NSFont) ?? model.font
         if model.blockCaret {
@@ -305,8 +338,7 @@ final class EditorTextView: NSTextView {
             return
         }
         guard flag else { return setNeedsDisplay(rect, avoidAdditionalLayout: true) }
-        let baseline = rect.minY + model.baselineOffset
-        let caret = NSRect(x: rect.minX, y: baseline - font.ascender, width: 2, height: font.ascender - font.descender)
+        let caret = EditorLogic.caretRect(lineRect: rect, capHeight: font.capHeight, leading: font.leading)
         color.setFill()
         NSBezierPath(roundedRect: caret, xRadius: 1, yRadius: 1).fill()
     }
@@ -463,7 +495,7 @@ final class EditorTextView: NSTextView {
     }
 }
 
-/// A thin (3 pt) rounded scroll knob in `typeHighlight` near the right edge, with no track.
+/// A thin (4 pt) rounded scroll knob in `typeHighlight` near the right edge, at least 50 pt long, with no track.
 final class ThinScroller: NSScroller {
     var knobColor: NSColor = .tertiaryLabelColor { didSet { needsDisplay = true } }
 
@@ -472,10 +504,15 @@ final class ThinScroller: NSScroller {
     override func drawKnobSlot(in slotRect: NSRect, highlight flag: Bool) {}
 
     override func drawKnob() {
-        let knob = rect(for: .knob)
+        let knob = rect(for: .knob), slot = rect(for: .knobSlot)
         guard knob.height > 0 else { return }
-        let r = NSRect(x: knob.maxX - 6, y: knob.minY + 3, width: 3, height: knob.height - 6)
+        var r = NSRect(x: knob.maxX - 7, y: knob.minY + 3, width: 4, height: knob.height - 6)
+        if r.height < 50 {
+            // Grow a short knob to 50 pt, keeping it inside the slot.
+            r.origin.y = min(max(slot.minY, r.midY - 25), slot.maxY - 50)
+            r.size.height = min(50, slot.height)
+        }
         knobColor.setFill()
-        NSBezierPath(roundedRect: r, xRadius: 1.5, yRadius: 1.5).fill()
+        NSBezierPath(roundedRect: r, xRadius: 2, yRadius: 2).fill()
     }
 }

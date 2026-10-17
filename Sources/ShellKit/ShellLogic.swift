@@ -143,6 +143,64 @@ public struct SlotBoard: Equatable, Sendable {
     }
 }
 
+// MARK: - Window chrome
+
+/// Text shown by the window chrome.
+public enum ChromeText {
+    /// A shortcut as chrome tooltips show it: modifiers in the order ⌘⇧⌥⌃, then the key in upper case ("⌘⇧F",
+    /// "⌘[", "⌘⌫"). `key` is a menu item's key equivalent.
+    public static func shortcut(key: String, command: Bool, shift: Bool, option: Bool, control: Bool) -> String {
+        var s = ""
+        if command { s += "⌘" }
+        if shift { s += "⇧" }
+        if option { s += "⌥" }
+        if control { s += "⌃" }
+        switch key {
+        case "\u{8}", "\u{7F}": return s + "⌫"
+        case " ": return s + "Space"
+        case "\u{F700}": return s + "↑"
+        case "\u{F701}": return s + "↓"
+        default: return s + key.uppercased()
+        }
+    }
+
+    /// A tooltip: "Label - ⌘N", or just the label when there is no shortcut.
+    public static func tooltip(_ label: String, shortcut: String?) -> String {
+        shortcut.map { "\(label) - \($0)" } ?? label
+    }
+
+    /// A destination name without its file-type note ("Markdown (.md)" → "Markdown").
+    public static func shortName(_ name: String) -> String {
+        name.range(of: " (").map { String(name[..<$0.lowerBound]) } ?? name
+    }
+}
+
+/// The slot bar's geometry: nine planets in 22 pt frames 3 pt apart (the open slot's frame is 28 pt), 16 pt of
+/// padding each side.
+public enum SlotBarLayout {
+    public static let padding: Double = 16
+    public static let spacing: Double = 3
+    public static let planetSize: Double = 22
+    public static let openPlanetSize: Double = 28
+
+    /// Frame widths of the nine planets, left to right.
+    public static func frames(open: Int?) -> [Double] {
+        (0..<SlotBoard.count).map { $0 == open ? openPlanetSize : planetSize }
+    }
+
+    /// Left edge of `slot`'s frame.
+    public static func x(of slot: Int, open: Int?) -> Double {
+        let f = frames(open: open)
+        return padding + f[..<slot].reduce(0, +) + spacing * Double(slot)
+    }
+
+    /// The bar's width.
+    public static func width(open: Int?) -> Double {
+        let f = frames(open: open)
+        return padding * 2 + f.reduce(0, +) + spacing * Double(f.count - 1)
+    }
+}
+
 // MARK: - Locked notes
 
 /// Which locked notes are open in this session. Unlocks expire `minutes` after a locked note was last in focus.
@@ -223,7 +281,7 @@ public enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
         case .appearance: "swatchpalette"
         case .editor: "character.cursor.ibeam"
         case .notes: "doc.on.doc"
-        case .keywords: "wand.and.sparkles"
+        case .keywords: "wand.and.stars"
         case .shortcuts: "command.square"
         case .timer: "stopwatch"
         case .export: "square.and.arrow.up"
