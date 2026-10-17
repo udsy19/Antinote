@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="website/assets/icon-256.png" alt="Jotter" width="128" height="128">
+  <img src="website/assets/icon-256.png" alt="Super Notes" width="128" height="128">
 </p>
 
-<h1 align="center">Jotter</h1>
+<h1 align="center">Super Notes</h1>
 
 <p align="center">
   <b>A scratchpad for your Mac. Jot first, sort never.</b><br>
@@ -11,22 +11,22 @@
 </p>
 
 <p align="center">
-  <a href="https://udsy19.github.io/Antinote/"><b>Website</b></a> ·
-  <a href="https://github.com/udsy19/Antinote/releases/latest/download/Jotter.dmg"><b>Download</b></a> ·
+  <a href="https://udsy19.github.io/super-notes/"><b>Website</b></a> ·
+  <a href="https://github.com/udsy19/super-notes/releases/latest/download/SuperNotes.dmg"><b>Download</b></a> ·
   <a href="CHANGELOG.md">Changelog</a> ·
   <a href="PRIVACY.md">Privacy</a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/udsy19/Antinote/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/udsy19/Antinote?color=18a383&label=release"></a>
+  <a href="https://github.com/udsy19/super-notes/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/udsy19/super-notes?color=18a383&label=release"></a>
   <img alt="macOS 14+" src="https://img.shields.io/badge/macOS-14%2B-111?logo=apple">
   <img alt="Apple silicon and Intel" src="https://img.shields.io/badge/Apple%20silicon%20%2B%20Intel-universal-111">
-  <a href="https://github.com/udsy19/Antinote/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/udsy19/Antinote/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/udsy19/super-notes/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/udsy19/super-notes/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-1f4e47"></a>
 </p>
 
 <p align="center">
-  <img src="website/assets/hero.png" alt="Three Jotter notes: a checklist, a math note with answers after each equals sign, and a sum note totalling a grocery list" width="860">
+  <img src="website/assets/hero.png" alt="Three notes in Super Notes: a checklist, a math note with answers after each equals sign, and a sum note totalling a grocery list" width="860">
 </p>
 
 ---
@@ -36,25 +36,28 @@
 **One line.** Downloads the latest release, installs it into Applications and opens it:
 
 ```bash
-curl -fsSL https://udsy19.github.io/Antinote/install.sh | bash
+curl -fsSL https://udsy19.github.io/super-notes/install.sh | bash
 ```
 
-**Or download the [DMG](https://github.com/udsy19/Antinote/releases/latest/download/Jotter.dmg)**, drag Jotter to
-Applications and open it. Jotter isn't notarized by Apple, so the first launch of a browser-downloaded copy needs
+**Or download the [DMG](https://github.com/udsy19/super-notes/releases/latest/download/SuperNotes.dmg)**, drag Super Notes to
+Applications and open it. Super Notes isn't notarized by Apple, so the first launch of a browser-downloaded copy needs
 **System Settings → Privacy & Security → Open Anyway** (only once). The one-line installer doesn't need this step.
 
 Requires macOS 14 Sonoma or later, Apple silicon or Intel. Run the same command to update; add
 `-s -- --uninstall` after `bash` to remove it.
 
+Formerly Jotter.
+Your notes, settings and keys move over to Super Notes automatically the first time it opens.
+
 ## Quick start
 
-1. Open Jotter. A short deck of tutorial notes walks you through the basics.
+1. Open Super Notes. A short deck of tutorial notes walks you through the basics.
 2. Press <kbd>⌥A</kbd> from anywhere to show or hide the scratchpad, and start typing.
 3. Swipe with two fingers (or press <kbd>⌘[</kbd> / <kbd>⌘]</kbd>) to move through your notes. Swipe past the newest
    one to start a fresh note; empty notes clean themselves up.
 4. Put a keyword like `list`, `math` or `timer` on the first line to change what the note does.
 
-## Why Jotter?
+## Why Super Notes?
 
 - **Instant.** One hotkey, one small window, no titles, no folders. Write it down before you forget it.
 - **The first word does the work.** Checklists, math with units and currencies, running totals, timers and code,
@@ -171,7 +174,7 @@ Type `::` anywhere for autocomplete, then press Return to run the command on tha
 | llm | `::ask`, `::summarize`, `::rewrite`, `::translate` with your own OpenAI, Anthropic, Gemini or OpenRouter key, or a local Ollama model |
 
 Extensions are folders with an `extension.json` and an `index.js`, run in their own JavaScriptCore context. Install
-more from GitHub in **Settings → Extensions**, or drop a folder into `~/Library/Application Support/Jotter/Extensions`.
+more from GitHub in **Settings → Extensions**, or drop a folder into `~/Library/Application Support/Super Notes/Extensions`.
 An extension can only reach the network when **Extension APIs** is on, only at the URLs it declares, and only with
 API keys you granted it.
 
@@ -209,7 +212,7 @@ listed in **Settings → Shortcuts**, where each one can be rebound.
 
 | Shortcut | Action |
 |---|---|
-| <kbd>⌥A</kbd> | Show or hide Jotter (global) |
+| <kbd>⌥A</kbd> | Show or hide Super Notes (global) |
 | <kbd>⌘N</kbd> | New note |
 | <kbd>⌘[</kbd> / <kbd>⌘]</kbd> | Previous / next note |
 | <kbd>⌘1</kbd> | Jump to the newest note |
@@ -243,27 +246,27 @@ listed in **Settings → Shortcuts**, where each one can be rebound.
 <details>
 <summary><b>URL scheme</b></summary>
 
-Automate Jotter from Shortcuts, Raycast, Alfred or Terminal (`open "jotter://…"`). Parameters are URL-encoded.
+Automate Super Notes from Shortcuts, Raycast, Alfred or Terminal (`open "supernotes://…"`). Parameters are URL-encoded.
 
 | URL | Action |
 |---|---|
-| `jotter://new?text=…` | Create a note at the front and show it |
-| `jotter://append?text=…` | Append a line to the current note |
-| `jotter://overwrite?text=…` | Replace the current note's text |
-| `jotter://show?id=<uuid>` | Show a note |
-| `jotter://promote?id=<uuid>` | Move a note to the front and show it |
-| `jotter://togglepin` | Toggle pin on top |
-| `jotter://palette`, `jotter://search?q=…`, `jotter://void` | Open the command palette, search or The Void |
+| `supernotes://new?text=…` | Create a note at the front and show it |
+| `supernotes://append?text=…` | Append a line to the current note |
+| `supernotes://overwrite?text=…` | Replace the current note's text |
+| `supernotes://show?id=<uuid>` | Show a note |
+| `supernotes://promote?id=<uuid>` | Move a note to the front and show it |
+| `supernotes://togglepin` | Toggle pin on top |
+| `supernotes://palette`, `supernotes://search?q=…`, `supernotes://void` | Open the command palette, search or The Void |
 
-Example: `open "jotter://append?text=buy%20milk"`
+Example: `open "supernotes://append?text=buy%20milk"`
 
 </details>
 
 ## Privacy
 
-Jotter is a local app. Your notes live in a SQLite database in `~/Library/Application Support/Jotter`, and they
+Super Notes is a local app. Your notes live in a SQLite database in `~/Library/Application Support/Super Notes`, and they
 never leave your Mac unless you turn on a feature that needs the network. Each of those has its own switch in
-**Settings → Privacy**, and **Turn Everything Off** makes Jotter fully offline:
+**Settings → Privacy**, and **Turn Everything Off** makes Super Notes fully offline:
 
 | Switch | Default | What it does |
 |---|---|---|
@@ -279,11 +282,11 @@ No accounts, no analytics, no telemetry. Details in [PRIVACY.md](PRIVACY.md).
 Only the Command Line Tools are needed (`xcode-select --install`). No Xcode project, no dependencies.
 
 ```bash
-git clone https://github.com/udsy19/Antinote.git && cd Antinote
+git clone https://github.com/udsy19/super-notes.git && cd super-notes
 ./scripts/signing-setup.sh        # once: local signing identity so Keychain access survives rebuilds
-./scripts/build-app.sh            # → build/Jotter.app   (--debug for a faster build)
-open build/Jotter.app
-swift run JotterSelfTest          # logic tests
+./scripts/build-app.sh            # → build/Super Notes.app   (--debug for a faster build)
+open "build/Super Notes.app"
+swift run SuperNotesSelfTest      # logic tests
 ./scripts/make-dmg.sh             # universal DMG in dist/
 ```
 
@@ -298,5 +301,5 @@ security issues privately as described in [SECURITY.md](SECURITY.md).
 
 [MIT](LICENSE) © Udaya Vijay Anand.
 
-Jotter is an independent project inspired by [Antinote](https://antinote.io). It is not affiliated with or endorsed by
+Super Notes is an independent project inspired by [Antinote](https://antinote.io). It is not affiliated with or endorsed by
 Antinote and contains none of its code.

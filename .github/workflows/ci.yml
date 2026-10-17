@@ -16,4 +16,4 @@ jobs:
       - name: Build
         run: swift build
       - name: Self-tests
-        run: .build/debug/JotterSelfTest
+        run: .build/debug/SuperNotesSelfTest

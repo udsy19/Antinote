@@ -1,6 +1,6 @@
-// Jotter extension: random (MIT)
+// Super Notes extension: random (MIT)
 (function () {
-  var ext = new Extension({ name: "random", version: "1.0.0", author: "jotter", category: "Random Generators", dataScope: "none" });
+  var ext = new Extension({ name: "random", version: "1.0.0", author: "Super Notes", category: "Random Generators", dataScope: "none" });
 
   function below(n) { return Math.floor(Math.random() * n); }
   function ok(text, message) { return new ReturnObject({ status: "success", message: message || "", payload: text }); }

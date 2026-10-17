@@ -1,5 +1,5 @@
 import AppKit
-import JotterCore
+import SuperNotesCore
 
 /// The find and replace shelf docked under the note (⇧⌘F): a disclosure chevron that shows the Replace row, the
 /// search field with an "Aa" (match case) toggle and a match-type popup (Contains, Matches Word, Starts With, Ends

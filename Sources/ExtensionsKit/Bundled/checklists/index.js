@@ -1,7 +1,7 @@
-// Jotter extension: checklists (MIT)
+// Super Notes extension: checklists (MIT)
 // Works on [ ] / [x] markers (optionally after indentation or a "- " bullet).
 (function () {
-  var ext = new Extension({ name: "checklists", version: "1.0.0", author: "jotter", category: "Text Manipulation", dataScope: "full" });
+  var ext = new Extension({ name: "checklists", version: "1.0.0", author: "Super Notes", category: "Text Manipulation", dataScope: "full" });
 
   var BOX = /^(\s*(?:[-*]\s+)?)\[([ xX])\]/;
   function isChecked(line) { var m = BOX.exec(line); return !!m && m[2] !== " "; }

@@ -1,5 +1,5 @@
 import AppKit
-import JotterCore
+import SuperNotesCore
 
 // Views that make up the main note window: the hover-revealed top and bottom bars, the planets slot bar, the
 // latest-note dot, note panes and the lock screen. The note fills the window; the bars float over it.
@@ -15,7 +15,7 @@ final class MainWindow: NSWindow {
                    backing: .buffered, defer: false)
         titlebarAppearsTransparent = true
         titleVisibility = .hidden
-        title = "Jotter"
+        title = "Super Notes"
         minSize = NSSize(width: 240, height: 180)
         isReleasedWhenClosed = false
         collectionBehavior = [.fullScreenPrimary, .moveToActiveSpace]
@@ -274,7 +274,7 @@ final class TitleBarView: HoverBar {
                                     action: #selector(Shell.openSettings(_:)))
         let search = ChromeButton(.search, "Search Notes", target: target, action: #selector(Shell.searchAllNotes(_:)))
         let new = ChromeButton(.new, "New Note", target: target, action: #selector(Shell.newNote(_:)))
-        pinButton = ChromeButton(.pin, "Pin Jotter to Top", target: target, action: #selector(Shell.togglePin(_:)))
+        pinButton = ChromeButton(.pin, "Pin Super Notes to Top", target: target, action: #selector(Shell.togglePin(_:)))
         buttons = [settings, search, new, pinButton]
         super.init(frame: .zero)
         buttons.forEach(content.addSubview)

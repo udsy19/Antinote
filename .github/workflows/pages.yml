@@ -24,7 +24,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Assemble site
-        # install.sh goes to the site root: curl -fsSL https://udsy19.github.io/Antinote/install.sh | bash
+        # install.sh goes to the site root: curl -fsSL https://udsy19.github.io/super-notes/install.sh | bash
         run: |
           mkdir -p _site
           cp -R website/. _site/

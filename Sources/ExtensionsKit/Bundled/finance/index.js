@@ -1,6 +1,6 @@
-// Jotter extension: finance (MIT)
+// Super Notes extension: finance (MIT)
 (function () {
-  var ext = new Extension({ name: "finance", version: "1.0.0", author: "jotter", category: "Finance", dataScope: "none" });
+  var ext = new Extension({ name: "finance", version: "1.0.0", author: "Super Notes", category: "Finance", dataScope: "none" });
 
   // 1234567.891 -> "1,234,567.89"
   function money(n) {

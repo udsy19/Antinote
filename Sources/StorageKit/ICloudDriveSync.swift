@@ -1,14 +1,14 @@
 import Foundation
 import Combine
 import CryptoKit
-import JotterCore
+import SuperNotesCore
 
 extension Defaults.Keys {
     /// Last local change to a synced preference (drives preferences last-writer-wins).
     static let storagePrefsChangedAt = Key<Date>("storageKit.prefsChangedAt", default: .distantPast)
 }
 
-/// End-to-end encrypted sync through the user's iCloud Drive folder (`…/CloudDocs/Jotter`). Active only while
+/// End-to-end encrypted sync through the user's iCloud Drive folder (`…/CloudDocs/Super Notes`). Active only while
 /// `Defaults[.syncNotes]` is on; preferences ride along with `Defaults[.syncPreferences]`.
 @MainActor
 public final class ICloudDriveSync: SyncServicing {
@@ -18,7 +18,7 @@ public final class ICloudDriveSync: SyncServicing {
 
     nonisolated public static var defaultRoot: URL {
         FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs/Jotter", isDirectory: true)
+            .appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs/Super Notes", isDirectory: true)
     }
 
     private let store: SQLiteNoteStore
@@ -178,7 +178,7 @@ public final class ICloudDriveSync: SyncServicing {
 
     public func importKey(_ text: String) throws {
         guard let data = Data(base64Encoded: text.trimmingCharacters(in: .whitespacesAndNewlines)), data.count == 32 else {
-            throw StorageError(message: "That isn't a Jotter sync key.")
+            throw StorageError(message: "That isn't a Super Notes sync key.")
         }
         try keyStore.save(SymmetricKey(data: data))
         folder = nil

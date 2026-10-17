@@ -1,6 +1,6 @@
-// Jotter extension: json (MIT)
+// Super Notes extension: json (MIT)
 (function () {
-  var ext = new Extension({ name: "json", version: "1.0.0", author: "jotter", category: "Developer", dataScope: "full" });
+  var ext = new Extension({ name: "json", version: "1.0.0", author: "Super Notes", category: "Developer", dataScope: "full" });
 
   function parse(text) {
     var source = (text || "").trim();

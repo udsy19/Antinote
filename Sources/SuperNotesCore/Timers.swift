@@ -197,7 +197,7 @@ public enum TimerFormat {
 /// The timer publishes it; the app's single status item displays it.
 @MainActor
 public enum MenuBarTimer {
-    public static let didChange = Notification.Name("JotterMenuBarTimerDidChange")
+    public static let didChange = Notification.Name("SuperNotesMenuBarTimerDidChange")
     public private(set) static var text: String?
 
     public static func update(_ text: String?) {

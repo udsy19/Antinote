@@ -1,6 +1,6 @@
 import Foundation
 import Combine
-import JotterCore
+import SuperNotesCore
 
 extension Defaults.Keys {
     static let extensionsDisabled = Key<Set<String>>("extensions.disabled", default: [])

@@ -1,5 +1,5 @@
 import Foundation
-import JotterCore
+import SuperNotesCore
 
 /// Settings that affect math results, captured once per analysis.
 public struct MathSettings: Hashable, Sendable {

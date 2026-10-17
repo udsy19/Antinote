@@ -80,7 +80,7 @@ public extension Defaults.Keys {
     static let pinOnTop = Key<Bool>("pinOnTop", default: false)
     static let restorePinState = Key<Bool>("restorePinState", default: true)
     static let hideOnFocusLoss = Key<Bool>("hideOnFocusLoss", default: false)
-    /// Minutes of inactivity after which showing Jotter starts a fresh note (0 = never).
+    /// Minutes of inactivity after which showing Super Notes starts a fresh note (0 = never).
     static let newNoteAfterMinutes = Key<Int>("newNoteAfterMinutes", default: 0)
     static let swipeNavigation = Key<Bool>("swipeNavigation", default: true)
     static let swipeSensitivity = Key<Double>("swipeSensitivity", default: 0)
@@ -88,7 +88,7 @@ public extension Defaults.Keys {
     static let showNoteDates = Key<Bool>("showNoteDates", default: false)
     static let alwaysShowSlotsBar = Key<Bool>("alwaysShowSlotsBar", default: false)
     static let forceRTL = Key<Bool>("forceRTL", default: false)
-    /// Launching Jotter opens on a fresh note (an empty front note is reused).
+    /// Launching Super Notes opens on a fresh note (an empty front note is reused).
     static let startWithNewNote = Key<Bool>("startWithNewNote", default: false)
     /// Size of the window when it drops down from the menu bar (`AppPresence.pseudoMenuBar`).
     static let dropdownWidth = Key<Double>("dropdownWidth", default: 350)
@@ -207,14 +207,14 @@ public extension Defaults.Keys {
     static let showArchivedInStack = Key<Bool>("showArchivedInStack", default: false)
     /// Seconds a locked note stays on screen before Touch ID is asked for (`AutoUnlock.never` = only on Unlock).
     static let autoUnlockDelay = Key<Double>("autoUnlockDelay", default: AutoUnlock.never)
-    /// Jotter opens on the slotted notes instead of the ephemeral stack.
+    /// Super Notes opens on the slotted notes instead of the ephemeral stack.
     static let slottedAsMain = Key<Bool>("slottedAsMain", default: false)
     static let relockAfterMinutes = Key<Int>("relockAfterMinutes", default: 5)
     static let exportDestinations = Key<Set<ExportDestination>>("exportDestinations", default: [.appleNotes, .markdown, .plainText, .pdf])
     static let quickExportDestination = Key<ExportDestination?>("quickExportDestination", default: nil)
     static let omitKeywordInExport = Key<Bool>("omitKeywordInExport", default: true)
     static let obsidianVault = Key<String>("obsidianVault", default: "")
-    /// Exports are named after the note's first line; otherwise "Jotter - <last modified date>".
+    /// Exports are named after the note's first line; otherwise "Super Notes - <last modified date>".
     static let exportFirstLineAsTitle = Key<Bool>("exportFirstLineAsTitle", default: true)
     /// The Custom URL scheme destination, with {TITLE}, {CONTENT} and {DATE} placeholders.
     static let customURLTemplate = Key<String>("customURLTemplate", default: "")

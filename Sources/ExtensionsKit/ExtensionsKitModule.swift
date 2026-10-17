@@ -1,5 +1,5 @@
 import AppKit
-import JotterCore
+import SuperNotesCore
 
 /// Registers this module's services in `Services` (called once at launch).
 public enum ExtensionsKitModule {

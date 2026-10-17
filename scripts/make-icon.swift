@@ -1,4 +1,4 @@
-// Renders the Jotter app icon into an .iconset directory: an index card on a warm field, a few ink lines and a
+// Renders the Super Notes app icon into an .iconset directory: an index card on a warm field, a few ink lines and a
 // single teal check — "jot it down, tick it off".
 // Usage: swift scripts/make-icon.swift <out.iconset>
 import AppKit

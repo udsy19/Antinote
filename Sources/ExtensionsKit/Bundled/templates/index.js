@@ -1,9 +1,9 @@
-// Jotter extension: templates (MIT)
-// Depends on "date" for date formatting (global.JotterDate).
+// Super Notes extension: templates (MIT)
+// Depends on "date" for date formatting (global.SuperNotesDate).
 (function () {
-  var ext = new Extension({ name: "templates", version: "1.0.0", author: "jotter", category: "Templates", dataScope: "none", dependencies: ["date"] });
+  var ext = new Extension({ name: "templates", version: "1.0.0", author: "Super Notes", category: "Templates", dataScope: "none", dependencies: ["date"] });
 
-  function dateText(style) { return JotterDate.format(JotterDate.today(), style || JotterDate.style()); }
+  function dateText(style) { return SuperNotesDate.format(SuperNotesDate.today(), style || SuperNotesDate.style()); }
   function ok(text) { return new ReturnObject({ status: "success", message: "Inserted template", payload: text }); }
 
   new Command({

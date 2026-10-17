@@ -1,5 +1,5 @@
 import AppKit
-import JotterCore
+import SuperNotesCore
 
 extension Defaults.Keys {
     static let storageLastAutoBackup = Key<Date>("storageKit.lastAutoBackup", default: .distantPast)
@@ -10,12 +10,13 @@ public enum StorageKitModule {
     @MainActor private static var maintenance: Timer?
 
     @MainActor public static func install() {
+        LegacyMigration.run()   // before the store opens: brings over notes, settings and keys from before the rename
         let store: SQLiteNoteStore
         do {
             store = try SQLiteNoteStore()   // opens and migrates
         } catch {
-            Alerts.error("Jotter couldn't open its notes database. Notes written now are kept in a temporary file.", error)
-            let temp = FileManager.default.temporaryDirectory.appendingPathComponent("Jotter-\(UUID().uuidString).sqlite")
+            Alerts.error("Super Notes couldn't open its notes database. Notes written now are kept in a temporary file.", error)
+            let temp = FileManager.default.temporaryDirectory.appendingPathComponent("SuperNotes-\(UUID().uuidString).sqlite")
             store = try! SQLiteNoteStore(url: temp)
         }
         let sync = ICloudDriveSync(store: store)

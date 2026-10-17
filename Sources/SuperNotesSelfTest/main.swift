@@ -1,12 +1,15 @@
 import AppKit
-import JotterCore
+import SuperNotesCore
 
-// Headless logic checks (the Command Line Tools have no XCTest). Run: swift run JotterSelfTest
+// Headless logic checks (the Command Line Tools have no XCTest). Run: swift run SuperNotesSelfTest
 var failures = 0
 func check(_ cond: @autoclosure () -> Bool, _ msg: String, file: String = #fileID, line: Int = #line) {
     if !cond() { failures += 1; print("✗ \(file):\(line) \(msg)") }
 }
 enum SelfTest { nonisolated(unsafe) static var cases: [(String, () -> Void)] = [] }
+
+// Custom themes, the rates cache and user extensions resolve inside a throwaway folder, never the real one.
+SuperNotesPaths.base = FileManager.default.temporaryDirectory.appendingPathComponent("supernotes-selftest-\(UUID().uuidString)")
 
 SelfTest.cases.append(("Core.modeDetection", {
     check(NoteMode.detect(firstLine: "Math").mode == .math, "case-insensitive keyword")
@@ -47,5 +50,6 @@ for (name, run) in SelfTest.cases {
     let before = failures; run()
     print(failures == before ? "✓ \(name)" : "✗ \(name)")
 }
+try? FileManager.default.removeItem(at: SuperNotesPaths.base)
 print(failures == 0 ? "All self-tests passed." : "\(failures) failure(s).")
 exit(failures == 0 ? 0 : 1)

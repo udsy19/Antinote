@@ -92,7 +92,7 @@ rates with manual overrides."
 
 * Fetches only when `Defaults[.allowCurrencyRates]`: fiat from `https://open.er-api.com/v6/latest/USD` (no key),
   crypto from CoinGecko `simple/price?vs_currencies=usd`.
-* Rates are "units per 1 USD"; cached to `JotterPaths.support/exchange-rates.json` with a timestamp. On start the
+* Rates are "units per 1 USD"; cached to `SuperNotesPaths.support/exchange-rates.json` with a timestamp. On start the
   cache loads; a refresh runs when there are no rates, or when `Defaults[.autoUpdateRates]` and the cache is older
   than 24 h (checked hourly). Failures keep the saved rates.
 * `Defaults[.customRates]` (units per USD, e.g. `["XYZ": 2.5]` = 1 USD is 2.5 XYZ) override fetched rates.

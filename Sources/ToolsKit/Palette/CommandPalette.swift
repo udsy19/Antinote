@@ -1,5 +1,5 @@
 import AppKit
-import JotterCore
+import SuperNotesCore
 
 /// ⌘K: every action plus note matches, fuzzy-filtered. The same commands (without notes) feed the editor's
 /// inline "/" list through `PanelServicing.commands(matching:)`.

@@ -1,5 +1,5 @@
 import Foundation
-import JotterCore
+import SuperNotesCore
 
 /// A short link located in the editor text. `expanded` links show their full URL while the caret is inside.
 public struct TrackedLink: Equatable {

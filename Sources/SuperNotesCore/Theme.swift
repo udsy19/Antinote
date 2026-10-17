@@ -1,9 +1,9 @@
 import AppKit
 
-/// A colour theme. Jotter picks one theme for light mode and one for dark mode (Settings → Appearance).
+/// A colour theme. Super Notes picks one theme for light mode and one for dark mode (Settings → Appearance).
 ///
 /// Every colour in the UI comes from one of the 24 roles below. A theme file is a flat JSON object with these
-/// keys plus `name` and `isDarkTheme` (the format theme makers export); custom themes live in `JotterPaths.themes`.
+/// keys plus `name` and `isDarkTheme` (the format theme makers export); custom themes live in `SuperNotesPaths.themes`.
 /// Keys a file leaves out fall back to the default light or dark theme.
 public struct Theme: Codable, Hashable, Identifiable, Sendable {
     public var name: String
@@ -185,7 +185,7 @@ public struct Theme: Codable, Hashable, Identifiable, Sendable {
 
     /// Built-ins plus valid custom theme files.
     public static var all: [Theme] {
-        let dir = JotterPaths.themes
+        let dir = SuperNotesPaths.themes
         let custom = ((try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? [])
             .filter { $0.pathExtension == "json" }
             .compactMap { try? JSONDecoder().decode(Theme.self, from: Data(contentsOf: $0)) }
@@ -208,7 +208,7 @@ public struct Theme: Codable, Hashable, Identifiable, Sendable {
         return own.isEmpty ? Defaults[dark ? .darkTheme : .lightTheme] : own
     }
 
-    public static let didChange = Notification.Name("JotterThemeDidChange")
+    public static let didChange = Notification.Name("SuperNotesThemeDidChange")
 
     // MARK: Paper and keywords
 

@@ -1,18 +1,18 @@
 # Privacy
 
-**Jotter is a local app. Your notes never leave your Mac unless you turn on a feature that needs the network.**
+**Super Notes is a local app. Your notes never leave your Mac unless you turn on a feature that needs the network.**
 
-## What Jotter does not do
+## What Super Notes does not do
 
 - **No accounts.** There is nothing to sign up for.
-- **No analytics or telemetry.** Jotter never phones home, tracks usage or sends crash reports.
+- **No analytics or telemetry.** Super Notes never phones home, tracks usage or sends crash reports.
 - **No servers.** The project doesn't operate any; there is nowhere for your notes to go.
 
 ## Every network call has its own switch
 
 **Settings → Privacy → Allow these network calls** lists everything that can reach the network. Each switch is the
 only way the feature next to it goes online, and **Turn Everything Off** flips them all at once. With every switch
-off, Jotter works fully offline.
+off, Super Notes works fully offline.
 
 | Switch | Default | What it calls | What is sent |
 |---|---|---|---|
@@ -29,12 +29,12 @@ saved rates, and you can type your own rates in **Settings → Math**.
 
 | Data | Location |
 |---|---|
-| Notes, The Void, archive | `~/Library/Application Support/Jotter/notes.sqlite` |
-| Automatic backups | `~/Library/Application Support/Jotter/Backups` |
-| Extensions you installed | `~/Library/Application Support/Jotter/Extensions` |
-| Custom themes | `~/Library/Application Support/Jotter/Themes` |
-| Saved exchange rates | `~/Library/Application Support/Jotter/exchange-rates.json` |
-| Settings | `~/Library/Preferences/com.udsy.jotter.plist` |
+| Notes, The Void, archive | `~/Library/Application Support/Super Notes/notes.sqlite` |
+| Automatic backups | `~/Library/Application Support/Super Notes/Backups` |
+| Extensions you installed | `~/Library/Application Support/Super Notes/Extensions` |
+| Custom themes | `~/Library/Application Support/Super Notes/Themes` |
+| Saved exchange rates | `~/Library/Application Support/Super Notes/exchange-rates.json` |
+| Settings | `~/Library/Preferences/com.udsy.supernotes.plist` |
 | Extension API keys and the sync encryption key | macOS Keychain |
 
 Text recognition from dropped images (Vision), Touch ID for locked notes (LocalAuthentication) and everything else
@@ -42,7 +42,7 @@ run on-device using Apple's frameworks.
 
 ## Extensions
 
-Extensions are JavaScript that runs inside Jotter, each in its own JavaScriptCore context. An extension can only
+Extensions are JavaScript that runs inside Super Notes, each in its own JavaScriptCore context. An extension can only
 reach the network when **Extension APIs** is on, only at the URLs its manifest declares, and only with an API key you
 granted to that extension. Keys are substituted outside the script, so the JavaScript never sees them. Each extension
 also declares how much of a note it can read (`none`, the current `line`, or the `full` note).
@@ -59,6 +59,6 @@ Automation permission the first time. Markdown, plain text and PDF exports are f
 
 ## Removing everything
 
-Run `curl -fsSL https://udsy19.github.io/Antinote/install.sh | bash -s -- --uninstall`, then delete
-`~/Library/Application Support/Jotter` and `~/Library/Preferences/com.udsy.jotter.plist`. If you used sync, also
-delete the `Jotter` folder in iCloud Drive.
+Run `curl -fsSL https://udsy19.github.io/super-notes/install.sh | bash -s -- --uninstall`, then delete
+`~/Library/Application Support/Super Notes` and `~/Library/Preferences/com.udsy.supernotes.plist`. If you used sync, also
+delete the `Super Notes` folder in iCloud Drive.

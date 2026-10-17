@@ -1,7 +1,7 @@
 {
   "name": "json",
   "version": "1.0.0",
-  "author": "jotter",
+  "author": "Super Notes",
   "description": "Format, minify and validate JSON notes.",
   "license": "MIT",
   "category": "Developer",

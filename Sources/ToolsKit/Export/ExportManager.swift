@@ -1,5 +1,5 @@
 import AppKit
-import JotterCore
+import SuperNotesCore
 import UniformTypeIdentifiers
 
 /// Sends notes to other apps and files.
@@ -58,8 +58,8 @@ public final class ExportManager: ExportServicing {
             try? FileManager.default.setAttributes([.creationDate: note.created, .modificationDate: note.modified],
                                                    ofItemAtPath: url.path)
         }
-        // Full-fidelity copy (slots, links, dates) that Jotter can import again.
-        try Services.store.exportJSON().write(to: folder.appendingPathComponent("Jotter Notes.json"), options: .atomic)
+        // Full-fidelity copy (slots, links, dates) that Super Notes can import again.
+        try Services.store.exportJSON().write(to: folder.appendingPathComponent("Super Notes.json"), options: .atomic)
     }
 
     /// Asks for a folder, then writes every note as Markdown.
@@ -101,7 +101,7 @@ public final class ExportManager: ExportServicing {
         guard let error else { HUD.show("Sent to Apple Notes", kind: .success); return }
         let code = error[NSAppleScript.errorNumber] as? Int ?? 0
         if code == -1743 {
-            Alerts.error("Jotter isn't allowed to control Notes.",
+            Alerts.error("Super Notes isn't allowed to control Notes.",
                          AutomationDenied())
         } else {
             Alerts.error("Couldn't send the note to Apple Notes: \(error[NSAppleScript.errorMessage] as? String ?? "error \(code)")")
@@ -110,7 +110,7 @@ public final class ExportManager: ExportServicing {
 
     private struct AutomationDenied: LocalizedError {
         var errorDescription: String? {
-            "Open System Settings → Privacy & Security → Automation, find Jotter and turn on Notes, then export again."
+            "Open System Settings → Privacy & Security → Automation, find Super Notes and turn on Notes, then export again."
         }
     }
 

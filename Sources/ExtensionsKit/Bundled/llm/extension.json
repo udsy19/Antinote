@@ -1,7 +1,7 @@
 {
   "name": "llm",
   "version": "1.0.0",
-  "author": "jotter",
+  "author": "Super Notes",
   "description": "Ask, summarize, rewrite and translate with OpenAI, Anthropic, Google Gemini, OpenRouter or a local Ollama model.",
   "license": "MIT",
   "category": "AI",

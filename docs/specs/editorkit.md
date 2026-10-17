@@ -1,6 +1,6 @@
 # EditorKit — the note editor
 
-EditorKit implements `NoteEditing` (`JotterEditor`) and registers `Services.editorFactory`
+EditorKit implements `NoteEditing` (`SuperNotesEditor`) and registers `Services.editorFactory`
 (`EditorKitModule.install()`). ShellKit embeds `editor.view`, calls `load(_:)`, forwards menu commands through
 `perform(_:)` and shows `onAnalysis` output in its chrome.
 

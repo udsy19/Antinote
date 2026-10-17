@@ -1,6 +1,6 @@
 import AppKit
 import SwiftUI
-import JotterCore
+import SuperNotesCore
 
 // One view per Settings tab. Every control reads and writes a `Defaults` key directly.
 
@@ -39,17 +39,17 @@ struct GeneralSettings: View {
         SettingsForm {
             ICloudSection()
             Section("Startup") {
-                Toggle("Launch Jotter at login", isOn: $launchAtLogin)
-                Captioned("Opening Jotter starts on a fresh note; an empty latest note is reused.") {
+                Toggle("Launch Super Notes at login", isOn: $launchAtLogin)
+                Captioned("Opening Super Notes starts on a fresh note; an empty latest note is reused.") {
                     Toggle("Start with a new note", isOn: $startWithNewNote)
                 }
             }
             Section("Menu bar & Dock") {
-                Picker("Show Jotter in", selection: $presence) {
+                Picker("Show Super Notes in", selection: $presence) {
                     ForEach(AppPresence.allCases, id: \.self) { Text($0.displayName).tag($0) }
                 }
                 if presence == .pseudoMenuBar {
-                    Caption("Jotter drops down under its menu bar icon and hides when you click anywhere else.")
+                    Caption("Super Notes drops down under its menu bar icon and hides when you click anywhere else.")
                 }
                 LabeledContent {
                     HStack(spacing: 6) {
@@ -59,13 +59,13 @@ struct GeneralSettings: View {
                     }
                 } label: {
                     Text("Dropdown window size")
-                    Text("Width × height in points while Jotter drops down from the menu bar.")
+                    Text("Width × height in points while Super Notes drops down from the menu bar.")
                 }
                 .disabled(presence != .pseudoMenuBar)
             }
             Section("Window") {
                 Captioned("Applies only while the window is unpinned.") {
-                    Toggle("Hide Jotter when it loses focus", isOn: $hideOnFocusLoss)
+                    Toggle("Hide Super Notes when it loses focus", isOn: $hideOnFocusLoss)
                 }
                 Toggle("Restore pin state on open", isOn: $restorePin)
             }
@@ -209,7 +209,7 @@ struct AppearanceSettings: View {
             }
             Section("Window") {
                 Captioned("Requires macOS 15 (Sequoia) or later.") {
-                    Toggle("Make Jotter translucent", isOn: $translucent).disabled(!supportsTranslucency)
+                    Toggle("Make Super Notes translucent", isOn: $translucent).disabled(!supportsTranslucency)
                 }
                 Group {
                     Captioned("Otherwise the bars float on a blurred backdrop.") {
@@ -260,7 +260,7 @@ struct AppearanceSettings: View {
                             themes = Theme.all
                             NotificationCenter.default.post(name: Theme.didChange, object: nil)
                         }
-                        Button("Open Folder") { NSWorkspace.shared.open(JotterPaths.themes) }
+                        Button("Open Folder") { NSWorkspace.shared.open(SuperNotesPaths.themes) }
                     }
                 } label: {
                     Text("Custom themes")
@@ -546,7 +546,7 @@ extension EditorSettings {
 // MARK: - Notes
 
 /// Section order follows the reference: Automatic notes, Locked notes, The Void, Slotted notes, Backups, then
-/// Jotter's import/export and Reset.
+/// Super Notes' import/export and Reset.
 struct NotesSettings: View {
     @Default(.newNoteAfterMinutes) private var newNoteAfter
     @Default(.autoDeleteUnmodifiedDays) private var autoDeleteDays
@@ -618,7 +618,7 @@ struct NotesSettings: View {
                     ForEach([1, 5, 15, 60], id: \.self) { Text(minutesLabel($0)).tag($0) }
                 } label: {
                     Text("Require Touch ID or password again after")
-                    Text("Counted from the last time a locked note was in focus. Quitting Jotter always locks them.")
+                    Text("Counted from the last time a locked note was in focus. Quitting Super Notes always locks them.")
                 }
                 Picker(selection: $autoUnlock) {
                     ForEach(AutoUnlock.choices, id: \.self) { delay in Text(Self.autoUnlockLabel(delay)).tag(delay) }
@@ -652,7 +652,7 @@ struct NotesSettings: View {
                 }
             }
             Section("Slotted notes") {
-                Captioned("Jotter opens on your slotted notes instead of the ephemeral stack.") {
+                Captioned("Super Notes opens on your slotted notes instead of the ephemeral stack.") {
                     Toggle("Use slotted notes as your main notes", isOn: $slottedAsMain)
                 }
                 Captioned("Otherwise ⌘N on a slotted note only shows a reminder.") {
@@ -680,7 +680,7 @@ struct NotesSettings: View {
                     Button("Make Backup") { Maintenance.makeBackup(); backups = Services.store.backups }
                 }
                 LabeledContent {
-                    Button("Open Folder") { NSWorkspace.shared.open(JotterPaths.support) }
+                    Button("Open Folder") { NSWorkspace.shared.open(SuperNotesPaths.support) }
                 } label: {
                     Text("Notes & backups folder")
                     Text("Backups are timestamped copies stored next to your notes database.")
@@ -695,7 +695,7 @@ struct NotesSettings: View {
                     .fixedSize()
                 } label: {
                     Text("Restore from a backup")
-                    Text("Swaps your notes for a backup's. Jotter quits; open it again to finish.")
+                    Text("Swaps your notes for a backup's. Super Notes quits; open it again to finish.")
                 }
             }
             Section("Import & export") {
@@ -809,7 +809,7 @@ struct KeywordsSettings: View {
 
     private var customRatesSection: some View {
         Section("Custom currency rates") {
-            Caption("These override live currency rates, and define currencies Jotter doesn't know. Enter units per 1 USD.")
+            Caption("These override live currency rates, and define currencies Super Notes doesn't know. Enter units per 1 USD.")
             ForEach(rates.keys.sorted(), id: \.self) { code in
                 HStack {
                     Text(code).monospaced().frame(width: 60, alignment: .leading)
@@ -941,7 +941,7 @@ struct ShortcutsSettings: View {
             Section("Global") {
                 Captioned("Works from any app. Click the field and press a combination; ⌫ clears it.") {
                     HStack {
-                        Text("Global Hotkey - Show Jotter")
+                        Text("Global Hotkey - Show Super Notes")
                         Spacer()
                         ShortcutRecorder(shortcut: $hotkey).frame(width: 160, height: 24)
                     }
@@ -999,7 +999,7 @@ struct TimerSettings: View {
         SettingsForm {
             Section("General") {
                 Toggle("Pause timer when quitting the app", isOn: $pauseOnQuit)
-                Captioned("Only when Jotter has a menu bar icon.") {
+                Captioned("Only when Super Notes has a menu bar icon.") {
                     Toggle("Show time left in the menu bar", isOn: $inMenuBar)
                 }
             }
@@ -1095,7 +1095,7 @@ struct ExportSettings: View {
                 Captioned("Leaves the keyword line (e.g. “math”) out of exported notes.") {
                     Toggle("Omit keyword in exported notes", isOn: $omitKeyword)
                 }
-                Captioned("Otherwise notes are titled “Jotter - ” and the date they were last changed.") {
+                Captioned("Otherwise notes are titled “Super Notes - ” and the date they were last changed.") {
                     Toggle("Use first line of note as title", isOn: $firstLineTitle)
                 }
             }
@@ -1175,11 +1175,11 @@ struct PrivacySettings: View {
     private var groups: [(title: String, subtitle: String, calls: [Call])] {
         [("iCloud Sync", "Calls to your own iCloud Drive to keep notes, settings and extensions in sync across your Macs.", [
             Call(title: "Sync notes with iCloud", detail: "Writes encrypted notes to your own iCloud Drive.",
-                 endpoint: "iCloud Drive (Jotter folder)", isOn: $syncNotes),
+                 endpoint: "iCloud Drive (Super Notes folder)", isOn: $syncNotes),
             Call(title: "Sync preferences with iCloud", detail: "Writes encrypted settings to your own iCloud Drive.",
-                 endpoint: "iCloud Drive (Jotter folder)", isOn: $syncPreferences),
+                 endpoint: "iCloud Drive (Super Notes folder)", isOn: $syncPreferences),
             Call(title: "Sync extensions with iCloud", detail: "Copies your installed extensions to your own iCloud Drive.",
-                 endpoint: "iCloud Drive (Jotter folder)", isOn: $syncExtensions),
+                 endpoint: "iCloud Drive (Super Notes folder)", isOn: $syncExtensions),
          ]),
          ("Features", "Calls that keep currency conversion rates up to date.", [
             Call(title: "Fetch currency conversion rates", detail: "Custom rates in Keywords › Math work without it.",
@@ -1203,10 +1203,10 @@ struct PrivacySettings: View {
                     }
                 } label: {
                     Text("Network access")
-                    Text("Every network call Jotter can make is listed below, and each one is yours to switch off. Jotter works fully offline.")
+                    Text("Every network call Super Notes can make is listed below, and each one is yours to switch off. Super Notes works fully offline.")
                 }
             } footer: {
-                Caption("Jotter doesn't collect usage data.")
+                Caption("Super Notes doesn't collect usage data.")
             }
             ForEach(groups, id: \.title) { group in
                 Section(group.title) {
@@ -1245,15 +1245,15 @@ struct UpdatesSettings: View {
                 HStack(spacing: 16) {
                     Image(nsImage: NSApp.applicationIconImage ?? NSImage()).resizable().frame(width: 72, height: 72)
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Jotter").font(.title2.bold())
+                        Text("Super Notes").font(.title2.bold())
                         Text(version).foregroundStyle(.secondary)
                         Text("A scratchpad for quick, disposable notes.").foregroundStyle(.secondary)
                     }
                 }
-                Caption("Jotter doesn't check for updates on its own.")
+                Caption("Super Notes doesn't check for updates on its own.")
             }
             Section("License") {
-                Text("Jotter is open source under the MIT License. Notes are plain text stored on this Mac.")
+                Text("Super Notes is open source under the MIT License. Notes are plain text stored on this Mac.")
             }
             Section("Tutorial") {
                 LabeledContent("Tutorial notes") { Button("Show Tutorial Notes") { Shell.shared.showTutorial(nil) } }

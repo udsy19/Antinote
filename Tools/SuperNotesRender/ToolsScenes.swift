@@ -1,5 +1,5 @@
 import AppKit
-import JotterCore
+import SuperNotesCore
 import ToolsKit
 
 /// Search, timer alert and other ToolsKit scenes.

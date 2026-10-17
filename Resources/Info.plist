@@ -5,17 +5,17 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>Jotter</string>
+	<string>Super Notes</string>
 	<key>CFBundleExecutable</key>
-	<string>Jotter</string>
+	<string>SuperNotes</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.udsy.jotter</string>
+	<string>com.udsy.supernotes</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>Jotter</string>
+	<string>Super Notes</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -24,10 +24,10 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>com.udsy.jotter</string>
+			<string>com.udsy.supernotes</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>jotter</string>
+				<string>supernotes</string>
 			</array>
 		</dict>
 	</array>
@@ -38,13 +38,13 @@
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>Jotter sends notes to Apple Notes only when you choose Export → Apple Notes.</string>
+	<string>Super Notes sends notes to Apple Notes only when you choose Export → Apple Notes.</string>
 	<key>NSFaceIDUsageDescription</key>
-	<string>Jotter uses Touch ID to unlock notes you have locked.</string>
+	<string>Super Notes uses Touch ID to unlock notes you have locked.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>
-	<string>Jotter — MIT License.</string>
+	<string>Super Notes — MIT License.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 </dict>

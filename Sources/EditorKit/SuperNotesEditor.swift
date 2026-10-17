@@ -1,17 +1,17 @@
 import AppKit
 import Combine
-import JotterCore
+import SuperNotesCore
 
 @MainActor
-public final class JotterEditorFactory: EditorFactory {
+public final class SuperNotesEditorFactory: EditorFactory {
     public init() {}
-    public func makeEditor() -> NoteEditing { JotterEditor() }
+    public func makeEditor() -> NoteEditing { SuperNotesEditor() }
 }
 
 /// The plain-text note editor: styling, lists, inline results, short links, code, paste/OCR, AutoPaste,
 /// extension commands, copy rules, Vim mode and autosave. See docs/specs/editorkit.md.
 @MainActor
-public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @preconcurrency NSTextStorageDelegate {
+public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, @preconcurrency NSTextStorageDelegate {
     public let view: NSView = NSView()
     public private(set) var note: Note?
     public var onAnalysis: ((NoteAnalysis) -> Void)?

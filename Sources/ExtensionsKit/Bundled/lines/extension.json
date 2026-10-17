@@ -1,7 +1,7 @@
 {
   "name": "lines",
   "version": "1.0.0",
-  "author": "jotter",
+  "author": "Super Notes",
   "description": "Sort, reverse, shuffle, de-duplicate, number and trim the lines of a note.",
   "license": "MIT",
   "category": "Text Manipulation",

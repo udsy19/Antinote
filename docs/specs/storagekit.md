@@ -1,7 +1,7 @@
 # StorageKit
 
 Local persistence for notes (SQLite), The Void, backups, JSON export/import, and optional end-to-end encrypted
-sync through the user's iCloud Drive folder. Implements `NoteStoring` and `SyncServicing` from JotterCore.
+sync through the user's iCloud Drive folder. Implements `NoteStoring` and `SyncServicing` from SuperNotesCore.
 
 ## What Antinote does (evidence)
 
@@ -30,10 +30,10 @@ Sources: the class digest (ivars/selectors), UI strings and the bundled `DataMod
   (`PreferencesSyncManager.defaultsDidChange:`, "Keeps settings, keywords, themes, and keyboard shortcuts the same on
   your other Macs.") and extension sync (`ExtensionCloudSync`) are separate switches.
 
-## How Jotter implements it
+## How Super Notes implements it
 
 ### Database (`SQLiteNoteStore`, `SQLiteDatabase`)
-- System SQLite C API (`import SQLite3`) at `JotterPaths.database` (path injectable for tests), `journal_mode=WAL`,
+- System SQLite C API (`import SQLite3`) at `SuperNotesPaths.database` (path injectable for tests), `journal_mode=WAL`,
   `synchronous=NORMAL`, `foreign_keys=ON`.
 - Versioned migrations keyed on `PRAGMA user_version`, each run in a transaction:
   v1 `notes(id, content, created, modified, changed, position, slot, is_locked, is_read_only, is_archived,
@@ -55,7 +55,7 @@ Sources: the class digest (ivars/selectors), UI strings and the bundled `DataMod
 - `search`: case- and diacritic-insensitive substring over content, deck order, archived notes appended on request.
 
 ### Backups and portability
-- `backup()` runs `VACUUM INTO` (consistent while open) into `JotterPaths.backups/notes-<timestamp>.sqlite` and keeps
+- `backup()` runs `VACUUM INTO` (consistent while open) into `SuperNotesPaths.backups/notes-<timestamp>.sqlite` and keeps
   the newest `Defaults[.backupCount]`. `StorageKitModule`'s hourly maintenance makes one automatically once
   `Defaults[.backupIntervalHours]` (default 24) have passed, and moves ephemeral, unarchived notes not changed for
   `Defaults[.autoDeleteUnmodifiedDays]` days to The Void (0 = never; `Note.isUnmodified(since:)`).
@@ -67,7 +67,7 @@ Sources: the class digest (ivars/selectors), UI strings and the bundled `DataMod
 
 ### Encrypted iCloud Drive sync (`ICloudDriveSync`, `SyncFolder`, `SyncMerge`, `SyncCrypto`, `KeychainSyncKey`)
 CloudKit needs a paid developer account, so sync uses the iCloud Drive folder
-`~/Library/Mobile Documents/com~apple~CloudDocs/Jotter/`:
+`~/Library/Mobile Documents/com~apple~CloudDocs/Super Notes/`:
 - `notes/<id>.jnote` — AES-GCM (CryptoKit) sealed JSON `{note, changed}` or a tombstone `{id, deletedAt}`.
 - `key.check` — a sealed marker proving which key encrypts the folder; `preferences.jprefs` — sealed plist of the
   synced Settings keys (only with `Defaults[.syncPreferences]`).
@@ -82,6 +82,17 @@ CloudKit needs a paid developer account, so sync uses the iCloud Drive folder
   iCloud placeholders (`.name.icloud`) are asked to download and picked up on a later pass.
 - `statusText`: "Sync is off", "iCloud Drive is off", "Waiting for the encryption key from your other Mac",
   "Syncing…", "Synced just now / 2 min ago", or the last error.
+
+### Moving over from Jotter (`LegacyMigration`)
+The app was called Jotter before 1.2.0. `StorageKitModule.install()` first runs `LegacyMigration.run()`, which acts
+only on the first launch under the new name (while `SuperNotesPaths.support` doesn't exist yet) and never deletes data:
+- Preferences: the old `com.udsy.jotter` domain is copied into the new one when that holds nothing but AppKit's own
+  keys; window frame names are renamed.
+- Folders: `~/Library/Application Support/Jotter` → `Super Notes`, and the iCloud Drive `Jotter` folder →
+  `Super Notes` when sync was on. A folder moves only when the new one doesn't exist; otherwise both are left alone.
+- Keychain: items under `com.udsy.jotter` (API keys) and `com.udsy.jotter.sync` (sync key) move to the new services
+  when the new service has no item for that account.
+- Sync files and `key.check` sealed under the old name still open, and old JSON exports (`jotter.notes`) import.
 
 ## Gaps
 - Sync runs on the main actor with plain file I/O (no `NSFileCoordinator`); fine for a few thousand small notes.

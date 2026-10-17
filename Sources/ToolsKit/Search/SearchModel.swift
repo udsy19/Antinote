@@ -1,5 +1,5 @@
 import Foundation
-import JotterCore
+import SuperNotesCore
 
 /// Which notes Search lists: the swipeable deck or the slotted notes.
 public enum SearchScope: String, Codable, Sendable {

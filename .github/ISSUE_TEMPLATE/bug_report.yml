@@ -23,7 +23,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: Jotter version
+      label: Super Notes version
       placeholder: "1.0.0 (Settings → About)"
     validations:
       required: true
@@ -38,4 +38,4 @@ body:
     id: extra
     attributes:
       label: Screenshots, recordings or logs
-      description: Console.app logs filtered by `com.udsy.jotter` help a lot.
+      description: Console.app logs filtered by `com.udsy.supernotes` help a lot.

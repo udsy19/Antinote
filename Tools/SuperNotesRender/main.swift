@@ -1,15 +1,15 @@
 import AppKit
-import JotterCore
+import SuperNotesCore
 import StorageKit
 import NoteEngine
 import EditorKit
 import ShellKit
 import ToolsKit
 
-// Renders Jotter's views offscreen to PNG files for visual checks. Nothing is ever shown on screen: windows are
+// Renders Super Notes' views offscreen to PNG files for visual checks. Nothing is ever shown on screen: windows are
 // created but never ordered front, and the app never runs or activates.
 //
-//     swift build && .build/debug/JotterRender <out-dir> [scene-prefix …]
+//     swift build && .build/debug/SuperNotesRender <out-dir> [scene-prefix …]
 //
 // With no prefixes every scene is rendered. Preferences go to a throwaway defaults suite and notes to a
 // temporary database, so the user's own data is never touched.
@@ -143,25 +143,26 @@ enum Render {
 let app = NSApplication.shared
 let args = Array(CommandLine.arguments.dropFirst())
 guard let outPath = args.first else {
-    print("usage: JotterRender <out-dir> [scene-prefix …]")
+    print("usage: SuperNotesRender <out-dir> [scene-prefix …]")
     exit(2)
 }
 let filters = Array(args.dropFirst())
 let out = URL(fileURLWithPath: outPath, isDirectory: true)
 try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
 
-let suite = "com.udsy.jotter.render"
+let suite = "com.udsy.supernotes.render"
 UserDefaults().removePersistentDomain(forName: suite)
 Defaults.store = UserDefaults(suiteName: suite)!
 Defaults[.onboardingCompleted] = true
 
-let temp = FileManager.default.temporaryDirectory.appendingPathComponent("JotterRender-\(UUID().uuidString)")
+let temp = FileManager.default.temporaryDirectory.appendingPathComponent("SuperNotesRender-\(UUID().uuidString)")
 try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
+SuperNotesPaths.base = temp   // custom themes, rates cache and extensions resolve inside the temporary folder
 MainActor.assumeIsolated {
     Services.store = try! SQLiteNoteStore(url: temp.appendingPathComponent("notes.sqlite"),
                                           backupsFolder: temp.appendingPathComponent("Backups"))
     Services.analyzer = NoteEngine(rates: { ExchangeRates(perUSD: ["EUR": 0.92, "CAD": 1.37, "JPY": 148.6, "GBP": 0.79]) })
-    Services.editorFactory = JotterEditorFactory()
+    Services.editorFactory = SuperNotesEditorFactory()
 }
 
 // MARK: - Run

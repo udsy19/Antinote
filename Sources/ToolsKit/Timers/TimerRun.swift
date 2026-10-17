@@ -1,5 +1,5 @@
 import Foundation
-import JotterCore
+import SuperNotesCore
 
 /// Something a running timer announces.
 public enum TimerEvent: Equatable, Sendable {

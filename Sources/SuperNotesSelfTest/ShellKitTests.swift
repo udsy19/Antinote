@@ -1,5 +1,5 @@
 import Foundation
-import JotterCore
+import SuperNotesCore
 import ShellKit
 
 /// Append cases with `SelfTest.cases.append(("name", { check(..., "msg") }))`.

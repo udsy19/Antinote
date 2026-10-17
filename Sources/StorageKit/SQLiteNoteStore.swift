@@ -1,6 +1,6 @@
 import Foundation
 import Combine
-import JotterCore
+import SuperNotesCore
 
 /// A note plus its sync revision time (`changed` moves on any synced-field change; `note.modified` only on edits).
 public struct NoteRecord: Codable, Equatable, Sendable {
@@ -26,10 +26,10 @@ public final class SQLiteNoteStore: NoteStoring {
     var records: [UUID: NoteRecord] = [:]
     let subject = PassthroughSubject<NoteStoreChange, Never>()
 
-    public init(url: URL = JotterPaths.database, backupsFolder: URL = JotterPaths.backups) throws {
+    public init(url: URL = SuperNotesPaths.database, backupsFolder: URL = SuperNotesPaths.backups) throws {
         self.url = url
-        self.backupsFolder = JotterPaths.ensure(backupsFolder)
-        JotterPaths.ensure(url.deletingLastPathComponent())
+        self.backupsFolder = SuperNotesPaths.ensure(backupsFolder)
+        SuperNotesPaths.ensure(url.deletingLastPathComponent())
         db = try SQLiteNoteStore.open(url, backupsFolder: backupsFolder)
         try load()
     }
@@ -73,7 +73,7 @@ public final class SQLiteNoteStore: NoteStoring {
         try db.execute("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON;")
         let version = db.userVersion
         guard version <= schemaVersion else {
-            throw StorageError(message: "The notes database was created by a newer version of Jotter.")
+            throw StorageError(message: "The notes database was created by a newer version of Super Notes.")
         }
         if version > 0 && version < schemaVersion {
             let dest = uniqueBackupURL(in: backupsFolder, tag: "pre-migration-v\(version)")

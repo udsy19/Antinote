@@ -1,7 +1,7 @@
 import AppKit
 import UniformTypeIdentifiers
 import Vision
-import JotterCore
+import SuperNotesCore
 
 // MARK: - OCR
 
@@ -402,7 +402,7 @@ final class CompletionListView: NSView {
     }
 }
 
-/// Offscreen views for rendering (JotterRender); nothing here is shown on screen.
+/// Offscreen views for rendering (SuperNotesRender); nothing here is shown on screen.
 public enum EditorPreview {
     /// The `::` command list as it appears under the caret in a note window `width` points wide.
     @MainActor public static func completionList(_ items: [ExtensionCommandInfo], selected: Int = 0, width: CGFloat) -> NSView {
@@ -412,7 +412,7 @@ public enum EditorPreview {
     /// The "/" command list for `commands` as the palette returns them for `query`.
     @MainActor public static func slashList(_ commands: [PaletteCommand], query: String = "", selected: Int = 0,
                                             width: CGFloat) -> NSView {
-        list(JotterEditor.slashRows(EditorLogic.Slash.ordered(commands, query: query)), footer: CompletionListView.paletteFooter, selected: selected,
+        list(SuperNotesEditor.slashRows(EditorLogic.Slash.ordered(commands, query: query)), footer: CompletionListView.paletteFooter, selected: selected,
              width: width)
     }
 
@@ -429,7 +429,7 @@ public enum EditorPreview {
     /// A note editor showing `text` with the find shelf open on the first `term` (and its Replace row when
     /// `replace`).
     @MainActor public static func findShelf(_ text: String, term: String, replace: Bool) -> NSView {
-        let editor = JotterEditor()
+        let editor = SuperNotesEditor()
         editor.load(Note(content: text))
         let r = (text as NSString).range(of: term)
         if r.location != NSNotFound { editor.textView.setSelectedRange(r) }

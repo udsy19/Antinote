@@ -1,5 +1,5 @@
 import Foundation
-import JotterCore
+import SuperNotesCore
 
 /// A GitHub location of an extension: repository plus optional branch and sub-folder.
 public struct GitHubSource: Equatable, Sendable {
@@ -69,7 +69,7 @@ extension ExtensionsManager {
         for file in manifest.scriptFiles { files.append((file, try await fetch(source.rawURL(file)))) }
 
         let fm = FileManager.default
-        let staging = fm.temporaryDirectory.appendingPathComponent("jotter-ext-\(UUID().uuidString)", isDirectory: true)
+        let staging = fm.temporaryDirectory.appendingPathComponent("supernotes-ext-\(UUID().uuidString)", isDirectory: true)
         defer { try? fm.removeItem(at: staging) }
         do {
             for (file, data) in files {

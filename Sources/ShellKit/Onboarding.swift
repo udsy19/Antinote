@@ -1,5 +1,5 @@
 import Foundation
-import JotterCore
+import SuperNotesCore
 
 /// First-launch tutorial: ordinary notes seeded into the stack. The front note welcomes you; each note ends with a
 /// "[←]" hint pointing to the previous one, and every keyword note demonstrates its feature live.
@@ -21,7 +21,7 @@ enum Onboarding {
         let previous = key("Show Previous Note", "⌘[")
         return [
             """
-            Welcome to Jotter!
+            Welcome to Super Notes!
 
             This is a scratchpad, not a filing cabinet. Don't title your notes, don't sort them, don't tidy them up. Just write.
 
@@ -166,7 +166,7 @@ enum Onboarding {
 
             Last trick, promise.
 
-            Take a screenshot of some text, then drag or paste it into this note. Jotter types the text out for you.
+            Take a screenshot of some text, then drag or paste it into this note. Super Notes types the text out for you.
 
 
             [←]
@@ -175,7 +175,7 @@ enum Onboarding {
             That's the tour!
 
             \(key("Search All Notes", "⌘F"))  Search every note
-            \(key("Pin Jotter to Top", "⌘P"))  Keep Jotter above other windows
+            \(key("Pin Super Notes to Top", "⌘P"))  Keep Super Notes above other windows
             \(key("Delete Note", "⌘D"))  Send a note to The Void
             \(key("Jump to Front", "⌘1"))  Jump to the latest note
             \(key("Move Note to Front", "⇧⌘1"))  Bring a note to the front

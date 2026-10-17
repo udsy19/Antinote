@@ -1,7 +1,7 @@
 {
   "name": "checklists",
   "version": "1.0.0",
-  "author": "jotter",
+  "author": "Super Notes",
   "description": "Check, uncheck, remove or move checked [x] items.",
   "license": "MIT",
   "category": "Text Manipulation",

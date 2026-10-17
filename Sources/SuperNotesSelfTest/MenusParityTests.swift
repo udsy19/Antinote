@@ -1,5 +1,5 @@
 import AppKit
-import JotterCore
+import SuperNotesCore
 import ShellKit
 
 func registerMenusParityTests() {
@@ -27,7 +27,7 @@ func registerMenusParityTests() {
     }))
 
     SelfTest.cases.append(("ShellKit.menuToggleTitles", {
-        check(MenuLogic.Toggle.pin.titles == ("Pin Jotter to Top", "Unpin from Top"), "pin")
+        check(MenuLogic.Toggle.pin.titles == ("Pin Super Notes to Top", "Unpin from Top"), "pin")
         check(MenuLogic.Toggle.readOnly.titles == ("Make Read-Only", "Allow Editing"), "read-only")
         check(MenuLogic.Toggle.allCases.allSatisfy { $0.titles.off != $0.titles.on }, "every toggle changes its title")
     }))

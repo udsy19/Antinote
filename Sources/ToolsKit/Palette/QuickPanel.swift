@@ -1,5 +1,5 @@
 import AppKit
-import JotterCore
+import SuperNotesCore
 
 /// A floating search field over a result list: ↑/↓ select, Enter runs, Esc or clicking elsewhere closes.
 /// Used by the command palette and Search All Notes.

@@ -1,5 +1,5 @@
 import AppKit
-import JotterCore
+import SuperNotesCore
 import StorageKit
 import NoteEngine
 import ExtensionsKit

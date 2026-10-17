@@ -1,5 +1,5 @@
 import Foundation
-import JotterCore
+import SuperNotesCore
 
 /// Pure text transforms behind the editor (no AppKit), so they can be tested headlessly.
 /// All offsets are UTF-16 (`NSString`/`NSRange`), matching `NSTextView`.

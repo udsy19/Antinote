@@ -1,5 +1,5 @@
 import Foundation
-import JotterCore
+import SuperNotesCore
 import ShellKit
 
 /// Settings layout details that follow the reference app.

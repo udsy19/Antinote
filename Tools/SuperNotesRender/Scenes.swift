@@ -1,9 +1,9 @@
 import AppKit
-import JotterCore
+import SuperNotesCore
 import EditorKit
 import ShellKit
 
-/// Every scene JotterRender knows. Sizes are window content sizes in points.
+/// Every scene SuperNotesRender knows. Sizes are window content sizes in points.
 @MainActor
 enum Scenes {
     static let window = NSSize(width: 337, height: 386)
@@ -73,7 +73,7 @@ enum Scenes {
 
     /// A note editor showing `text` with the caret at the end.
     static func editor(_ text: String) -> NSView {
-        let editor = JotterEditor()
+        let editor = SuperNotesEditor()
         let shortened = Demo.shortenLinks(text)
         editor.load(Note(content: shortened.text, links: shortened.links))
         return editor.view

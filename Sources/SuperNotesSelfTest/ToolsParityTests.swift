@@ -1,5 +1,5 @@
 import Foundation
-import JotterCore
+import SuperNotesCore
 import ToolsKit
 
 /// Search pane sizing (text one step below the editor's, paddings and card columns).

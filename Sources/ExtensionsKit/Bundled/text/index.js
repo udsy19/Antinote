@@ -1,7 +1,7 @@
-// Jotter extension: text (MIT)
+// Super Notes extension: text (MIT)
 // Case and identifier conversions for the current line (or for the text passed in parentheses).
 (function () {
-  var ext = new Extension({ name: "text", version: "1.0.0", author: "jotter", category: "Text Formatting", dataScope: "line" });
+  var ext = new Extension({ name: "text", version: "1.0.0", author: "Super Notes", category: "Text Formatting", dataScope: "line" });
 
   function words(s) {
     return s.replace(/([a-z0-9])([A-Z])/g, "$1 $2")

@@ -4,7 +4,7 @@
 # Nothing is added to the login keychain or the keychain search list.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-DIR="$ROOT/.signing"; KC="$DIR/jotter.keychain-db"; PASS="jotter"
+DIR="$ROOT/.signing"; KC="$DIR/supernotes.keychain-db"; PASS="supernotes"
 [ -f "$KC" ] && { echo "$KC exists"; exit 0; }
 mkdir -p "$DIR"; cd "$DIR"
 cat > cert.cnf <<CNF
@@ -13,7 +13,7 @@ distinguished_name=dn
 x509_extensions=ext
 prompt=no
 [dn]
-CN=Jotter Local Signing
+CN=Super Notes Local Signing
 [ext]
 basicConstraints=critical,CA:false
 keyUsage=critical,digitalSignature

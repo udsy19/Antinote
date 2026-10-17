@@ -1,6 +1,6 @@
 import AppKit
 import Combine
-import JotterCore
+import SuperNotesCore
 import SwiftUI
 
 /// The Void: deleted notes waiting to be recovered or erased. A black, always-dark window: "THE VOID" and a count
@@ -23,8 +23,8 @@ final class VoidWindowController {
             w.isReleasedWhenClosed = false
             w.minSize = NSSize(width: VoidView.minSize.width, height: VoidView.minSize.height)
             w.contentViewController = NSHostingController(rootView: VoidView(model: VoidModel(), close: { [weak w] in w?.close() }))
-            w.setFrameAutosaveName("JotterVoidWindow")
-            if !w.setFrameUsingName("JotterVoidWindow") { w.center() }
+            w.setFrameAutosaveName("SuperNotesVoidWindow")
+            if !w.setFrameUsingName("SuperNotesVoidWindow") { w.center() }
             window = w
         }
         NSApp.activate(ignoringOtherApps: true)

@@ -1,6 +1,6 @@
 import AppKit
 import UniformTypeIdentifiers
-import JotterCore
+import SuperNotesCore
 
 /// Alternate app icons, drawn in code, plus a user-supplied image (`Defaults[.appIcon] == "custom"`).
 @MainActor
@@ -22,7 +22,7 @@ enum AppIcons {
     ]
     static let customID = "custom"
 
-    static var customIconURL: URL { JotterPaths.support.appendingPathComponent("AppIcon.png") }
+    static var customIconURL: URL { SuperNotesPaths.support.appendingPathComponent("AppIcon.png") }
 
     static func apply() {
         let id = Defaults[.appIcon]
@@ -45,7 +45,7 @@ enum AppIcons {
     /// Copies the chosen image into Application Support and selects it.
     static func chooseCustomImage() {
         let panel = NSOpenPanel()
-        panel.message = "Choose an image to use as the Jotter app icon"
+        panel.message = "Choose an image to use as the Super Notes app icon"
         panel.allowedContentTypes = [.image]
         panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
@@ -77,7 +77,7 @@ enum AppIcons {
             return true
         }
         image.isTemplate = true
-        image.accessibilityDescription = "Jotter"
+        image.accessibilityDescription = "Super Notes"
         return image
     }()
 

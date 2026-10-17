@@ -1,6 +1,6 @@
-# Antinote 2.x: visual UI reference for Jotter
+# Antinote 2.x: visual UI reference for Super Notes
 
-This is a pixel-level reference for rebuilding the Antinote (antinote.io, v2.0–2.1.x, macOS) interface in Jotter.
+This is a pixel-level reference for rebuilding the Antinote (antinote.io, v2.0–2.1.x, macOS) interface in Super Notes.
 It covers what things look like. Behaviour belongs in the per-kit specs (`editorkit.md`, `shellkit.md`, ...).
 
 > `ui-parity.md` has the values read from the shipping app's binary. Where the two disagree, `ui-parity.md` wins.
@@ -875,6 +875,6 @@ are **[U]**. Cells marked * were read by eye rather than pixel-sampled. Ship the
 `IconPromote`, `IconSearch`, `IconSettings` (all 30×30, non-template, black line art), `LogoStandalone` (50×22,
 mint), `MenuIcon` (16×16 template triangle), `OCRDrag` (700×479), `PlanetsMercury…PlanetsPluto` (30×30 templates).
 
-Jotter must draw its own equivalents and must not copy these files. The glyph descriptions in §1, §3 and §4 are
+Super Notes must draw its own equivalents and must not copy these files. The glyph descriptions in §1, §3 and §4 are
 enough to redraw them.
 

@@ -138,12 +138,13 @@ public enum Services {
     public static var panels: PanelServicing!
 }
 
-public enum JotterPaths {
-    public static let bundleID = Bundle.main.bundleIdentifier ?? "com.udsy.jotter"
-    public static var support: URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return ensure(base.appendingPathComponent("Jotter", isDirectory: true))
-    }
+public enum SuperNotesPaths {
+    public static let bundleID = Bundle.main.bundleIdentifier ?? "com.udsy.supernotes"
+    /// The folder `support` lives in: Application Support. The self-test and render tools point it at a temporary
+    /// folder so they never create or touch the real one.
+    nonisolated(unsafe) public static var base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    public static let supportFolderName = "Super Notes"
+    public static var support: URL { ensure(base.appendingPathComponent(supportFolderName, isDirectory: true)) }
     public static var database: URL { support.appendingPathComponent("notes.sqlite") }
     public static var backups: URL { ensure(support.appendingPathComponent("Backups", isDirectory: true)) }
     public static var extensions: URL { ensure(support.appendingPathComponent("Extensions", isDirectory: true)) }

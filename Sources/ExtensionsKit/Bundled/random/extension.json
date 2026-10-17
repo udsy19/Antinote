@@ -1,7 +1,7 @@
 {
   "name": "random",
   "version": "1.0.0",
-  "author": "jotter",
+  "author": "Super Notes",
   "description": "Roll dice, flip a coin, make UUIDs and passwords, pick a random item.",
   "license": "MIT",
   "category": "Random Generators",

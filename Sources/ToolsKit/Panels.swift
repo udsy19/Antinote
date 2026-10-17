@@ -1,6 +1,6 @@
 import AppKit
 import Combine
-import JotterCore
+import SuperNotesCore
 
 /// `PanelServicing`: command palette (⌘K), Search All Notes (shown inside the main window) and The Void.
 @MainActor
@@ -56,7 +56,7 @@ public final class ToolsPanels: PanelServicing {
     }
 }
 
-/// Views built for offscreen renders (JotterRender): the same views the app shows, fed fixed data.
+/// Views built for offscreen renders (SuperNotesRender): the same views the app shows, fed fixed data.
 @MainActor
 public enum ToolsPreviews {
     /// The Search pane listing `notes` (front first) as a list or as cards, dated against `now`.

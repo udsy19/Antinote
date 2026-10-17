@@ -1,5 +1,5 @@
 import Foundation
-import JotterCore
+import SuperNotesCore
 
 // The store side of sync: snapshots for merging and applying a merge result.
 extension SQLiteNoteStore {

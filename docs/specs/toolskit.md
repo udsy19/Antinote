@@ -1,8 +1,8 @@
 # ToolsKit
 
-Timers & pomodoro, export, the `jotter://` URL scheme, the command palette, The Void window and Search All Notes.
-Implements `TimerServicing`, `ExportServicing` and `PanelServicing` from JotterCore and installs the URL-scheme
-Apple-event handler. Depends only on JotterCore; everything else is reached through `Services`.
+Timers & pomodoro, export, the `supernotes://` URL scheme, the command palette, The Void window and Search All Notes.
+Implements `TimerServicing`, `ExportServicing` and `PanelServicing` from SuperNotesCore and installs the URL-scheme
+Apple-event handler. Depends only on SuperNotesCore; everything else is reached through `Services`.
 
 ## What Antinote does (evidence)
 
@@ -22,7 +22,7 @@ Sources: the class digest (`TimerManager`, `TimerPreferences`, `TimerCompleteAle
 - **Timer preferences** (`TimerPreferences`): "Show a full-screen alert", "Show a notification" (separately for
   countdowns and pomodoros), sound + volume ("Affects both countdown and pomodoro alert sounds."), "Show time left in
   the menu bar" (`statusItem`), "Pause timer when quitting the app" (`_pauseTheTimerIfAppClosed`), "Esc closes timer
-  alert overlay". The completion overlay shows a random encouraging line (Antinote uses animal facts; Jotter writes
+  alert overlay". The completion overlay shows a random encouraging line (Antinote uses animal facts; Super Notes writes
   its own short messages instead).
 - **Export** (`ExportPreferences`): Plain text, Markdown, Bear (`bear://x-callback-url/create`), Obsidian (vault
   name, convert to Markdown), Apple Notes (originally via the "Apple Notes helper Shortcut"), a custom URL scheme
@@ -38,7 +38,7 @@ Sources: the class digest (`TimerManager`, `TimerPreferences`, `TimerCompleteAle
   "There is no recovery beyond The Void.", "The Void is empty", "The Void is already empty", "Restore from The Void".
 - **Search**: "Search All Notes", "Try a different search term", "Clear the search to rearrange notes".
 
-## How Jotter implements it
+## How Super Notes implements it
 
 ### Timers (`TimerSpec`, `TimerRun`, `TimerManager`, `TimerOverlay`)
 - `TimerSpec.parse(_:)` (pure) turns the first-line arguments into a command. The keyword itself may be passed in
@@ -61,7 +61,7 @@ Sources: the class digest (`TimerManager`, `TimerPreferences`, `TimerCompleteAle
   every query takes an explicit `now` (tests inject a clock). Pomodoro phases are derived from elapsed time
   (`phaseIndex = 2·cycle + (inBreak ? 1 : 0)`); `events(from:to:)` reports `finished`, `workEnded(n)`, `breakEnded(n)`.
 - `TimerManager` keeps one timer per note (any number of notes, each with an optional name), ticks once a second while
-  any timer runs, and posts `Notification.Name("JotterTimersDidChange")` (object: note UUID) so the editor can refresh
+  any timer runs, and posts `Notification.Name("SuperNotesTimersDidChange")` (object: note UUID) so the editor can refresh
   `status(noteID:)`, e.g. `24:59 · work 1 · tea`, `03:12 · paused`, `Done · tea`.
   `start` on a running timer with the same spec resumes it instead of restarting. Public extras: `pause`, `resume`,
   `reset`, `togglePause`, `runningNoteIDs`, `showFullScreen(noteID:)`.
@@ -82,7 +82,7 @@ Sources: the class digest (`TimerManager`, `TimerPreferences`, `TimerCompleteAle
 ### Export (`ExportManager`, `ExportText`)
 - `ExportText` (pure): optional keyword removal (`Defaults[.omitKeywordInExport]`; the first line is dropped when
   `NoteMode.detect` recognises it), title = first remaining line (`Defaults[.exportFirstLineAsTitle]`; otherwise
-  `datedTitle`, "Jotter - 2026-10-17 14-05-09" from the last change), Markdown conversion: `☐ ◻ □ [ ]` → `- [ ]`,
+  `datedTitle`, "Super Notes - 2026-10-17 14-05-09" from the last change), Markdown conversion: `☐ ◻ □ [ ]` → `- [ ]`,
   `☑ ☒ ✓ ✔ [x]` → `- [x]`, `• ◦ ‣ ▪` → `-`; in list-mode notes unmarked lines become `- [ ]`. Indentation is kept.
 - Apple Notes: `NSAppleScript` `tell application "Notes" to make new note with properties {name:…, body:…}` (HTML
   body). Error -1743 explains how to allow Automation (System Settings → Privacy & Security → Automation).
@@ -95,7 +95,7 @@ Sources: the class digest (`TimerManager`, `TimerPreferences`, `TimerCompleteAle
   (`Defaults[.fontName]`/`[.fontSize]`, theme text colour forced to black on white paper) printed to file via
   `NSPrintOperation` (`jobDisposition = .save`). `print(_:)` shows the print panel.
 - `exportAll(to:)` writes every deck and archived note as `<title>.md` (unique names, Markdown conversion applied)
-  plus `Jotter Notes.json` from `Services.store.exportJSON()` (re-importable, keeps slots/links/dates).
+  plus `Super Notes.json` from `Services.store.exportJSON()` (re-importable, keeps slots/links/dates).
 
 ### URL scheme (`URLCommand`, `URLSchemeHandler`)
 `kAEGetURL` is handled from `ToolsKitModule.install()`; URLs arriving before `Services.store`/`windows` exist are queued
@@ -103,15 +103,15 @@ and replayed after `didFinishLaunching`. Commands (host of the URL, parameters p
 
 | URL | Action |
 |---|---|
-| `jotter://new?text=…` | create a note at the front and show it |
-| `jotter://append?text=…` | append a line to the current note (creates one when there is none) |
-| `jotter://overwrite?text=…` | replace the current note's text |
-| `jotter://show?id=<uuid>` | show that note |
-| `jotter://promote?id=<uuid>` | move to the front and show (slotted notes cannot be promoted) |
-| `jotter://togglepin` | toggle `Defaults[.pinOnTop]` |
-| `jotter://palette`, `jotter://search?q=…`, `jotter://void` | open the panels |
+| `supernotes://new?text=…` | create a note at the front and show it |
+| `supernotes://append?text=…` | append a line to the current note (creates one when there is none) |
+| `supernotes://overwrite?text=…` | replace the current note's text |
+| `supernotes://show?id=<uuid>` | show that note |
+| `supernotes://promote?id=<uuid>` | move to the front and show (slotted notes cannot be promoted) |
+| `supernotes://togglepin` | toggle `Defaults[.pinOnTop]` |
+| `supernotes://palette`, `supernotes://search?q=…`, `supernotes://void` | open the panels |
 
-Shell use: `open "jotter://append?text=$(python3 -c 'import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))' "milk")"`.
+Shell use: `open "supernotes://append?text=$(python3 -c 'import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))' "milk")"`.
 
 ### Command palette (`CommandPalette`, `FuzzyMatcher`, `QuickPanel`)
 - `QuickPanel`: floating non-activating-style `NSPanel` (search field + table), ↑/↓ move, Enter runs, Esc or focus
@@ -140,5 +140,5 @@ Empty results: "Try a different search term".
 ## Gaps / requests
 - Core: a timer-change publisher in `TimerServicing`, `pause/reset` in the protocol, `print` in `ExportServicing`,
   a shared settings-tab enum, an editor-insertion hook in `WindowServicing`; the app's Info.plist needs
-  `CFBundleURLTypes` (`jotter`) and `NSAppleEventsUsageDescription`.
+  `CFBundleURLTypes` (`supernotes`) and `NSAppleEventsUsageDescription`.
 - Not implemented: Notion export, the "refresh db" URL command.

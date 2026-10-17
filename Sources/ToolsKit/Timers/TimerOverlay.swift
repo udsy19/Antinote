@@ -1,5 +1,5 @@
 import AppKit
-import JotterCore
+import SuperNotesCore
 import SwiftUI
 
 /// Full-screen timer surfaces on a dark, softly lit backdrop: the pomodoro break screen, the completion alerts,
@@ -171,7 +171,7 @@ struct OverlayView: View {
     }
 }
 
-/// Jotter's own app icon as the overlay's mark (80 pt).
+/// Super Notes' own app icon as the overlay's mark (80 pt).
 private struct Mark: View {
     var body: some View {
         Image(nsImage: NSApp?.applicationIconImage ?? NSImage())

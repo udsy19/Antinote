@@ -1,5 +1,5 @@
 import Foundation
-import JotterCore
+import SuperNotesCore
 
 /// Analyses notes for display (math results, sums, counts) and provides the shared text helpers.
 /// Thread-safe; results are cached per note text and per math line.

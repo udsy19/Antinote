@@ -1,4 +1,4 @@
-// Each module owns Sources/JotterSelfTest/<Module>Tests.swift and its register function.
+// Each module owns Sources/SuperNotesSelfTest/<Module>Tests.swift and its register function.
 func registerModuleTests() {
     registerStorageKitTests()
     registerNoteEngineTests()

@@ -1,7 +1,7 @@
 import Foundation
 import CryptoKit
 import SQLite3
-import JotterCore
+import SuperNotesCore
 import StorageKit
 
 /// Append cases with `SelfTest.cases.append(("name", { check(..., "msg") }))`.
@@ -9,9 +9,9 @@ func registerStorageKitTests() {
     func storageCase(_ name: String, _ body: @escaping @MainActor (URL) throws -> Void) {
         SelfTest.cases.append(("StorageKit.\(name)", {
             MainActor.assumeIsolated {
-                let dir = FileManager.default.temporaryDirectory.appendingPathComponent("jotter-storage-\(UUID().uuidString)")
+                let dir = FileManager.default.temporaryDirectory.appendingPathComponent("supernotes-storage-\(UUID().uuidString)")
                 try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-                let suite = "jotter.selftest.storage.\(UUID().uuidString)"
+                let suite = "supernotes.selftest.storage.\(UUID().uuidString)"
                 let savedDefaults = Defaults.store
                 Defaults.store = UserDefaults(suiteName: suite)!
                 defer {
@@ -183,6 +183,73 @@ func registerStorageKitTests() {
             check((try? SyncCrypto.open(tampered, key: key)) == nil, "tampering detected")
         }
     }))
+
+    // Data kept under the app's previous name, Jotter (before 1.2.0).
+    SelfTest.cases.append(("StorageKit.legacyMigration", {
+        let support = URL(fileURLWithPath: "/Users/u/Library/Application Support/Super Notes", isDirectory: true)
+        check(LegacyMigration.legacyFolder(for: support).path == "/Users/u/Library/Application Support/Jotter",
+              "support folder maps to the old one")
+        let cloud = ICloudDriveSync.defaultRoot
+        check(cloud.lastPathComponent == "Super Notes"
+              && LegacyMigration.legacyFolder(for: cloud).path == cloud.deletingLastPathComponent().appendingPathComponent("Jotter").path,
+              "iCloud Drive folder maps to the old one")
+        check(SuperNotesPaths.supportFolderName == "Super Notes", "support folder name")
+
+        let services = LegacyMigration.keychainServices(bundleID: "com.udsy.supernotes")
+        check(services.map(\.from) == ["com.udsy.jotter", "com.udsy.jotter.sync"]
+              && services.map(\.to) == ["com.udsy.supernotes", "com.udsy.supernotes.sync"], "keychain services that move")
+
+        let old: [String: Any] = ["syncNotes": true, "theme": "Fern", "NSWindow Frame JotterMainWindow": "10 10 350 400"]
+        let fresh = LegacyMigration.migratedDefaults(old: old, new: [:])
+        check(fresh?["syncNotes"] as? Bool == true && fresh?["theme"] as? String == "Fern", "settings copy into an empty domain")
+        check(fresh?["NSWindow Frame SuperNotesMainWindow"] as? String == "10 10 350 400"
+              && fresh?["NSWindow Frame JotterMainWindow"] == nil, "window frame names are renamed")
+        let appKitOnly = LegacyMigration.migratedDefaults(old: old, new: ["NSNavLastRootDirectory": "~"])
+        check(appKitOnly?["theme"] as? String == "Fern" && appKitOnly?["NSNavLastRootDirectory"] as? String == "~",
+              "AppKit's own keys don't count as settings")
+        check(LegacyMigration.migratedDefaults(old: old, new: ["theme": "Dune"]) == nil, "existing settings are left alone")
+        check(LegacyMigration.migratedDefaults(old: [:], new: [:]) == nil, "nothing to copy")
+
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("supernotes-migration-\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: root) }
+        let from = root.appendingPathComponent("a/Jotter"), to = root.appendingPathComponent("a/Super Notes")
+        try? fm.createDirectory(at: from.appendingPathComponent("Backups"), withIntermediateDirectories: true)
+        for name in ["notes.sqlite", "notes.sqlite-wal", "notes.sqlite-shm"] {
+            fm.createFile(atPath: from.appendingPathComponent(name).path, contents: Data(name.utf8))
+        }
+        check(LegacyMigration.moveFolder(from: from, to: to), "old folder moves")
+        check(!fm.fileExists(atPath: from.path) && fm.contents(atPath: to.appendingPathComponent("notes.sqlite-wal").path) == Data("notes.sqlite-wal".utf8)
+              && fm.fileExists(atPath: to.appendingPathComponent("Backups").path), "database, WAL and folders arrive intact")
+        let kept = root.appendingPathComponent("b/Jotter"), existing = root.appendingPathComponent("b/Super Notes")
+        try? fm.createDirectory(at: kept, withIntermediateDirectories: true)
+        try? fm.createDirectory(at: existing, withIntermediateDirectories: true)
+        fm.createFile(atPath: kept.appendingPathComponent("notes.sqlite").path, contents: Data("old".utf8))
+        check(!LegacyMigration.moveFolder(from: kept, to: existing)
+              && fm.contents(atPath: kept.appendingPathComponent("notes.sqlite").path) == Data("old".utf8)
+              && !fm.fileExists(atPath: existing.appendingPathComponent("notes.sqlite").path),
+              "an existing new folder leaves the old one untouched")
+        check(!LegacyMigration.moveFolder(from: root.appendingPathComponent("c/Jotter"), to: root.appendingPathComponent("c/Super Notes"))
+              && !fm.fileExists(atPath: root.appendingPathComponent("c").path), "nothing to move, nothing created")
+
+        // Sync files sealed before the rename still open.
+        let key = SymmetricKey(size: .bits256)
+        let plain = Data("old note".utf8)
+        let legacy = try? AES.GCM.seal(plain, using: key, authenticating: Data("jotter.sync.v1".utf8)).combined
+        check(legacy.flatMap { try? SyncCrypto.open(Data("JOT1".utf8) + $0, key: key) } == plain, "legacy sync file opens")
+    }))
+
+    storageCase("legacyExport") { dir in
+        let s = try makeStore(dir)
+        s.create(content: "from before the rename")
+        let json = String(decoding: s.exportJSON(), as: UTF8.self)
+        check(json.contains("\"supernotes.notes\""), "exports use the new format name")
+        let other = try makeStore(dir, "other")
+        let imported = try other.importJSON(Data(json.replacingOccurrences(of: "\"supernotes.notes\"", with: "\"jotter.notes\"").utf8))
+        check(imported == 1 && texts(other.deck) == ["from before the rename"], "exports made before the rename import")
+        check((try? other.importJSON(Data(json.replacingOccurrences(of: "\"supernotes.notes\"", with: "\"other\"").utf8))) == nil,
+              "other formats are rejected")
+    }
 
     SelfTest.cases.append(("StorageKit.mergeRules", {
         let t0 = Date(timeIntervalSinceReferenceDate: 1_000), t1 = t0 + 10, t2 = t0 + 20

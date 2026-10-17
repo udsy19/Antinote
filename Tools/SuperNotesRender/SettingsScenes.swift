@@ -1,5 +1,5 @@
 import AppKit
-import JotterCore
+import SuperNotesCore
 import ShellKit
 
 /// Settings window scenes: every tab in light mode plus one tab in dark mode. The whole window frame (title and

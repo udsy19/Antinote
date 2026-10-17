@@ -1,6 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
-import JotterCore
+import SuperNotesCore
 import EditorKit
 import ShellKit
 import ToolsKit
@@ -171,7 +171,7 @@ func registerSettingsBehaviourTests() {
 
     SelfTest.cases.append(("Settings.exportTitles", {
         let utc = TimeZone(identifier: "UTC")!
-        check(ExportText.datedTitle(Date(timeIntervalSince1970: 0), timeZone: utc) == "Jotter - 1970-01-01 00-00-00",
+        check(ExportText.datedTitle(Date(timeIntervalSince1970: 0), timeZone: utc) == "Super Notes - 1970-01-01 00-00-00",
               "dated title")
         check(ExportText.customURL(template: "app://new?t={TITLE}&b={CONTENT}&d={DATE}", title: "A b", content: "x&y",
                                    date: "2026") == "app://new?t=A%20b&b=x%26y&d=2026", "placeholders are encoded")

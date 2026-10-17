@@ -1,5 +1,5 @@
 import Foundation
-import JotterCore
+import SuperNotesCore
 
 /// Cleans pasted text per Settings → Copy & Paste.
 public enum PasteCleaner {

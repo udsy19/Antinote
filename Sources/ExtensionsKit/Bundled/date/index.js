@@ -1,8 +1,8 @@
-// Jotter extension: date (MIT)
+// Super Notes extension: date (MIT)
 // Dates are computed from now(), the host clock, so they can be pinned in tests.
-// Also exposes global.JotterDate for extensions that depend on "date".
+// Also exposes global.SuperNotesDate for extensions that depend on "date".
 (function () {
-  var ext = new Extension({ name: "date", version: "1.0.0", author: "jotter", category: "Date & Time", dataScope: "none" });
+  var ext = new Extension({ name: "date", version: "1.0.0", author: "Super Notes", category: "Date & Time", dataScope: "none" });
 
   ext.register_preference(new Preference({
     key: "format", label: "Date format", type: "selectOne", defaultValue: "long",
@@ -42,7 +42,7 @@
   }
   function style(override) { return override || getExtensionPreference("date", "format") || "long"; }
 
-  global.JotterDate = { format: format, today: today, addDays: addDays, style: function () { return style(""); } };
+  global.SuperNotesDate = { format: format, today: today, addDays: addDays, style: function () { return style(""); } };
 
   var offset = new Parameter({ type: "int", name: "days", helpText: "Days to add (negative goes back)", default: 0, required: false });
   var fmt = new Parameter({ type: "string", name: "format", helpText: "Optional format: long, weekday, iso, us, eu or a YYYY-MM-DD pattern", default: "", required: false });

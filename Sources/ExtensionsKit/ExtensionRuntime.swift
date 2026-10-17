@@ -1,6 +1,6 @@
 import Foundation
 import JavaScriptCore
-import JotterCore
+import SuperNotesCore
 
 public struct PreferenceSpec: Sendable, Equatable {
     public enum Kind: String, Sendable { case bool, string, paragraph, selectOne, selectMultiple }
@@ -78,7 +78,7 @@ final class ExtensionRuntime: @unchecked Sendable {
         self.name = name
         self.policy = policy
         self.clock = clock
-        queue = DispatchQueue(label: "jotter.extension.\(name)", qos: .userInitiated)
+        queue = DispatchQueue(label: "supernotes.extension.\(name)", qos: .userInitiated)
     }
 
     /// Evaluates the base library and `scripts` (dependencies first) synchronously and returns what they registered.
@@ -94,7 +94,7 @@ final class ExtensionRuntime: @unchecked Sendable {
 
     private func setUp(scripts: [(file: String, source: String)]) throws -> [RegisteredExtension] {
         guard let context = JSContext() else { throw ExtensionError.script("Could not create a JavaScript context") }
-        context.name = "Jotter extension: \(name)"
+        context.name = "Super Notes extension: \(name)"
         self.context = context
         var exception: String?
         context.exceptionHandler = { _, value in exception = value?.toString() ?? "Unknown error" }
@@ -108,7 +108,7 @@ final class ExtensionRuntime: @unchecked Sendable {
         try evaluate(BaseLibrary.source, file: "base.js")
         for script in scripts { try evaluate(script.source, file: script.file) }
 
-        guard let json = context.objectForKeyedSubscript("__jotterDescribe")?.call(withArguments: [])?.toString(),
+        guard let json = context.objectForKeyedSubscript("__superNotesDescribe")?.call(withArguments: [])?.toString(),
               let data = json.data(using: .utf8),
               let list = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
             throw ExtensionError.script(exception ?? "Could not read the registered commands")
@@ -262,7 +262,7 @@ final class ExtensionRuntime: @unchecked Sendable {
 
     private func runNow(command: String, extensionName: String, payloadJSON: String) -> CommandResult {
         context.exception = nil
-        let json = context.objectForKeyedSubscript("__jotterRun")?
+        let json = context.objectForKeyedSubscript("__superNotesRun")?
             .call(withArguments: [extensionName, command, payloadJSON])?.toString() ?? ""
         guard let data = json.data(using: .utf8),
               let d = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {

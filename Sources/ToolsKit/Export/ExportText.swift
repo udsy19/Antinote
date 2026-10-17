@@ -1,5 +1,5 @@
 import Foundation
-import JotterCore
+import SuperNotesCore
 
 /// Pure text preparation for exports.
 public enum ExportText {
@@ -18,13 +18,13 @@ public enum ExportText {
         return line.map { String($0.prefix(120)) } ?? "Untitled"
     }
 
-    /// The title when notes aren't named after their first line: "Jotter - 2026-10-17 14-05-09" (last modified).
+    /// The title when notes aren't named after their first line: "Super Notes - 2026-10-17 14-05-09" (last modified).
     public static func datedTitle(_ modified: Date, timeZone: TimeZone = .current) -> String {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.timeZone = timeZone
         f.dateFormat = "yyyy-MM-dd HH-mm-ss"
-        return "Jotter - " + f.string(from: modified)
+        return "Super Notes - " + f.string(from: modified)
     }
 
     /// The Custom URL scheme destination: `template` with {TITLE}, {CONTENT} and {DATE} replaced by the
@@ -50,7 +50,7 @@ public enum ExportText {
     private static let checked = ["☑", "☒", "✓", "✔", "[x]", "[X]", "- [x]", "- [X]", "* [x]"]
     private static let bullets = ["•", "◦", "‣", "▪", "–", "*"]
 
-    /// Converts Jotter's plain-text list markers to Markdown. `isChecklist` (list-mode notes) turns unmarked lines
+    /// Converts Super Notes' plain-text list markers to Markdown. `isChecklist` (list-mode notes) turns unmarked lines
     /// into open tasks. Indentation is preserved.
     public static func markdown(_ text: String, isChecklist: Bool = false) -> String {
         text.components(separatedBy: "\n").map { line -> String in

@@ -1,6 +1,6 @@
 import AppKit
 import Combine
-import JotterCore
+import SuperNotesCore
 
 extension Defaults.Keys {
     /// ⌘1…⌘9 open the slotted notes (and ⌘1 stops meaning Jump to Front). Off by default.
@@ -112,14 +112,14 @@ enum MainMenu {
 
         let services = submenu("Services", [])
         NSApp.servicesMenu = services.submenu
-        add("Jotter", [
-            item("About Jotter", #selector(Shell.showAbout(_:))), sep(),
+        add("Super Notes", [
+            item("About Super Notes", #selector(Shell.showAbout(_:))), sep(),
             item("Settings…", #selector(Shell.openSettings(_:)), ","), sep(),
             services, sep(),
-            item("Hide Jotter", #selector(NSApplication.hide(_:)), "h", target: NSApp),
+            item("Hide Super Notes", #selector(NSApplication.hide(_:)), "h", target: NSApp),
             item("Hide Others", #selector(NSApplication.hideOtherApplications(_:)), "h", [.command, .option], target: NSApp),
             item("Show All", #selector(NSApplication.unhideAllApplications(_:)), target: NSApp), sep(),
-            item("Quit Jotter", #selector(NSApplication.terminate(_:)), "q", target: NSApp),
+            item("Quit Super Notes", #selector(NSApplication.terminate(_:)), "q", target: NSApp),
         ])
 
         quickExportItem = item("Quick Export", #selector(Shell.quickExport(_:)), "s")
@@ -207,7 +207,7 @@ enum MainMenu {
         let pin = item(MenuState.Toggle.pin.titles.off, #selector(Shell.togglePin(_:)), "p")
         let window = add("Window", [
             pin,
-            item("Hide/Show Jotter", #selector(MenuState.toggleMainWindow(_:)), "o", target: state), sep(),
+            item("Hide/Show Super Notes", #selector(MenuState.toggleMainWindow(_:)), "o", target: state), sep(),
             item("Minimize", #selector(NSWindow.performMiniaturize(_:)), "m", target: nil),
             item("Zoom", #selector(NSWindow.performZoom(_:)), target: nil), sep(),
             item("Bring All to Front", #selector(NSApplication.arrangeInFront(_:)), target: NSApp),
@@ -265,7 +265,7 @@ public enum MenuLogic {
 
         public var titles: (off: String, on: String) {
             switch self {
-            case .pin: ("Pin Jotter to Top", "Unpin from Top")
+            case .pin: ("Pin Super Notes to Top", "Unpin from Top")
             case .readOnly: ("Make Read-Only", "Allow Editing")
             case .archive: ("Archive Note", "Unarchive Note")
             case .lock: ("Lock Note", "Unlock Note")
@@ -344,7 +344,7 @@ struct MenuBinding {
     let modifiers: NSEvent.ModifierFlags
 }
 
-/// Keeps state-dependent menu titles current ("Pin Jotter to Top" / "Unpin from Top", …), shows the slot jumps
+/// Keeps state-dependent menu titles current ("Pin Super Notes to Top" / "Unpin from Top", …), shows the slot jumps
 /// only while ⌘1…⌘9 belong to the slots, and applies rebound shortcuts as soon as they change.
 @MainActor
 final class MenuState: NSObject, NSMenuDelegate {

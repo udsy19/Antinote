@@ -1,6 +1,6 @@
 import AppKit
 import Combine
-import JotterCore
+import SuperNotesCore
 
 /// Search All Notes: replaces the note inside the main window (`WindowServicing.present(inWindow:)`).
 /// A rounded search field on top, results as a list or a grid of cards (columns 230–340 pt wide), and two floating

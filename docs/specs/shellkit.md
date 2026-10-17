@@ -61,7 +61,7 @@ move to the previous or next note.", "Swipe sensitivity", "Higher values require
   `30 + 170·swipeSensitivity` points. Momentum events of a horizontal gesture are swallowed.
 - `swipeNavigation` off disables swipes (⌘[ / ⌘] keep working).
 - Inactivity (`newNoteAfterMinutes`, 0 = never): when the window is shown after being hidden at least that
-  long, Jotter shows the front note if it is empty, otherwise creates a new note.
+  long, Super Notes shows the front note if it is empty, otherwise creates a new note.
 - Jump to Front (⌘1) jumps to the front.
 - The current note ID survives relaunches (`shellKitCurrentNote`).
 
@@ -130,8 +130,8 @@ Screen ⌃⌘F.
 Navigate: Jump to Front ⌘1, Show Previous Note ⌘[, Show Next Note ⌘], Go to Slot 1…9 ⌘1…⌘9 and Ephemeral Notes
 ⌘0 (only while `shellKitSlotNumberShortcuts` is on; ⌘1 then leaves Jump to Front), Assign to Slot ▸ (⌃⌘1…9,
 Remove from Slot).
-Support / Help: Show Tutorial Notes, Keyboard Shortcuts. Window: Pin Jotter to Top/Unpin from Top ⌘P, Hide/Show
-Jotter ⌘O, Minimize ⌘M, Zoom, Bring All to Front.
+Support / Help: Show Tutorial Notes, Keyboard Shortcuts. Window: Pin Super Notes to Top/Unpin from Top ⌘P, Hide/Show
+Super Notes ⌘O, Minimize ⌘M, Zoom, Bring All to Front.
 Toggle items change their titles with state instead of showing checkmarks.
 
 ## Locked notes
@@ -154,11 +154,11 @@ time a locked note was in focus. Quitting Antinote always locks them.", "Relock 
 
 A toolbar-tab preferences window (`NSTabViewController`, ~780 pt wide; the title is the tab name) with the
 11 tabs of ui-reference.md §5 — General, Appearance, Editor, Notes, Keywords, Shortcuts, Timer, Export,
-Extensions, Privacy, Updates — each a grouped SwiftUI form using the reference labels ("Antinote" → "Jotter").
+Extensions, Privacy, Updates — each a grouped SwiftUI form using the reference labels ("Antinote" → "Super Notes").
 `showSettings(tab:)` routes ids, titles and old aliases (`SettingsTab(routing:)`: "copyPaste"/"writing"/"lists" →
 Editor, "storage"/"sync"/"backups"/"advanced" → Notes, "math" → Keywords, "timers" → Timer, "about" → Updates).
 Appearance picks themes from one grid of preview tiles with a sun (light mode) and moon (dark mode) button each.
-Jotter has no updater, so Updates shows the version and the tutorial button.
+Super Notes has no updater, so Updates shows the version and the tutorial button.
 
 ## Onboarding & icons
 
@@ -168,7 +168,7 @@ palette, slotted "first of nine"), `AppIconManager` (_style, _customIcon, applyI
 "App icon updated".
 
 - First launch with an empty deck: seed tutorial notes in the reference's teaching order (ui-reference.md §11),
-  in Jotter's own wording — welcome, math, conversions, variables, breathe, sum, avg, count, list, timer, commands,
+  in Super Notes' own wording — welcome, math, conversions, variables, breathe, sum, avg, count, list, timer, commands,
   screenshots, shortcuts — each ending with a "[←]" hint and using its feature live, plus one slotted note; set
   `onboardingCompleted`.
 - App icons are drawn in code (`AppIconArt`): default, midnight, mint, sunset; "custom" uses a chosen image

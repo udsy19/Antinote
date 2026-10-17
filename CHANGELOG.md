@@ -1,7 +1,13 @@
 # Changelog
 
-All notable changes to Jotter are documented here. The format follows
+All notable changes to Super Notes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org).
+
+## [1.2.0] — 2026-10-17
+
+### Changed
+- Renamed to Super Notes (bundle id com.udsy.supernotes, URL scheme supernotes://). Notes, settings and keys move
+  over automatically.
 
 ## [1.1.0] — 2026-10-17
 
@@ -49,4 +55,4 @@ First public release.
 - Settings → Privacy: every network feature has its own switch, plus Turn Everything Off.
 - One-line installer and a universal (Apple silicon + Intel) DMG.
 
-[1.0.0]: https://github.com/udsy19/Antinote/releases/tag/v1.0.0
+[1.0.0]: https://github.com/udsy19/super-notes/releases/tag/v1.0.0

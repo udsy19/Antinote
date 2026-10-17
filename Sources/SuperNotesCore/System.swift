@@ -2,10 +2,10 @@ import AppKit
 import os
 
 public enum Log {
-    public static let app = Logger(subsystem: JotterPaths.bundleID, category: "app")
-    public static let store = Logger(subsystem: JotterPaths.bundleID, category: "store")
-    public static let extensions = Logger(subsystem: JotterPaths.bundleID, category: "extensions")
-    public static let sync = Logger(subsystem: JotterPaths.bundleID, category: "sync")
+    public static let app = Logger(subsystem: SuperNotesPaths.bundleID, category: "app")
+    public static let store = Logger(subsystem: SuperNotesPaths.bundleID, category: "store")
+    public static let extensions = Logger(subsystem: SuperNotesPaths.bundleID, category: "extensions")
+    public static let sync = Logger(subsystem: SuperNotesPaths.bundleID, category: "sync")
 }
 
 // MARK: - Alerts & HUD
@@ -140,7 +140,7 @@ public final class PillView: NSView {
     public override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
-/// App-wide message pill, centred 20 pt above the bottom of the key Jotter window (or low on the active screen
+/// App-wide message pill, centred 20 pt above the bottom of the key Super Notes window (or low on the active screen
 /// when no window is key).
 @MainActor
 public enum HUD {

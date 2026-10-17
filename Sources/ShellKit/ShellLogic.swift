@@ -1,6 +1,6 @@
 import Foundation
 
-// Pure, UI-free rules behind the shell (covered by JotterSelfTest).
+// Pure, UI-free rules behind the shell (covered by SuperNotesSelfTest).
 
 // MARK: - Swipe gestures
 

@@ -1,9 +1,9 @@
 import AppKit
 import Combine
 import ServiceManagement
-import JotterCore
+import SuperNotesCore
 
-/// Where Jotter lives (Dock, status item, pseudo-menu-bar dropdown, nowhere), the global hotkey, pin on top
+/// Where Super Notes lives (Dock, status item, pseudo-menu-bar dropdown, nowhere), the global hotkey, pin on top
 /// and launch at login.
 @MainActor
 final class Presence: NSObject {
@@ -78,7 +78,7 @@ final class Presence: NSObject {
         statusItem.length = text == nil ? NSStatusItem.squareLength : NSStatusItem.variableLength
     }
 
-    /// Left click shows or hides Jotter; right click (or ⌃-click) opens the status menu.
+    /// Left click shows or hides Super Notes; right click (or ⌃-click) opens the status menu.
     @objc private func statusItemClicked(_ sender: NSStatusBarButton) {
         let event = NSApp.currentEvent
         if event?.type == .rightMouseUp || event?.modifierFlags.contains(.control) == true {
@@ -116,7 +116,7 @@ final class Presence: NSObject {
 
     private func applyFrameAutosave() {
         // The dropdown position must not overwrite the remembered free-floating frame.
-        shell.window.setFrameAutosaveName(isDropdown ? "" : "JotterMainWindow")
+        shell.window.setFrameAutosaveName(isDropdown ? "" : "SuperNotesMainWindow")
     }
 
     // MARK: Level, hotkey, login item

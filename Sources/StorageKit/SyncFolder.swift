@@ -1,6 +1,6 @@
 import Foundation
 import CryptoKit
-import JotterCore
+import SuperNotesCore
 
 /// The encrypted sync folder: `notes/<id>.jnote` per note (or tombstone), `key.check`, `preferences.jprefs`.
 /// Plain file I/O so it works on any folder; `ICloudDriveSync` points it at iCloud Drive.
@@ -32,7 +32,9 @@ public final class SyncFolder {
     enum KeyCheck { case missing, matches, mismatch, downloading }
 
     private var keyCheckFile: URL { root.appendingPathComponent("key.check") }
-    nonisolated private static let checkText = Data("jotter-sync-key-check".utf8)
+    nonisolated private static let checkText = Data("supernotes-sync-key-check".utf8)
+    /// Written before the rename to Super Notes (1.2.0).
+    nonisolated private static let legacyCheckText = Data("jotter-sync-key-check".utf8)
 
     nonisolated static func keyCheckState(root: URL, key: SymmetricKey?) -> KeyCheck {
         let file = root.appendingPathComponent("key.check")
@@ -46,7 +48,8 @@ public final class SyncFolder {
             return .missing
         }
         guard let key else { return .mismatch }
-        return (try? SyncCrypto.open(data, key: key)) == checkText ? .matches : .mismatch
+        guard let text = try? SyncCrypto.open(data, key: key) else { return .mismatch }
+        return text == checkText || text == legacyCheckText ? .matches : .mismatch
     }
 
     func writeKeyCheck() throws {

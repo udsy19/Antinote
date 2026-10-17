@@ -1,7 +1,7 @@
 import AppKit
-import JotterCore
+import SuperNotesCore
 
-/// A parsed `jotter://` URL.
+/// A parsed `supernotes://` URL.
 public enum URLCommand: Equatable, Sendable {
     case new(String)
     case append(String)
@@ -13,10 +13,10 @@ public enum URLCommand: Equatable, Sendable {
     case search(String)
     case void
 
-    public static let scheme = "jotter"
+    public static let scheme = "supernotes"
 
-    /// `jotter://new?text=…`, `append?text=…`, `overwrite?text=…`, `show?id=…`, `promote?id=…`, `togglepin`,
-    /// `palette`, `search?q=…`, `void`. Command names are case-insensitive; `jotter:new?…` works too.
+    /// `supernotes://new?text=…`, `append?text=…`, `overwrite?text=…`, `show?id=…`, `promote?id=…`, `togglepin`,
+    /// `palette`, `search?q=…`, `void`. Command names are case-insensitive; `supernotes:new?…` works too.
     public static func parse(_ url: URL) -> URLCommand? {
         guard url.scheme?.lowercased() == scheme,
               let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
@@ -80,7 +80,7 @@ final class URLSchemeHandler: NSObject {
 
     func open(_ url: URL) {
         guard let command = URLCommand.parse(url) else {
-            HUD.show("Unknown Jotter link", kind: .warning); return
+            HUD.show("Unknown Super Notes link", kind: .warning); return
         }
         let store = Services.store!, windows = Services.windows!
         switch command {

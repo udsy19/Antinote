@@ -1,5 +1,5 @@
 import AppKit
-import JotterCore
+import SuperNotesCore
 import EditorKit
 
 // Editor geometry and styling measured from the reference app (see docs/specs/ui-parity.md).

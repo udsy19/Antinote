@@ -1,5 +1,5 @@
 import Foundation
-import JotterCore
+import SuperNotesCore
 import ToolsKit
 
 /// Append cases with `SelfTest.cases.append(("name", { check(..., "msg") }))`.
@@ -88,17 +88,17 @@ func registerToolsKitTests() {
     SelfTest.cases.append(("ToolsKit.urlCommands", {
         func parse(_ s: String) -> URLCommand? { URL(string: s).flatMap(URLCommand.parse) }
         let id = UUID()
-        check(parse("jotter://new?text=Hello%20world") == .new("Hello world"), "new")
-        check(parse("jotter://append?text=milk%0Aeggs") == .append("milk\neggs"), "append decodes newlines")
-        check(parse("jotter://overwrite?text=x") == .overwrite("x"), "overwrite")
-        check(parse("jotter://show?id=\(id.uuidString)") == .show(id), "show")
-        check(parse("jotter://promote?id=\(id.uuidString)") == .promote(id), "promote")
-        check(parse("jotter://promote?id=nope") == nil, "invalid id")
-        check(parse("jotter://TogglePin") == .togglePin, "case-insensitive")
-        check(parse("jotter://search?q=tea%20cups") == .search("tea cups"), "search")
-        check(parse("jotter://palette") == .palette && parse("jotter://void") == .void, "panels")
-        check(parse("jotter:new?text=a") == .new("a"), "no slashes")
-        check(parse("other://new?text=a") == nil && parse("jotter://explode") == nil, "rejects others")
+        check(parse("supernotes://new?text=Hello%20world") == .new("Hello world"), "new")
+        check(parse("supernotes://append?text=milk%0Aeggs") == .append("milk\neggs"), "append decodes newlines")
+        check(parse("supernotes://overwrite?text=x") == .overwrite("x"), "overwrite")
+        check(parse("supernotes://show?id=\(id.uuidString)") == .show(id), "show")
+        check(parse("supernotes://promote?id=\(id.uuidString)") == .promote(id), "promote")
+        check(parse("supernotes://promote?id=nope") == nil, "invalid id")
+        check(parse("supernotes://TogglePin") == .togglePin, "case-insensitive")
+        check(parse("supernotes://search?q=tea%20cups") == .search("tea cups"), "search")
+        check(parse("supernotes://palette") == .palette && parse("supernotes://void") == .void, "panels")
+        check(parse("supernotes:new?text=a") == .new("a"), "no slashes")
+        check(parse("other://new?text=a") == nil && parse("supernotes://explode") == nil, "rejects others")
         check(URLCommand.appending("b", to: "a") == "a\nb" && URLCommand.appending("b", to: "a\n") == "a\nb"
               && URLCommand.appending("b", to: "") == "b", "appending")
     }))

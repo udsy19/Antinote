@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
-import JotterCore
+import SuperNotesCore
 
 /// The Settings window: a standard toolbar-tab preferences window (`SettingsTab`) with one SwiftUI form per tab.
 /// The window title follows the selected tab.
@@ -54,7 +54,7 @@ final class SettingsWindow: NSObject {
         w.isReleasedWhenClosed = false
         if autosave {
             w.center()
-            w.setFrameAutosaveName("JotterSettingsWindow")   // restores the position
+            w.setFrameAutosaveName("SuperNotesSettingsWindow")   // restores the position
         }
         w.setContentSize(contentSize)
         return (w, controller)
@@ -106,7 +106,7 @@ enum Maintenance {
     static func restore(_ backup: URL) {
         guard Alerts.confirm("Restore this backup?",
                              info: "Your notes will be replaced with “\(backup.deletingPathExtension().lastPathComponent)”. "
-                                 + "Make a backup first if you might want today's notes back. Jotter quits; reopen it to finish.",
+                                 + "Make a backup first if you might want today's notes back. Super Notes quits; reopen it to finish.",
                              confirmTitle: "Restore and Quit", destructive: true) else { return }
         do {
             try Services.store.restore(from: backup)
@@ -136,7 +136,7 @@ enum Maintenance {
     static func exportJSON() {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.json]
-        panel.nameFieldStringValue = "Jotter Notes.json"
+        panel.nameFieldStringValue = "Super Notes.json"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             try Services.store.exportJSON().write(to: url, options: .atomic)
@@ -150,7 +150,7 @@ enum Maintenance {
     static func importJSON() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.json]
-        panel.message = "Choose a Jotter notes export (.json)"
+        panel.message = "Choose a Super Notes export (.json)"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             let count = try Services.store.importJSON(Data(contentsOf: url))
@@ -193,16 +193,16 @@ enum Maintenance {
     }
 
     static func resetPreferences() {
-        guard Alerts.confirm("Reset all preferences?", info: "Notes are kept. Jotter quits; reopen it to start with default settings.",
+        guard Alerts.confirm("Reset all preferences?", info: "Notes are kept. Super Notes quits; reopen it to start with default settings.",
                              confirmTitle: "Reset and Quit", destructive: true) else { return }
         clearPreferences(keepOnboarding: true)
         NSApp.terminate(nil)
     }
 
     static func factoryReset() {
-        guard Alerts.confirm("Reset Jotter to factory settings?",
+        guard Alerts.confirm("Reset Super Notes to factory settings?",
                              info: "Every note — including The Void, archived and slotted notes — and every preference is deleted. "
-                                 + "Backups stay in the backups folder. Jotter quits afterwards.",
+                                 + "Backups stay in the backups folder. Super Notes quits afterwards.",
                              confirmTitle: "Erase Everything", destructive: true) else { return }
         let store = Services.store!
         for note in store.deck + store.archived + store.void { store.deletePermanently(note.id) }
@@ -211,7 +211,7 @@ enum Maintenance {
     }
 
     private static func clearPreferences(keepOnboarding: Bool) {
-        Defaults.store.removePersistentDomain(forName: JotterPaths.bundleID)
+        Defaults.store.removePersistentDomain(forName: SuperNotesPaths.bundleID)
         if keepOnboarding { Defaults[.onboardingCompleted] = true }
         Defaults.store.synchronize()
     }

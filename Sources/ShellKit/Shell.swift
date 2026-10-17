@@ -1,7 +1,7 @@
 import AppKit
 import Combine
 import LocalAuthentication
-import JotterCore
+import SuperNotesCore
 
 /// The main note window and everything it does: deck navigation, slots, split view, locking and the menu actions.
 @MainActor
@@ -139,7 +139,7 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
 
         ephemeralPane = makePane(.ephemeral)
         slotPane = makePane(.slot)
-        if !window.setFrameUsingName("JotterMainWindow") { window.center() }
+        if !window.setFrameUsingName("SuperNotesMainWindow") { window.center() }
         window.alignTrafficLights()
         layoutPanes()
         applyTheme()
@@ -206,7 +206,7 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         })
     }
 
-    /// The note Jotter opens on: a fresh one with "Start with a new note", else the last note shown; the first
+    /// The note Super Notes opens on: a fresh one with "Start with a new note", else the last note shown; the first
     /// slotted note with "Use slotted notes as your main notes".
     private func restoreCurrentNote() {
         let deck = ephemeralDeck()

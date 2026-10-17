@@ -1,6 +1,6 @@
-// Jotter extension: regex (MIT)
+// Super Notes extension: regex (MIT)
 (function () {
-  var ext = new Extension({ name: "regex", version: "1.0.0", author: "jotter", category: "Text Manipulation", dataScope: "full" });
+  var ext = new Extension({ name: "regex", version: "1.0.0", author: "Super Notes", category: "Text Manipulation", dataScope: "full" });
 
   new Command({
     name: "replace_regex", type: "replaceAll", aliases: ["regex", "sub"], extension: ext,

@@ -150,7 +150,7 @@ var MathEvaluator = {
 global.MathEvaluator = MathEvaluator;
 
 // Called by the host. Returns a JSON string {status, message, payload}.
-function __jotterRun(extensionName, commandName, payloadJSON) {
+function __superNotesRun(extensionName, commandName, payloadJSON) {
   var cmd = null;
   for (var i = 0; i < global.commandRegistry.length; i++) {
     var c = global.commandRegistry[i];
@@ -172,7 +172,7 @@ function __jotterRun(extensionName, commandName, payloadJSON) {
 }
 
 // Called by the host after loading: a JSON description of what the scripts registered.
-function __jotterDescribe() {
+function __superNotesDescribe() {
   return JSON.stringify(global.extensionRegistry.map(function (ext) {
     return {
       name: ext.name, version: ext.version,

@@ -1,6 +1,6 @@
 import AppKit
 
-/// The main note window built offscreen for rendering (JotterRender); it is never shown. Notes come from
+/// The main note window built offscreen for rendering (SuperNotesRender); it is never shown. Notes come from
 /// `Services.store` (front note first), so the caller seeds the store before asking.
 public enum WindowPreview {
     /// The main window's default content size.

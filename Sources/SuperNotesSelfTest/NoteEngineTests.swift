@@ -1,5 +1,5 @@
 import Foundation
-import JotterCore
+import SuperNotesCore
 import NoteEngine
 
 private let fixedRates = ExchangeRates(perUSD: ["EUR": 0.9, "GBP": 0.8, "JPY": 150, "CAD": 1.35, "BTC": 0.00001,

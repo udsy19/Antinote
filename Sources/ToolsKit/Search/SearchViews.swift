@@ -1,5 +1,5 @@
 import AppKit
-import JotterCore
+import SuperNotesCore
 
 /// One Search result: a list row (preview text, meta line, promote/delete buttons on the right) or a card
 /// (mini note keeping keyword colours, meta and buttons along the bottom).

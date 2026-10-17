@@ -1,5 +1,5 @@
 import Foundation
-import JotterCore
+import SuperNotesCore
 import ExtensionsKit
 
 /// Append cases with `SelfTest.cases.append(("name", { check(..., "msg") }))`.
@@ -178,7 +178,7 @@ private func fixedDate() -> Date {
 }
 
 private func tempDirectory() -> URL {
-    let url = FileManager.default.temporaryDirectory.appendingPathComponent("jotter-ext-tests-\(UUID().uuidString)")
+    let url = FileManager.default.temporaryDirectory.appendingPathComponent("supernotes-ext-tests-\(UUID().uuidString)")
     try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
     return url
 }

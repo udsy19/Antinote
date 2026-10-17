@@ -1,4 +1,4 @@
-/* Jotter — website
+/* Super Notes — website
    Palette from the app icon: a green field, a paper card, ink, and a teal check.
    Note windows use the app's default light and dark theme colours (keywords stay neutral here). */
 
@@ -19,7 +19,7 @@
   --well: rgba(6, 22, 19, .42);
   --check: #18A383;
 
-  /* Jotter's default light theme */
+  /* Super Notes' default light theme */
   --n-bg: #FFFFFF;
   --n-text: #473F37;
   --n-2: #8F897F;
@@ -55,7 +55,7 @@
     --well: rgba(0, 0, 0, .35);
     --check: #3CC9A5;
 
-    /* Jotter's default dark theme */
+    /* Super Notes' default dark theme */
     --n-bg: #2A2626;
     --n-text: #EBE3DB;
     --n-2: #8C8784;
@@ -411,9 +411,9 @@ u { color: var(--n-link); text-decoration-color: color-mix(in srgb, var(--n-link
 .foot-title kbd { font-size: .62em; vertical-align: .14em; }
 .foot .install { margin-top: 0; width: 100%; }
 .foot-meta { display: grid; grid-template-columns: auto 1fr; gap: 14px 40px; align-items: center; padding-top: 28px; border-top: 1px solid var(--on-field-rule); font-size: 14px; color: var(--on-field-2); }
-.foot-brand { display: flex; align-items: center; gap: 10px; font: 600 16px/1 var(--display); color: var(--on-field); }
+.foot-brand { display: flex; align-items: center; gap: 10px; font: 600 16px/1 var(--display); color: var(--on-field); white-space: nowrap; }
 .foot-brand img { width: 24px; height: 24px; }
-.foot-brand span { font: 400 14px/1 var(--body); color: var(--on-field-2); margin-left: 6px; }
+.foot-brand span { font: 400 14px/1 var(--body); color: var(--on-field-2); margin-left: 6px; white-space: normal; }
 .foot-links { display: flex; flex-wrap: wrap; gap: 8px 22px; justify-content: flex-end; }
 .foot-links a { text-decoration: none; }
 .foot-links a:hover { text-decoration: underline; }

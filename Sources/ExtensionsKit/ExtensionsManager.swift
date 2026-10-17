@@ -1,6 +1,6 @@
 import AppKit
 import SwiftUI
-import JotterCore
+import SuperNotesCore
 
 /// The time extensions see through `now()`; tests pin it.
 public final class ExtensionClock: @unchecked Sendable {
@@ -41,7 +41,7 @@ public final class ExtensionsManager: ObservableObject, ExtensionsServicing {
     public let userDirectory: URL
     public let clock = ExtensionClock()
 
-    public init(bundledDirectory: URL? = ExtensionsManager.bundledExtensionsURL, userDirectory: URL = JotterPaths.extensions) {
+    public init(bundledDirectory: URL? = ExtensionsManager.bundledExtensionsURL, userDirectory: URL = SuperNotesPaths.extensions) {
         self.bundledDirectory = bundledDirectory
         self.userDirectory = userDirectory
         reload()
@@ -50,7 +50,7 @@ public final class ExtensionsManager: ObservableObject, ExtensionsServicing {
     /// `Bundled/` inside the module's resource bundle: the packaged app's Resources first, then next to the
     /// executable (`swift run`, self-tests). Never touches `Bundle.module`, which traps when the bundle is missing.
     public nonisolated static var bundledExtensionsURL: URL? {
-        let bundleName = "Jotter_ExtensionsKit.bundle"
+        let bundleName = "SuperNotes_ExtensionsKit.bundle"
         var candidates = [Bundle.main.resourceURL, Bundle.main.bundleURL].compactMap { $0?.appendingPathComponent(bundleName) }
         if let exe = Bundle.main.executableURL { candidates.append(exe.deletingLastPathComponent().appendingPathComponent(bundleName)) }
         for candidate in candidates {

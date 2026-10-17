@@ -3,7 +3,7 @@ import Security
 
 /// Generic-password storage for secrets (upload credentials). Account names are free-form ("s3SecretKey").
 public enum Keychain {
-    private static let service = JotterPaths.bundleID
+    private static let service = SuperNotesPaths.bundleID
 
     public static func get(_ account: String) -> String? {
         let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,

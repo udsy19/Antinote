@@ -1,7 +1,7 @@
-// Jotter extension: lines (MIT)
+// Super Notes extension: lines (MIT)
 // Whole-note line operations. Each command replaces the note with the transformed lines.
 (function () {
-  var ext = new Extension({ name: "lines", version: "1.0.0", author: "jotter", category: "Text Manipulation", dataScope: "full" });
+  var ext = new Extension({ name: "lines", version: "1.0.0", author: "Super Notes", category: "Text Manipulation", dataScope: "full" });
 
   ext.register_preference(new Preference({
     key: "keepFirstLine", label: "Keep the first line in place", type: "bool", defaultValue: false,

@@ -1,5 +1,5 @@
 import Foundation
-import JotterCore
+import SuperNotesCore
 
 /// What the sync folder holds for one note id.
 public enum RemoteEntry: Equatable, Sendable {

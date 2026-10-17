@@ -1,5 +1,5 @@
 import Foundation
-import JotterCore
+import SuperNotesCore
 
 // Backups, restore, and JSON export/import.
 extension SQLiteNoteStore {
@@ -19,7 +19,7 @@ extension SQLiteNoteStore {
 
     /// Writes a consistent copy of the open database (`VACUUM INTO`) and prunes old backups.
     public func backup() throws -> URL {
-        let dest = Self.uniqueBackupURL(in: JotterPaths.ensure(backupsFolder))
+        let dest = Self.uniqueBackupURL(in: SuperNotesPaths.ensure(backupsFolder))
         try db.run("VACUUM INTO ?", [.text(dest.path)])
         pruneBackups(keep: max(Defaults[.backupCount], 1))
         return dest
@@ -71,14 +71,14 @@ extension SQLiteNoteStore {
         let check = try probe.query("PRAGMA quick_check") { $0.text(0) }.first
         let hasNotes = try probe.scalarInt("SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'notes'") == 1
         guard check == "ok", hasNotes, probe.userVersion <= schemaVersion else {
-            throw StorageError(message: "\(file.lastPathComponent) is not a valid Jotter backup.")
+            throw StorageError(message: "\(file.lastPathComponent) is not a valid Super Notes backup.")
         }
     }
 
     // MARK: - JSON export / import
 
     private struct Archive: Codable {
-        var format = "jotter.notes"
+        var format = "supernotes.notes"
         var version = 1
         var exported: Date
         var notes: [Note]
@@ -102,7 +102,10 @@ extension SQLiteNoteStore {
     /// imported copy was modified later. Returns the number of notes added or updated.
     @discardableResult public func importJSON(_ data: Data) throws -> Int {
         let archive = try Self.coder().1.decode(Archive.self, from: data)
-        guard archive.format == "jotter.notes" else { throw StorageError(message: "Not a Jotter notes export.") }
+        // "jotter.notes": exports made before the rename to Super Notes (1.2.0).
+        guard ["supernotes.notes", "jotter.notes"].contains(archive.format) else {
+            throw StorageError(message: "Not a Super Notes export.")
+        }
         let t = now()
         var touched: [UUID] = []
         var appended: [UUID] = []

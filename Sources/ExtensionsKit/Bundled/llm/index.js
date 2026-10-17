@@ -1,9 +1,9 @@
-// Jotter extension: llm (MIT)
+// Super Notes extension: llm (MIT)
 // Talks to the provider chosen in this extension's settings through callAPI. Keys come from the Keychain
 // (Settings → Extensions → API Keys); Ollama runs locally and needs no key, but every provider needs the
 // "Let extensions call their own APIs" privacy switch.
 (function () {
-  var ext = new Extension({ name: "llm", version: "1.0.0", author: "jotter", category: "AI", dataScope: "full" });
+  var ext = new Extension({ name: "llm", version: "1.0.0", author: "Super Notes", category: "AI", dataScope: "full" });
 
   var PROVIDERS = {
     openai: { label: "OpenAI", key: "apikey_openai", model: "gpt-4o-mini", style: "chat",

@@ -1,7 +1,7 @@
 import AppKit
-import JotterCore
+import SuperNotesCore
 
-/// What the text view draws on top of / behind the text. Rebuilt by `JotterEditor` after each restyle.
+/// What the text view draws on top of / behind the text. Rebuilt by `SuperNotesEditor` after each restyle.
 struct RenderModel {
     enum Marker: Equatable { case checkbox(checked: Bool), bullet, number(String) }
     /// Hidden, zero-width marker characters (the caret never stops inside them), drawn in the left gutter.
@@ -68,10 +68,10 @@ public extension TextSize {
     var index: Int { Self.allCases.firstIndex(of: self) ?? 2 }
 }
 
-/// The note's NSTextView (TextKit 1). Keyboard, clipboard, mouse and drag events go to `JotterEditor` first;
+/// The note's NSTextView (TextKit 1). Keyboard, clipboard, mouse and drag events go to `SuperNotesEditor` first;
 /// drawing adds paper, code backgrounds, gutter markers, inline results and the summary line.
 final class EditorTextView: NSTextView {
-    weak var editor: JotterEditor?
+    weak var editor: SuperNotesEditor?
     var model = RenderModel() {
         didSet {
             needsDisplay = true

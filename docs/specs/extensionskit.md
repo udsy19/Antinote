@@ -1,6 +1,6 @@
 # ExtensionsKit
 
-JavaScript extensions that add `::commands` to notes. Jotter keeps the JavaScript API shape of the original
+JavaScript extensions that add `::commands` to notes. Super Notes keeps the JavaScript API shape of the original
 extension format so existing extensions can be ported by copying their folder into the extensions folder.
 
 Registered as `Services.extensions` (`ExtensionsServicing`) by `ExtensionsKitModule.install()`.
@@ -17,16 +17,16 @@ An extension is a folder containing:
 
 Sources, in load order:
 
-1. **Bundled** — `Bundled/<name>/` inside the module's resource bundle. Lookup order: `Jotter_ExtensionsKit.bundle`
+1. **Bundled** — `Bundled/<name>/` inside the module's resource bundle. Lookup order: `SuperNotes_ExtensionsKit.bundle`
    in `Bundle.main.resourceURL` (packaged app), then next to the executable (`swift run`, self-tests).
    `Bundle.module` is never touched, so a missing bundle means "no bundled extensions", never a crash.
-2. **User** — `JotterPaths.extensions/<name>/` (`~/Library/Application Support/Jotter/Extensions`). A user extension
+2. **User** — `SuperNotesPaths.extensions/<name>/` (`~/Library/Application Support/Super Notes/Extensions`). A user extension
    with the same name as a bundled one replaces it (that is how a newer version from GitHub wins).
 
 ### Manifest
 
 ```json
-{ "name": "date", "version": "1.0.0", "author": "jotter", "description": "…", "license": "MIT",
+{ "name": "date", "version": "1.0.0", "author": "Super Notes", "description": "…", "license": "MIT",
   "category": "Date & Time", "dataScope": "none", "dependencies": [], "endpoints": [],
   "requiredAPIKeys": [], "files": ["index.js"], "isService": false }
 ```

@@ -1,6 +1,6 @@
 import AppKit
 import Combine
-import JotterCore
+import SuperNotesCore
 import UserNotifications
 
 extension Defaults.Keys {
@@ -12,7 +12,7 @@ extension Defaults.Keys {
 
 public extension Notification.Name {
     /// Posted whenever a timer's display may have changed (every tick while running). `object` is the note's UUID.
-    static let jotterTimersDidChange = Notification.Name("JotterTimersDidChange")
+    static let superNotesTimersDidChange = Notification.Name("SuperNotesTimersDidChange")
 }
 
 /// Runs the timers of `timer` notes: one per note, any number of notes at once.
@@ -130,7 +130,7 @@ public final class TimerManager: NSObject, TimerServicing {
         save()
         scheduleTicker()
         refreshMenuBarText()
-        NotificationCenter.default.post(name: .jotterTimersDidChange, object: noteID)
+        NotificationCenter.default.post(name: .superNotesTimersDidChange, object: noteID)
     }
 
     private func scheduleTicker() {
@@ -154,7 +154,7 @@ public final class TimerManager: NSObject, TimerServicing {
         purgeDeletedNotes()
         for (id, run) in runs where !run.isPaused {
             if let event = run.events(from: lastTick, to: now).last { announce(event, run: run, noteID: id) }
-            NotificationCenter.default.post(name: .jotterTimersDidChange, object: id)
+            NotificationCenter.default.post(name: .superNotesTimersDidChange, object: id)
         }
         lastTick = now
         refreshMenuBarText()
@@ -298,7 +298,7 @@ enum TimerNotifier {
         }
     }
 
-    /// Shows banners while Jotter is frontmost.
+    /// Shows banners while Super Notes is frontmost.
     private final class ForegroundPresenter: NSObject, UNUserNotificationCenterDelegate {
         func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
                                     withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {

@@ -1,7 +1,7 @@
 // swift-tools-version:5.10
 import PackageDescription
 
-// Jotter — a scratchpad for macOS. Feature modules depend only on JotterCore; the app target wires them
+// Super Notes — a scratchpad for macOS. Feature modules depend only on SuperNotesCore; the app target wires them
 // together through the `Services` registry.
 let modules = [
     "StorageKit",     // SQLite note store, The Void, backups, encrypted iCloud Drive sync
@@ -14,21 +14,21 @@ let modules = [
 ]
 
 let package = Package(
-    name: "Jotter",
+    name: "SuperNotes",
     platforms: [.macOS(.v14)],
-    products: [.executable(name: "Jotter", targets: ["Jotter"])],
+    products: [.executable(name: "SuperNotes", targets: ["SuperNotes"])],
     targets: [
-        .target(name: "JotterCore", path: "Sources/JotterCore"),
-        .executableTarget(name: "Jotter", dependencies: ["JotterCore"] + modules.map { .target(name: $0) },
-                          path: "Sources/Jotter"),
-        .executableTarget(name: "JotterSelfTest", dependencies: ["JotterCore"] + modules.map { .target(name: $0) },
-                          path: "Sources/JotterSelfTest"),
-        // Offscreen PNG renders of the UI for visual checks: `.build/debug/JotterRender <out-dir> [scene…]`.
-        .executableTarget(name: "JotterRender", dependencies: ["JotterCore"] + modules.map { .target(name: $0) },
-                          path: "Tools/JotterRender"),
+        .target(name: "SuperNotesCore", path: "Sources/SuperNotesCore"),
+        .executableTarget(name: "SuperNotes", dependencies: ["SuperNotesCore"] + modules.map { .target(name: $0) },
+                          path: "Sources/SuperNotes"),
+        .executableTarget(name: "SuperNotesSelfTest", dependencies: ["SuperNotesCore"] + modules.map { .target(name: $0) },
+                          path: "Sources/SuperNotesSelfTest"),
+        // Offscreen PNG renders of the UI for visual checks: `.build/debug/SuperNotesRender <out-dir> [scene…]`.
+        .executableTarget(name: "SuperNotesRender", dependencies: ["SuperNotesCore"] + modules.map { .target(name: $0) },
+                          path: "Tools/SuperNotesRender"),
     ] + modules.map { name -> Target in
         name == "ExtensionsKit"
-            ? .target(name: name, dependencies: ["JotterCore"], path: "Sources/\(name)", resources: [.copy("Bundled")])
-            : .target(name: name, dependencies: ["JotterCore"], path: "Sources/\(name)")
+            ? .target(name: name, dependencies: ["SuperNotesCore"], path: "Sources/\(name)", resources: [.copy("Bundled")])
+            : .target(name: name, dependencies: ["SuperNotesCore"], path: "Sources/\(name)")
     }
 )

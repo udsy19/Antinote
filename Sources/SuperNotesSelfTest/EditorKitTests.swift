@@ -1,5 +1,5 @@
 import AppKit
-import JotterCore
+import SuperNotesCore
 import EditorKit
 
 /// Feeds keys to a Vim engine, applying each output like the editor does.
@@ -213,7 +213,7 @@ func registerEditorKitTests() {
     }))
     SelfTest.cases.append(("EditorKit.editorSmoke", {
         MainActor.assumeIsolated {
-            let editor = JotterEditorFactory().makeEditor()
+            let editor = SuperNotesEditorFactory().makeEditor()
             editor.view.frame = NSRect(x: 0, y: 0, width: 480, height: 320)
             editor.view.layoutSubtreeIfNeeded()
             var analyses = 0

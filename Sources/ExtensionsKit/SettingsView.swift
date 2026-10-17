@@ -1,6 +1,6 @@
 import AppKit
 import SwiftUI
-import JotterCore
+import SuperNotesCore
 
 /// Settings → Extensions: installed extensions, preferences, API keys, GitHub installs and logs.
 struct ExtensionsSettingsView: View {

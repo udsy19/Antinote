@@ -1,6 +1,6 @@
 import Foundation
 import Combine
-import JotterCore
+import SuperNotesCore
 
 /// Exchange rates as units per 1 USD (e.g. EUR 0.92, BTC 0.0000105).
 public struct ExchangeRates: Sendable {
@@ -25,7 +25,7 @@ public struct ExchangeRates: Sendable {
 public final class RatesProvider: @unchecked Sendable {
     public static let shared = RatesProvider()
     /// Posted on the main queue when rates (fetched or custom) change.
-    public static let didUpdate = Notification.Name("JotterExchangeRatesDidUpdate")
+    public static let didUpdate = Notification.Name("SuperNotesExchangeRatesDidUpdate")
 
     private let lock = NSLock()
     private var fetched: [String: Double] = [:]
@@ -36,7 +36,7 @@ public final class RatesProvider: @unchecked Sendable {
     private var settingsObserver: AnyCancellable?
     private let cacheURL: URL
 
-    init(cacheURL: URL = JotterPaths.support.appendingPathComponent("exchange-rates.json")) {
+    init(cacheURL: URL = SuperNotesPaths.support.appendingPathComponent("exchange-rates.json")) {
         self.cacheURL = cacheURL
     }
 
