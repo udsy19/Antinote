@@ -41,6 +41,8 @@ public final class TimerManager: NSObject, TimerServicing {
 
     // MARK: TimerServicing
 
+    public func playAlertSound() { TimerAlert.play() }
+
     public func start(noteID: UUID, arguments: String) {
         let parsed = TimerSpec.parse(withNoteKeyword(noteID: noteID, arguments: arguments),
                                      workMinutes: Defaults[.pomodoroWorkMinutes],
@@ -188,9 +190,9 @@ public final class TimerManager: NSObject, TimerServicing {
             message = BreakContent.backToWork.randomElement() ?? ""
             sound = "Ping"
         }
-        if Defaults[.timerSounds] { NSSound(named: NSSound.Name(sound))?.play() }
-        let style = Defaults[.timerAlertStyle]
-        if style != .notification {
+        let alert = TimerAlert.settings(for: event, kind: run.spec.kind)
+        if alert.sound { TimerAlert.play(sound) }
+        if alert.fullScreen {
             switch event {
             case .workEnded: TimerOverlay.shared.showBreak(breakScreen(noteID: noteID))
             case .finished:
@@ -199,7 +201,7 @@ public final class TimerManager: NSObject, TimerServicing {
                 TimerOverlay.shared.showAlert(title: title, subtitle: name.isEmpty ? "Session \(n + 1)" : name, message: message)
             }
         }
-        if style != .fullScreen { TimerNotifier.post(title: title, body: message) }
+        if alert.notification { TimerNotifier.post(title: title, body: message) }
     }
 
     /// The break screen for the pomodoro on `noteID`.
@@ -302,5 +304,45 @@ enum TimerNotifier {
                                     withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
             completionHandler([.banner, .list])
         }
+    }
+}
+
+/// What a finished countdown or a pomodoro phase change does (Settings → Timer: "When a countdown finishes",
+/// "When a pomodoro ends").
+public struct TimerAlert: Equatable, Sendable {
+    public var notification: Bool
+    public var fullScreen: Bool
+    public var sound: Bool
+
+    public init(notification: Bool, fullScreen: Bool, sound: Bool) {
+        self.notification = notification; self.fullScreen = fullScreen; self.sound = sound
+    }
+
+    public static let none = TimerAlert(notification: false, fullScreen: false, sound: false)
+    /// Pomodoro phases this short (seconds) or shorter stay silent.
+    public static let shortestAlertedPomodoro: TimeInterval = 30
+
+    /// The settings for `event`: the countdown's for a finished countdown, the pomodoro's when a pomodoro session
+    /// or break longer than 30 seconds ends.
+    public static func settings(for event: TimerEvent, kind: TimerKind) -> TimerAlert {
+        switch event {
+        case .finished:
+            return TimerAlert(notification: Defaults[.countdownNotification], fullScreen: Defaults[.countdownFullScreen],
+                              sound: Defaults[.countdownSound])
+        case .workEnded, .breakEnded:
+            if case let .pomodoro(work, rest) = kind {
+                let ended: TimeInterval = if case .workEnded = event { work } else { rest }
+                if ended <= shortestAlertedPomodoro { return .none }
+            }
+            return TimerAlert(notification: Defaults[.pomodoroNotification], fullScreen: Defaults[.pomodoroFullScreen],
+                              sound: Defaults[.pomodoroSound])
+        }
+    }
+
+    /// Plays a system alert sound at the volume set in Settings → Timer.
+    @MainActor public static func play(_ name: String = "Glass") {
+        guard let sound = NSSound(named: NSSound.Name(name))?.copy() as? NSSound else { return }
+        sound.volume = Float(min(max(Defaults[.timerVolume], 0), 1))
+        sound.play()
     }
 }

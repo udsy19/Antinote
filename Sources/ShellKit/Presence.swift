@@ -22,6 +22,12 @@ final class Presence: NSObject {
         Defaults.publisher(.globalHotkey).sink { [weak self] in self?.registerHotkey($0) }.store(in: &cancellables)
         Defaults.publisher(.pinOnTop).sink { [weak self] _ in self?.applyLevel() }.store(in: &cancellables)
         Defaults.publisher(.launchAtLogin).sink { Self.applyLaunchAtLogin($0) }.store(in: &cancellables)
+        Defaults.changes.filter { $0 == Defaults.Keys.dropdownWidth.name || $0 == Defaults.Keys.dropdownHeight.name }
+            .sink { [weak self] _ in
+                guard let self, self.isDropdown, self.shell.window.isVisible else { return }
+                self.positionDropdown(self.shell.window)
+            }
+            .store(in: &cancellables)
         NotificationCenter.default.publisher(for: MenuBarTimer.didChange)
             .sink { [weak self] _ in MainActor.assumeIsolated { self?.showTimerText() } }.store(in: &cancellables)
         updateStatusItem()
@@ -97,16 +103,15 @@ final class Presence: NSObject {
         return menu
     }
 
-    /// Places the window right under the status item (pseudo-menu-bar mode).
+    /// Places the window right under the status item at the dropdown size (pseudo-menu-bar mode).
     func positionDropdown(_ window: NSWindow) {
         guard isDropdown, let button = statusItem?.button, let buttonWindow = button.window else { return }
         let anchor = buttonWindow.convertToScreen(button.convert(button.bounds, to: nil))
         let screen = buttonWindow.screen ?? NSScreen.active
-        var frame = window.frame
-        frame.origin.x = min(max(anchor.midX - frame.width / 2, screen.visibleFrame.minX + 6),
-                             screen.visibleFrame.maxX - frame.width - 6)
-        frame.origin.y = anchor.minY - 4 - frame.height
-        window.setFrame(frame, display: false)
+        let size = window.frameRect(forContentRect: NSRect(x: 0, y: 0, width: Defaults[.dropdownWidth],
+                                                           height: Defaults[.dropdownHeight])).size
+        let frame = DropdownLayout.frame(size: size, minimum: window.minSize, anchor: anchor, visible: screen.visibleFrame)
+        window.setFrame(frame, display: window.isVisible)
     }
 
     private func applyFrameAutosave() {

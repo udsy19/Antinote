@@ -37,9 +37,48 @@ public enum NoteMode: String, Codable, CaseIterable, Sendable {
         defaultKeywords + (Defaults[.extraKeywords][rawValue] ?? [])
     }
 
+    /// Modes that have keywords, in Settings → Keywords order (the "/" list and the palette use it too).
+    public static let keywordModes: [NoteMode] = [.list, .math, .sum, .average, .count, .code, .timer, .autopaste]
+
+    /// The keyword the "/" list and the command palette insert (Settings → Keywords → Main keyword).
+    public var mainKeyword: String {
+        let all = keywords
+        if let chosen = Defaults[.mainKeywords][rawValue], all.contains(chosen) { return chosen }
+        return all.first ?? ""
+    }
+
+    /// One line on what the keyword does, shown next to it in the "/" list.
+    public var summary: String {
+        switch self {
+        case .plain: ""
+        case .list: "Turns every line into a checklist item."
+        case .math: "Calculates lines ending in “=”, with units and variables."
+        case .sum: "Adds up every number in the note."
+        case .average: "Averages every number in the note."
+        case .count: "Counts lines, words and characters."
+        case .timer: "Starts a stopwatch, countdown or pomodoro."
+        case .code: "Highlights code and pastes it as-is."
+        case .autopaste: "Collects everything you copy with ⌘C."
+        }
+    }
+
+    /// `content` with `keyword` as its first line: an existing keyword line is replaced (its arguments go with it),
+    /// otherwise the keyword goes on a new first line.
+    public static func settingKeyword(_ keyword: String, in content: String) -> String {
+        var lines = content.components(separatedBy: "\n")
+        if let first = lines.first, detect(firstLine: first).mode != .plain {
+            lines[0] = keyword
+        } else {
+            lines.insert(keyword, at: 0)
+        }
+        return lines.joined(separator: "\n")
+    }
+
     /// Detects the mode from the first line: the line must consist of a keyword, optionally followed by arguments
-    /// (e.g. `timer 25m`, `pomodoro 25 5`). Matching is case-insensitive.
+    /// (e.g. `timer 25m`, `pomodoro 25 5`). Matching is case-insensitive. With keywords turned off in Settings,
+    /// every note is plain text.
     public static func detect(firstLine: String) -> (mode: NoteMode, keyword: String, arguments: String) {
+        guard Defaults[.keywordsEnabled] else { return (.plain, "", "") }
         let trimmed = firstLine.trimmingCharacters(in: .whitespaces)
         // "list: Groceries" — a colon right after the keyword introduces a title.
         let token = trimmed.prefix { !$0.isWhitespace && $0 != ":" }

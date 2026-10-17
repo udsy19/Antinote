@@ -199,6 +199,15 @@ public struct ListLine: Equatable {
         }
     }
 
+    /// The first marker of a new list in `style`.
+    public static func kind(_ style: ListStyle) -> Kind {
+        switch style {
+        case .checkbox: .checkbox(checked: false)
+        case .bullet: .bullet("-")
+        case .numbered: .numbered(1)
+        }
+    }
+
     public var text: String { indent + ListLine.marker(kind) + content }
     public var isChecked: Bool { kind == .checkbox(checked: true) }
     /// Indentation width with tabs counted as four columns.
@@ -209,6 +218,35 @@ public struct ListLine: Equatable {
 
 extension EditorLogic {
     public enum Lists {
+        /// Settings → Editor → Automatic lists and Keywords → List: which markers make list items outside list
+        /// notes, and what plain lines in a list note become.
+        public struct Options: Equatable {
+            public var defaultStyle: ListStyle
+            public var checkboxes: Bool, bullets: Bool, numbered: Bool
+            public init(defaultStyle: ListStyle = .checkbox, checkboxes: Bool = true, bullets: Bool = true, numbered: Bool = true) {
+                self.defaultStyle = defaultStyle; self.checkboxes = checkboxes; self.bullets = bullets; self.numbered = numbered
+            }
+            public static var current: Options {
+                Options(defaultStyle: Defaults[.defaultListStyle], checkboxes: Defaults[.inlineCheckboxes],
+                        bullets: Defaults[.inlineBullets], numbered: Defaults[.inlineNumbered])
+            }
+            /// Every marker counts (list notes always have their markers).
+            public var allMarkers: Options { Options(defaultStyle: defaultStyle) }
+
+            public func allows(_ kind: ListLine.Kind) -> Bool {
+                switch kind {
+                case .checkbox: checkboxes
+                case .bullet: bullets
+                case .numbered: numbered
+                }
+            }
+
+            /// The list item on `line`, when its marker counts.
+            public func item(_ line: String) -> ListLine? {
+                ListLine.parse(line).flatMap { allows($0.kind) ? $0 : nil }
+            }
+        }
+
         /// "Toggle Checklist Item": toggles a checkbox; turns any other line into an unchecked item.
         public static func toggled(_ line: String) -> String {
             if var l = ListLine.parse(line) {
@@ -219,15 +257,21 @@ extension EditorLogic {
             return indent + "[ ] " + line.dropFirst(indent.count)
         }
 
-        /// ⌘⇧M: none → checkbox → bullet → numbered → checkbox.
-        public static func cycled(_ line: String) -> String {
-            guard var l = ListLine.parse(line) else { return toggled(line) }
+        /// ⌘⇧M: none → the default list style; then checkbox → bullet → numbered → checkbox.
+        public static func cycled(_ line: String, start: ListStyle = .checkbox) -> String {
+            guard var l = ListLine.parse(line) else { return started(line, style: start) }
             switch l.kind {
             case .checkbox: l.kind = .bullet("-")
             case .bullet: l.kind = .numbered(1)
             case .numbered: l.kind = .checkbox(checked: false)
             }
             return l.text
+        }
+
+        /// A plain line turned into a `style` list item (indentation kept).
+        public static func started(_ line: String, style: ListStyle) -> String {
+            let indent = String(line.prefix { $0 == " " || $0 == "\t" })
+            return indent + ListLine.marker(ListLine.kind(style)) + line.dropFirst(indent.count)
         }
 
         public static func indented(_ line: String) -> String { "\t" + line }
@@ -242,8 +286,8 @@ extension EditorLogic {
             renumbered(Lines.transform(st, lines: Lines.covered(st.ns, st.selection), toggled))
         }
 
-        public static func cycle(_ st: TextState) -> TextState {
-            renumbered(Lines.transform(st, lines: Lines.covered(st.ns, st.selection), cycled))
+        public static func cycle(_ st: TextState, start: ListStyle = .checkbox) -> TextState {
+            renumbered(Lines.transform(st, lines: Lines.covered(st.ns, st.selection)) { cycled($0, start: start) })
         }
 
         public static func indent(_ st: TextState, outdent: Bool) -> TextState {
@@ -252,10 +296,10 @@ extension EditorLogic {
 
         /// Return inside a list item: split it into a new item (unchecked / same bullet / next number), or — on an
         /// empty item — outdent it, or remove the marker at the top level. Nil when the caret line is not an item.
-        public static func continued(_ st: TextState) -> TextState? {
+        public static func continued(_ st: TextState, options: Options = Options()) -> TextState? {
             guard st.selection.length == 0 else { return nil }
             let s = st.ns, lineRange = Lines.range(s, at: st.selection.location)
-            guard let item = ListLine.parse(s.substring(with: lineRange)) else { return nil }
+            guard let item = options.item(s.substring(with: lineRange)) else { return nil }
             let markerEnd = lineRange.location + (item.indent as NSString).length + item.markerLength
             guard st.selection.location >= markerEnd else { return nil }
             if item.content.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -305,16 +349,50 @@ extension EditorLogic {
             return TextState(text, NSRange(location: start, length: max(0, map(NSMaxRange(st.selection)) - start)))
         }
 
-        /// List notes: every non-empty line after the keyword line becomes an unchecked item, except `# headers`
-        /// and `// comments`.
-        public static func normalizedListNote(_ st: TextState) -> TextState {
+        /// List notes: every non-empty line after the keyword line becomes an item in the default list style
+        /// (`style`), except `# headers` and `// comments`.
+        public static func normalizedListNote(_ st: TextState, style: ListStyle = .checkbox) -> TextState {
             let count = Lines.ranges(st.ns).count
             guard count > 1 else { return st }
-            return Lines.transform(st, lines: 1...(count - 1)) { line in
+            let normalized = Lines.transform(st, lines: 1...(count - 1)) { line in
                 let t = line.trimmingCharacters(in: .whitespaces)
                 if t.isEmpty || t.hasPrefix("#") || t.hasPrefix("//") || ListLine.parse(line) != nil { return line }
-                return toggled(line)
+                return started(line, style: style)
             }
+            return style == .numbered && normalized.text != st.text ? renumbered(normalized) : normalized
+        }
+
+        /// A line whose text ends in one of `triggers` ("milk /x"), checked off with the trigger removed — always
+        /// as a checkbox. The line must be a list item (`item`), or any text line of a list note. Nil otherwise.
+        public static func checkedByTrigger(_ line: String, triggers: [String], item: ListLine?, inListNote: Bool) -> String? {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty, !trimmed.hasPrefix("#"), !trimmed.hasPrefix("//") else { return nil }
+            let indent = item?.indent ?? String(line.prefix { $0 == " " || $0 == "\t" })
+            guard item != nil || inListNote else { return nil }
+            let content = item?.content ?? String(line.dropFirst(indent.count))
+            for trigger in triggers where !trigger.isEmpty {
+                guard content.lowercased().hasSuffix(trigger.lowercased()) else { continue }
+                let text = String(content.dropLast(trigger.count)).trimmingCharacters(in: .whitespaces)
+                return indent + ListLine.marker(.checkbox(checked: true)) + text
+            }
+            return nil
+        }
+
+        /// Typing a check trigger at the end of the caret's line checks the item off (then keeps, moves or deletes it
+        /// per `behavior`). Nil when the caret line doesn't end in a trigger.
+        public static func checkOffByTrigger(_ st: TextState, triggers: [String], options: Options, inListNote: Bool,
+                                             behavior: CheckedItemBehavior) -> TextState? {
+            let s = st.ns, lineRange = Lines.range(s, at: st.selection.location)
+            let index = Lines.index(s, at: lineRange.location)
+            guard st.selection.length == 0, st.selection.location == NSMaxRange(lineRange), !(inListNote && index == 0) else {
+                return nil
+            }
+            let line = s.substring(with: lineRange)
+            guard let checked = checkedByTrigger(line, triggers: triggers, item: options.item(line), inListNote: inListNote)
+            else { return nil }
+            let caretOnLine = TextState(s.replacingCharacters(in: lineRange, with: checked),
+                                        NSRange(location: lineRange.location + (checked as NSString).length, length: 0))
+            return place(caretOnLine, checkedLine: index, behavior: behavior)
         }
 
         /// Clicking a checkbox: toggles line `index`; a newly checked item is then kept, moved to the bottom of its
@@ -322,9 +400,17 @@ extension EditorLogic {
         public static func check(_ st: TextState, line index: Int, behavior: CheckedItemBehavior) -> TextState {
             var lines = st.text.components(separatedBy: "\n")
             guard lines.indices.contains(index) else { return st }
-            let toggledLine = toggled(lines[index])
-            let becameChecked = ListLine.parse(toggledLine)?.isChecked == true
-            lines[index] = toggledLine
+            lines[index] = toggled(lines[index])
+            let caret = min(st.selection.location, (lines.joined(separator: "\n") as NSString).length)
+            return place(TextState(lines.joined(separator: "\n"), NSRange(location: caret, length: 0)), checkedLine: index,
+                         behavior: behavior)
+        }
+
+        /// Keeps, moves to the bottom of its list block, or deletes line `index` when it is a checked item.
+        static func place(_ st: TextState, checkedLine index: Int, behavior: CheckedItemBehavior) -> TextState {
+            var lines = st.text.components(separatedBy: "\n")
+            guard lines.indices.contains(index), behavior != .keep else { return st }
+            let becameChecked = ListLine.parse(lines[index])?.isChecked == true
             if becameChecked {
                 switch behavior {
                 case .keep: break
@@ -424,10 +510,11 @@ extension EditorLogic {
 
 extension EditorLogic {
     /// The caret inside the line rect AppKit hands to `drawInsertionPoint` (flipped): 2 pt wide, cap height
-    /// + 7.8 pt tall, its foot on the bottom of the line less the font's leading.
-    public static func caretRect(lineRect: CGRect, capHeight: CGFloat, leading: CGFloat) -> CGRect {
+    /// + 7.8 pt tall, its foot on the bottom of the line less the font's leading, raised by `nudge` points (the
+    /// caret height offset setting; negative lowers it).
+    public static func caretRect(lineRect: CGRect, capHeight: CGFloat, leading: CGFloat, nudge: CGFloat = 0) -> CGRect {
         let height = capHeight + 7.8
-        return CGRect(x: lineRect.minX, y: lineRect.maxY - leading - height, width: 2, height: height)
+        return CGRect(x: lineRect.minX, y: lineRect.maxY - leading - height - nudge, width: 2, height: height)
     }
 
     /// The `backgroundFade` fill behind a fenced code block: its line fragments grown 4 pt sideways and 2 pt
@@ -448,6 +535,121 @@ extension EditorLogic {
         case "replaceall": ("doc.text.fill", \.accent2Main)
         case "openurl": ("link", \.accent2Main)
         default: ("questionmark.circle", \.typeLight)
+        }
+    }
+}
+
+// MARK: - "/" command list
+
+extension EditorLogic {
+    /// The inline "/" list: typing "/" at the start of a line (or after a space) lists the palette's commands
+    /// under the caret; letters after it filter them.
+    public enum Slash {
+        /// The "/query" just before `caret` on the caret's line: a "/" at the start of the line's text (after any
+        /// indentation and list marker) or after a space, then letters and digits only. With `emptyLineOnly` the "/"
+        /// must be the only thing on its line (math and code notes, where "/" divides or starts a comment).
+        public static func token(_ st: TextState, emptyLineOnly: Bool = false) -> (range: NSRange, query: String)? {
+            guard st.selection.length == 0 else { return nil }
+            let s = st.ns, line = Lines.range(s, at: st.selection.location)
+            let before = s.substring(with: NSRange(location: line.location, length: st.selection.location - line.location))
+            guard let slash = before.lastIndex(of: "/") else { return nil }
+            let query = String(before[before.index(after: slash)...])
+            guard query.allSatisfy({ $0.isLetter || $0.isNumber }) else { return nil }
+            let lead = String(before[..<slash])
+            let ok: Bool
+            if emptyLineOnly {
+                ok = lead.allSatisfy { $0 == " " || $0 == "\t" } && NSMaxRange(line) == st.selection.location
+            } else {
+                let afterMarker = ListLine.parse(lead).map { $0.content.isEmpty } ?? false
+                ok = lead.isEmpty || lead.last == " " || lead.last == "\t" || afterMarker
+            }
+            guard ok else { return nil }
+            let start = line.location + (lead as NSString).length
+            return (NSRange(location: start, length: st.selection.location - start), query)
+        }
+
+        /// The quick pick for a digit typed right after a bare "/": 1…9 choose rows 0…8.
+        public static func quickPick(_ key: String, query: String, rows: Int) -> Int? {
+            guard query.isEmpty, key.count == 1, let n = Int(key), (1...9).contains(n), n <= rows else { return nil }
+            return n - 1
+        }
+
+        /// Keyword commands first (in their order), then the rest, for a bare "/"; typed queries keep the ranking.
+        public static func ordered(_ commands: [PaletteCommand], query: String) -> [PaletteCommand] {
+            guard query.isEmpty else { return commands }
+            return commands.filter { $0.keyword != nil } + commands.filter { $0.keyword == nil }
+        }
+    }
+}
+
+// MARK: - Find and replace
+
+extension EditorLogic {
+    /// The find shelf's matching: "Aa" (match case) and the match type popup.
+    public enum Find {
+        public enum MatchType: String, CaseIterable, Sendable {
+            case contains, matchesWord, startsWith, endsWith, regex
+            public var title: String {
+                switch self {
+                case .contains: "Contains"
+                case .matchesWord: "Matches Word"
+                case .startsWith: "Starts With"
+                case .endsWith: "Ends With"
+                case .regex: "Regex"
+                }
+            }
+        }
+
+        public struct Options: Equatable, Sendable {
+            public var matchCase: Bool
+            public var type: MatchType
+            public init(matchCase: Bool = false, type: MatchType = .contains) { self.matchCase = matchCase; self.type = type }
+        }
+
+        /// The regular expression for `term` (nil for an empty term or an invalid regex).
+        static func expression(_ term: String, _ options: Options) -> NSRegularExpression? {
+            guard !term.isEmpty else { return nil }
+            let word = #"[\p{L}\p{N}_]"#, literal = NSRegularExpression.escapedPattern(for: term)
+            let pattern: String = switch options.type {
+            case .contains: literal
+            case .matchesWord: "(?<!\(word))\(literal)(?!\(word))"
+            case .startsWith: "(?<!\(word))\(literal)"
+            case .endsWith: "\(literal)(?!\(word))"
+            case .regex: term
+            }
+            return try? NSRegularExpression(pattern: pattern, options: options.matchCase ? [] : [.caseInsensitive])
+        }
+
+        /// Every non-empty match of `term` in `text`, in order (UTF-16 ranges).
+        public static func matches(of term: String, in text: String, options: Options) -> [NSRange] {
+            guard let regex = expression(term, options) else { return [] }
+            return regex.matches(in: text, range: NSRange(location: 0, length: (text as NSString).length))
+                .map(\.range).filter { $0.length > 0 }
+        }
+
+        /// The match to show next: the first one starting at or after `location` (before it, backwards), wrapping.
+        public static func next(from location: Int, in matches: [NSRange], backwards: Bool) -> Int? {
+            guard !matches.isEmpty else { return nil }
+            if backwards { return matches.lastIndex { $0.location < location } ?? matches.count - 1 }
+            return matches.firstIndex { $0.location >= location } ?? 0
+        }
+
+        /// `text` with every match replaced (regex replacements may use `$1`), and how many there were.
+        public static func replacingAll(_ term: String, with replacement: String, in text: String,
+                                        options: Options) -> (text: String, count: Int) {
+            guard let regex = expression(term, options) else { return (text, 0) }
+            let full = NSRange(location: 0, length: (text as NSString).length)
+            let count = regex.numberOfMatches(in: text, range: full)
+            let template = options.type == .regex ? replacement : NSRegularExpression.escapedTemplate(for: replacement)
+            return (regex.stringByReplacingMatches(in: text, range: full, withTemplate: template), count)
+        }
+
+        /// What replacing the single match `range` puts there (regex templates expanded).
+        public static func replacement(for range: NSRange, in text: String, term: String, with replacement: String,
+                                       options: Options) -> String {
+            guard options.type == .regex, let regex = expression(term, options),
+                  let m = regex.firstMatch(in: text, range: range), m.range == range else { return replacement }
+            return regex.replacementString(for: m, in: text, offset: 0, template: replacement)
         }
     }
 }

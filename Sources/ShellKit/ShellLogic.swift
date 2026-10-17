@@ -201,6 +201,20 @@ public enum SlotBarLayout {
     }
 }
 
+// MARK: - Dropdown window
+
+/// Where the window goes when it drops down from the menu bar.
+public enum DropdownLayout {
+    /// `size` (Settings → General → Dropdown window size) kept at least `minimum` and inside `visible`, centred
+    /// under `anchor` (the status item), 4 pt below it and at least 6 pt from the screen's sides.
+    public static func frame(size: CGSize, minimum: CGSize, anchor: CGRect, visible: CGRect) -> CGRect {
+        let width = min(max(size.width, minimum.width), visible.width - 12)
+        let height = min(max(size.height, minimum.height), anchor.minY - 4 - visible.minY)
+        let x = min(max(anchor.midX - width / 2, visible.minX + 6), visible.maxX - width - 6)
+        return CGRect(x: x, y: anchor.minY - 4 - height, width: width, height: height)
+    }
+}
+
 // MARK: - Locked notes
 
 /// Which locked notes are open in this session. Unlocks expire `minutes` after a locked note was last in focus.

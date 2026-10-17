@@ -27,6 +27,9 @@ private struct Captioned<Control: View>: View {
 struct GeneralSettings: View {
     @Default(.appPresence) private var presence
     @Default(.launchAtLogin) private var launchAtLogin
+    @Default(.startWithNewNote) private var startWithNewNote
+    @Default(.dropdownWidth) private var dropdownWidth
+    @Default(.dropdownHeight) private var dropdownHeight
     @Default(.restorePinState) private var restorePin
     @Default(.hideOnFocusLoss) private var hideOnFocusLoss
     @Default(.swipeNavigation) private var swipe
@@ -37,6 +40,9 @@ struct GeneralSettings: View {
             ICloudSection()
             Section("Startup") {
                 Toggle("Launch Jotter at login", isOn: $launchAtLogin)
+                Captioned("Opening Jotter starts on a fresh note; an empty latest note is reused.") {
+                    Toggle("Start with a new note", isOn: $startWithNewNote)
+                }
             }
             Section("Menu bar & Dock") {
                 Picker("Show Jotter in", selection: $presence) {
@@ -45,6 +51,17 @@ struct GeneralSettings: View {
                 if presence == .pseudoMenuBar {
                     Caption("Jotter drops down under its menu bar icon and hides when you click anywhere else.")
                 }
+                LabeledContent {
+                    HStack(spacing: 6) {
+                        TextField("Width", value: $dropdownWidth, format: .number).labelsHidden().frame(width: 72)
+                        Text("×").foregroundStyle(.secondary)
+                        TextField("Height", value: $dropdownHeight, format: .number).labelsHidden().frame(width: 72)
+                    }
+                } label: {
+                    Text("Dropdown window size")
+                    Text("Width × height in points while Jotter drops down from the menu bar.")
+                }
+                .disabled(presence != .pseudoMenuBar)
             }
             Section("Window") {
                 Captioned("Applies only while the window is unpinned.") {
@@ -114,10 +131,50 @@ struct AppearanceSettings: View {
     @Default(.doubleFontSize) private var doubleFontSize
     @Default(.lineSpacing) private var lineSpacing
     @Default(.translucent) private var translucent
+    @Default(.solidBarsWhenTranslucent) private var solidBars
+    @Default(.translucencyOpacity) private var translucencyOpacity
+    @Default(.showBottomBar) private var bottomBar
+    @Default(.showNoteCount) private var noteCount
     @Default(.showNoteDates) private var dates
+    @Default(.showCreationDate) private var creationDate
     @Default(.showLatestNoteIndicator) private var latestIndicator
+    @Default(.slottedLightTheme) private var slottedLight
+    @Default(.slottedDarkTheme) private var slottedDark
     @Default(.appIcon) private var appIcon
     @State private var themes = Theme.all
+    /// Which pair the theme grid edits ("Applies to").
+    @State private var themeTarget = ThemeTarget.ephemeral
+
+    enum ThemeTarget: Hashable { case ephemeral, slotted }
+
+    /// Slotted notes follow the ephemeral pair while neither slotted theme is set.
+    private var slottedFollowsEphemeral: Binding<Bool> {
+        Binding(get: { slottedLight.isEmpty && slottedDark.isEmpty }, set: { follow in
+            if follow {
+                slottedLight = ""; slottedDark = ""
+            } else {
+                slottedLight = lightTheme; slottedDark = darkTheme
+            }
+            NotificationCenter.default.post(name: Theme.didChange, object: nil)
+        })
+    }
+
+    /// The light/dark pair the grid shows and changes.
+    private func pair(dark: Bool) -> Binding<String> {
+        Binding(get: {
+            switch themeTarget {
+            case .ephemeral: dark ? darkTheme : lightTheme
+            case .slotted: Theme.selectedID(dark: dark, slotted: true)
+            }
+        }, set: { id in
+            switch (themeTarget, dark) {
+            case (.ephemeral, false): lightTheme = id
+            case (.ephemeral, true): darkTheme = id
+            case (.slotted, false): slottedLight = id
+            case (.slotted, true): slottedDark = id
+            }
+        })
+    }
 
     private var supportsTranslucency: Bool {
         if #available(macOS 15, *) { return true } else { return false }
@@ -154,15 +211,49 @@ struct AppearanceSettings: View {
                 Captioned("Requires macOS 15 (Sequoia) or later.") {
                     Toggle("Make Jotter translucent", isOn: $translucent).disabled(!supportsTranslucency)
                 }
+                Group {
+                    Captioned("Otherwise the bars float on a blurred backdrop.") {
+                        Toggle("Use solid colors for top and bottom bars when translucent", isOn: $solidBars)
+                    }
+                    LabeledContent {
+                        HStack {
+                            Slider(value: $translucencyOpacity, in: 0...1).frame(width: 180)
+                            Text("\(Int((translucencyOpacity * 100).rounded()))%").monospacedDigit()
+                                .frame(width: 44, alignment: .trailing)
+                        }
+                    } label: {
+                        Text("Translucency opacity")
+                        Text("0% uses the most translucent macOS material.")
+                    }
+                }
+                .disabled(!translucent || !supportsTranslucency)
             }
             Section("Bottom bar") {
-                Toggle("Show note modified/created time", isOn: $dates)
+                Toggle("Show bottom bar", isOn: $bottomBar)
+                Group {
+                    Captioned("e.g. “14 of 18”.") { Toggle("Show note count", isOn: $noteCount) }
+                    Toggle("Show note modified/created time", isOn: $dates)
+                    Toggle("Show the note creation date", isOn: $creationDate)
+                }
+                .disabled(!bottomBar)
                 Captioned("Marks the most recent note on the bottom right.") {
                     Toggle("Show latest-note indicator", isOn: $latestIndicator)
                 }
             }
             Section("Themes") {
-                ThemeGrid(themes: themes, light: $lightTheme, dark: $darkTheme)
+                Picker("Applies to", selection: $themeTarget) {
+                    Text("Ephemeral").tag(ThemeTarget.ephemeral)
+                    Text("Slotted").tag(ThemeTarget.slotted)
+                }
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 320)
+                if themeTarget == .slotted {
+                    Toggle("Use the Ephemeral themes in Slotted too", isOn: slottedFollowsEphemeral)
+                    if slottedFollowsEphemeral.wrappedValue {
+                        Caption("Slotted notes follow the Ephemeral themes. Pick one below to give them their own.")
+                    }
+                }
+                ThemeGrid(themes: themes, light: pair(dark: false), dark: pair(dark: true))
                 LabeledContent {
                     HStack {
                         Button("Reload") {
@@ -323,8 +414,16 @@ struct EditorSettings: View {
     @Default(.listContinuity) private var continuity
     @Default(.checkedItemBehavior) private var checked
     @Default(.vimMode) private var vim
+    @Default(.vimMotionTimeout) private var motionTimeout
     @Default(.keepIndentOnReturn) private var keepIndent
     @Default(.allowTextReplacements) private var replacements
+    @Default(.checkSpelling) private var spelling
+    @Default(.inlineCheckboxes) private var inlineCheckboxes
+    @Default(.inlineBullets) private var inlineBullets
+    @Default(.inlineNumbered) private var inlineNumbered
+    @Default(.autoCopySelection) private var autoCopy
+    @Default(.caretOffset) private var caretOffset
+    @Default(.caretOffsetInLists) private var caretOffsetInLists
 
     private let families = NSFontManager.shared.availableFontFamilies
 
@@ -333,23 +432,47 @@ struct EditorSettings: View {
             Section("Typing") {
                 Toggle("Keep indentation of the previous line when pressing Return", isOn: $keepIndent)
                 Toggle("Allow macOS text replacements", isOn: $replacements)
+                Captioned("Code notes are never spell-checked.") {
+                    Toggle("Check spelling", isOn: $spelling)
+                }
             }
             Section("Vim mode") {
                 Captioned("Modal editing with Normal, Insert, and Visual modes. Press Escape to return to Normal mode.") {
                     Toggle("Enable vim mode", isOn: $vim)
                 }
+                LabeledContent {
+                    HStack {
+                        Slider(value: $motionTimeout, in: 200...3000, step: 50).frame(width: 160)
+                        Text(String(format: "%.0fms", motionTimeout)).monospacedDigit().frame(width: 64, alignment: .trailing)
+                    }
+                } label: {
+                    Text("Motion timeout")
+                    Text("How long to wait for the next key of a multi-key command such as “dd” or “2w”.")
+                }
+                .disabled(!vim)
             }
             Section("Automatic lists") {
+                Captioned("Start a line with “[ ]” or “[x]”.") { Toggle("Checkboxes", isOn: $inlineCheckboxes) }
+                Captioned("Start a line with “-”, “*” or “•”.") { Toggle("Bullets", isOn: $inlineBullets) }
+                Captioned("Start a line with “1.”; items renumber themselves as the list changes.") {
+                    Toggle("Numbered lists", isOn: $inlineNumbered)
+                }
                 Captioned("Return on a list line starts the next item; Return on an empty item ends the list.") {
                     Toggle("Continue lists when pressing Return", isOn: $continuity)
                 }
-                Picker("When an item is checked", selection: $checked) {
+                Picker(selection: $checked) {
                     Text("Stays in place").tag(CheckedItemBehavior.keep)
                     Text("Moves to the bottom").tag(CheckedItemBehavior.moveToBottom)
                     Text("Is deleted").tag(CheckedItemBehavior.delete)
+                } label: {
+                    Text("When an item is checked")
+                    Text("Moving keeps the item inside its list. Both can be undone.")
                 }
             }
             Section("Copy") {
+                Captioned("Selecting text copies it right away. Quick, but it takes some getting used to.") {
+                    Toggle("Auto-copy selected text", isOn: $autoCopy)
+                }
                 Captioned("⌘C with no selection copies the whole note.") {
                     Toggle("Copy entire note when nothing is selected", isOn: $copyWhole)
                 }
@@ -391,12 +514,30 @@ struct EditorSettings: View {
                     Divider()
                     ForEach(families, id: \.self) { Text($0).tag($0) }
                 }
+                caretSlider("Caret height offset", value: $caretOffset)
+                caretSlider("Caret height offset in lists", value: $caretOffsetInLists)
                 Toggle("Force right-to-left (RTL) layout", isOn: $rtl)
-                Button("Reset Font to Default") { Defaults.reset(.fontName); Defaults.reset(.forceRTL) }
+                Button("Reset Font & Offsets to Defaults") {
+                    for key in [Defaults.Keys.caretOffset, .caretOffsetInLists] { Defaults.reset(key) }
+                    Defaults.reset(.fontName)
+                    Defaults.reset(.forceRTL)
+                }
             } header: {
                 Text("Typography & language (beta)")
             } footer: {
-                Caption("For non-English typography: pick a font that supports your language.")
+                Caption("For non-English typography: pick a font that supports your language, and move the caret if it sits too high or too low.")
+            }
+        }
+    }
+}
+
+extension EditorSettings {
+    /// A −5…5 pt slider for the caret's height (positive raises it).
+    private func caretSlider(_ title: String, value: Binding<Double>) -> some View {
+        LabeledContent(title) {
+            HStack {
+                Slider(value: value, in: -5...5, step: 0.5).frame(width: 160)
+                Text(String(format: "%+.1f pt", value.wrappedValue)).monospacedDigit().frame(width: 64, alignment: .trailing)
             }
         }
     }
@@ -408,13 +549,28 @@ struct EditorSettings: View {
 /// Jotter's import/export and Reset.
 struct NotesSettings: View {
     @Default(.newNoteAfterMinutes) private var newNoteAfter
+    @Default(.autoDeleteUnmodifiedDays) private var autoDeleteDays
+    @Default(.showArchivedInStack) private var showArchived
     @Default(.voidRetentionDays) private var retention
     @Default(.alwaysShowSlotsBar) private var slotsBar
     @Default(.shellKitNewNotesInEphemeral) private var newInEphemeral
     @Default(.shellKitSplitHorizontal) private var splitHorizontal
+    @Default(.slottedAsMain) private var slottedAsMain
     @Default(.relockAfterMinutes) private var relock
+    @Default(.autoUnlockDelay) private var autoUnlock
     @Default(.backupCount) private var backupCount
+    @Default(.backupIntervalHours) private var backupInterval
     @State private var backups: [URL] = []
+    @State private var staleBefore = Calendar.current.date(byAdding: .month, value: -1, to: Date()) ?? Date()
+
+    /// "Auto-delete unmodified notes after" choices, in days.
+    private static let autoDeleteChoices: [(Int, String)] = [
+        (1, "1 day"), (3, "3 days"), (7, "1 week"), (14, "2 weeks"), (30, "1 month"), (90, "3 months"), (365, "1 year"),
+    ]
+    /// "Backup interval" choices, in hours.
+    private static let backupIntervals: [(Int, String)] = [
+        (1, "Every hour"), (6, "Every 6 hours"), (12, "Every 12 hours"), (24, "Every day"), (168, "Every week"),
+    ]
 
     /// "Create a new note after" choices, in minutes.
     private static let newNoteChoices: [(Int, String)] = [
@@ -434,6 +590,27 @@ struct NotesSettings: View {
                     Text("Create a new note after")
                     Text("Timer starts whenever the window loses focus. An empty latest note is reused.")
                 }
+                Picker(selection: $autoDeleteDays) {
+                    Text("Never").tag(0)
+                    ForEach(Self.autoDeleteChoices, id: \.0) { Text($0.1).tag($0.0) }
+                } label: {
+                    Text("Auto-delete unmodified notes after")
+                    Text("Notes you haven't changed in that long go to The Void. Slotted and archived notes stay.")
+                }
+                LabeledContent {
+                    HStack {
+                        DatePicker("Date", selection: $staleBefore, in: ...Date(), displayedComponents: .date).labelsHidden()
+                        Button("Move to The Void") { Maintenance.voidNotes(notModifiedSince: staleBefore) }
+                    }
+                } label: {
+                    Text("Delete all notes not modified since")
+                    Text("You can bring them back from The Void until it is emptied.")
+                }
+            }
+            Section("Archive") {
+                Captioned("Archived notes stay out of search; search for “archived” to browse them.") {
+                    Toggle("Show archived notes in the note stack", isOn: $showArchived)
+                }
             }
             Section("Locked notes") {
                 Picker(selection: $relock) {
@@ -442,6 +619,12 @@ struct NotesSettings: View {
                 } label: {
                     Text("Require Touch ID or password again after")
                     Text("Counted from the last time a locked note was in focus. Quitting Jotter always locks them.")
+                }
+                Picker(selection: $autoUnlock) {
+                    ForEach(AutoUnlock.choices, id: \.self) { delay in Text(Self.autoUnlockLabel(delay)).tag(delay) }
+                } label: {
+                    Text("Ask to unlock automatically")
+                    Text("Staying on a locked note brings up Touch ID by itself; passing by quickly doesn't. “Never” waits for the Unlock button.")
                 }
                 LabeledContent {
                     Button("Relock Now") { Shell.shared.relockAll() }
@@ -469,6 +652,9 @@ struct NotesSettings: View {
                 }
             }
             Section("Slotted notes") {
+                Captioned("Jotter opens on your slotted notes instead of the ephemeral stack.") {
+                    Toggle("Use slotted notes as your main notes", isOn: $slottedAsMain)
+                }
                 Captioned("Otherwise ⌘N on a slotted note only shows a reminder.") {
                     Toggle("Create new notes in the ephemeral pane when in slotted view", isOn: $newInEphemeral)
                 }
@@ -483,6 +669,12 @@ struct NotesSettings: View {
                 } label: {
                     Text("Auto-backups to keep")
                     Text("New backups overwrite the oldest one.")
+                }
+                Picker("Backup interval", selection: $backupInterval) {
+                    ForEach(Self.backupIntervals, id: \.0) { Text($0.1).tag($0.0) }
+                    if !Self.backupIntervals.contains(where: { $0.0 == backupInterval }) {
+                        Text("Every \(backupInterval) hours").tag(backupInterval)
+                    }
                 }
                 LabeledContent("Back up now") {
                     Button("Make Backup") { Maintenance.makeBackup(); backups = Services.store.backups }
@@ -523,14 +715,20 @@ struct NotesSettings: View {
         }
         .onAppear { backups = Services.store?.backups ?? [] }
     }
+
+    static func autoUnlockLabel(_ delay: Double) -> String {
+        switch delay {
+        case ..<0: "Never"
+        case 0: "Right away"
+        default: delay < 1 ? String(format: "After %.1f seconds", delay) : "After \(Int(delay)) second\(delay == 1 ? "" : "s")"
+        }
+    }
 }
 
 // MARK: - Keywords
 
-/// The keyword groups of Settings › Keywords, in the reference's order and with its short titles.
+/// The keyword groups' short titles in Settings › Keywords (`NoteMode.keywordModes` gives their order).
 public enum KeywordGroups {
-    public static let order: [NoteMode] = [.list, .math, .sum, .average, .count, .code, .timer, .autopaste]
-
     /// "List", "Math", "Sum", "Avg", "Count", "Code", "Timer"; AutoPaste is "Paste".
     public static func title(_ mode: NoteMode) -> String {
         switch mode {
@@ -542,7 +740,7 @@ public enum KeywordGroups {
     }
 }
 
-/// One group per keyword (`KeywordGroups.order`).
+/// One group per keyword (`NoteMode.keywordModes`).
 struct KeywordsSettings: View {
     @Default(.primaryCurrency) private var primary
     @Default(.secondaryCurrency) private var secondary
@@ -555,6 +753,7 @@ struct KeywordsSettings: View {
     @Default(.customRates) private var rates
     @Default(.allowCurrencyRates) private var allowRates
     @Default(.defaultListStyle) private var listStyle
+    @Default(.keywordsEnabled) private var keywordsEnabled
     @State private var newCode = ""
     @State private var newRate = 1.0
 
@@ -562,19 +761,29 @@ struct KeywordsSettings: View {
 
     var body: some View {
         SettingsForm {
-            ForEach(KeywordGroups.order, id: \.self) { mode in
+            Section("General") {
+                Captioned("Off: first lines never switch a note into math, a list, a timer or any other mode.") {
+                    Toggle("Enable keywords", isOn: $keywordsEnabled)
+                }
+            }
+            ForEach(NoteMode.keywordModes, id: \.self) { mode in
                 Section(KeywordGroups.title(mode)) {
                     KeywordRow(mode: mode)
                     if mode == .math { mathOptions }
                     if mode == .list {
-                        Picker("Default list style", selection: $listStyle) {
+                        Picker(selection: $listStyle) {
                             Text("Checkboxes").tag(ListStyle.checkbox)
                             Text("Bullets").tag(ListStyle.bullet)
                             Text("Numbered").tag(ListStyle.numbered)
+                        } label: {
+                            Text("Default list style")
+                            Text("What a plain line in a list note becomes. Checked lines always get a checkbox.")
                         }
+                        CheckTriggersRow()
                     }
                 }
-                if mode == .math { customRatesSection }
+                .disabled(!keywordsEnabled)
+                if mode == .math { customRatesSection.disabled(!keywordsEnabled) }
             }
         }
     }
@@ -627,6 +836,13 @@ struct KeywordsSettings: View {
 private struct KeywordRow: View {
     let mode: NoteMode
     @State private var text = ""
+    @Default(.mainKeywords) private var mainKeywords
+    @Default(.extraKeywords) private var extraKeywords
+
+    /// The main keyword picker's binding (`NoteMode.mainKeyword` falls back to the first keyword).
+    private var main: Binding<String> {
+        Binding(get: { mode.mainKeyword }, set: { mainKeywords[mode.rawValue] = $0 == mode.defaultKeywords.first ? nil : $0 })
+    }
 
     /// What the keywords do, plus the reference's "Not case sensitive." note.
     static func help(_ mode: NoteMode) -> String {
@@ -658,6 +874,12 @@ private struct KeywordRow: View {
                 .onDisappear(perform: save)
                 Caption("Separate each keyword with a comma. Press Return to save.")
             }
+            Picker(selection: main) {
+                ForEach(mode.defaultKeywords + (extraKeywords[mode.rawValue] ?? []), id: \.self) { Text($0).tag($0) }
+            } label: {
+                Text("Main keyword")
+                Text("The one the “/” list and the command palette insert.")
+            }
         }
         .onAppear { text = (Defaults[.extraKeywords][mode.rawValue] ?? []).joined(separator: ", ") }
     }
@@ -671,11 +893,33 @@ private struct KeywordRow: View {
     }
 }
 
+/// "Check off items with": words that check off a list item when typed at its end.
+private struct CheckTriggersRow: View {
+    @Default(.checkTriggers) private var triggers
+    @State private var text = ""
+
+    var body: some View {
+        TextField(text: $text, prompt: Text("/x")) {
+            Text("Check off items with")
+            Text("Type any of these at the end of a list item to check it off. Separate them with commas.")
+        }
+        .onSubmit(save)
+        .onDisappear(perform: save)
+        .onAppear { text = triggers.joined(separator: ", ") }
+    }
+
+    private func save() {
+        triggers = text.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+}
+
 // MARK: - Shortcuts
 
 struct ShortcutsSettings: View {
     @Default(.globalHotkey) private var hotkey
     @Default(.shellKitSlotNumberShortcuts) private var slotShortcuts
+    /// Read so the list redraws when a shortcut changes.
+    @Default(.menuShortcuts) private var overrides
 
     private var groups: [(String, [MainMenu.ShortcutEntry])] {
         var order: [String] = []
@@ -687,20 +931,45 @@ struct ShortcutsSettings: View {
         return order.map { ($0, map[$0]!) }
     }
 
+    /// The recorder's binding: a new shortcut (or none) becomes the item's override.
+    private func shortcut(_ entry: MainMenu.ShortcutEntry) -> Binding<Shortcut?> {
+        Binding(get: { entry.shortcut }, set: { overrides[entry.id] = .some($0) })
+    }
+
     var body: some View {
         SettingsForm {
             Section("Global") {
                 Captioned("Works from any app. Click the field and press a combination; ⌫ clears it.") {
-                    LabeledContent("Global Hotkey - Show Jotter") { ShortcutRecorder(shortcut: $hotkey).frame(width: 160) }
+                    HStack {
+                        Text("Global Hotkey - Show Jotter")
+                        Spacer()
+                        ShortcutRecorder(shortcut: $hotkey).frame(width: 160, height: 24)
+                    }
                 }
                 Captioned("While on, ⌘1 opens Slot 1 and every ⌘ + digit goes to a slot instead.") {
                     Toggle("⌘1–⌘9 jump to slotted notes", isOn: $slotShortcuts)
+                }
+                LabeledContent {
+                    Button("Restore Defaults") { MainMenu.restoreDefaultShortcuts() }.disabled(overrides.isEmpty)
+                } label: {
+                    Text("Menu shortcuts")
+                    Text("Click a shortcut below and press new keys; ⌫ removes it. Menus change right away.")
                 }
             }
             ForEach(groups, id: \.0) { group in
                 Section(group.0) {
                     ForEach(group.1) { entry in
-                        LabeledContent(entry.title) { Text(entry.keys).monospaced().foregroundStyle(.secondary) }
+                        HStack(spacing: 6) {
+                            Text(entry.title)
+                            Spacer()
+                            ShortcutRecorder(shortcut: shortcut(entry), validator: { MainMenu.conflict($0, except: entry.id) })
+                                .frame(width: 150, height: 24)
+                            Button { overrides[entry.id] = nil } label: { Image(systemName: "arrow.uturn.backward") }
+                                .buttonStyle(.borderless)
+                                .help("Use the original shortcut")
+                                .opacity(entry.isCustom ? 1 : 0)
+                                .disabled(!entry.isCustom)
+                        }
                     }
                 }
             }
@@ -714,8 +983,13 @@ struct ShortcutsSettings: View {
 // MARK: - Timer
 
 struct TimerSettings: View {
-    @Default(.timerAlertStyle) private var alertStyle
-    @Default(.timerSounds) private var sounds
+    @Default(.countdownNotification) private var countdownNotification
+    @Default(.countdownFullScreen) private var countdownFullScreen
+    @Default(.countdownSound) private var countdownSound
+    @Default(.pomodoroNotification) private var pomodoroNotification
+    @Default(.pomodoroFullScreen) private var pomodoroFullScreen
+    @Default(.pomodoroSound) private var pomodoroSound
+    @Default(.timerVolume) private var volume
     @Default(.timerInMenuBar) private var inMenuBar
     @Default(.pauseTimersOnQuit) private var pauseOnQuit
     @Default(.pomodoroWorkMinutes) private var work
@@ -729,13 +1003,32 @@ struct TimerSettings: View {
                     Toggle("Show time left in the menu bar", isOn: $inMenuBar)
                 }
             }
-            Section("When a countdown or pomodoro finishes") {
-                Picker("Alert", selection: $alertStyle) {
-                    Text("Show a full-screen alert").tag(TimerAlertStyle.fullScreen)
-                    Text("Show a notification").tag(TimerAlertStyle.notification)
-                    Text("Both").tag(TimerAlertStyle.both)
+            Section("When a countdown finishes") {
+                Toggle("Show a notification", isOn: $countdownNotification)
+                Toggle("Show a full-screen alert", isOn: $countdownFullScreen)
+                Toggle("Play a sound", isOn: $countdownSound)
+            }
+            Section {
+                Toggle("Show a notification", isOn: $pomodoroNotification)
+                Toggle("Show a full-screen alert", isOn: $pomodoroFullScreen)
+                Toggle("Play a sound", isOn: $pomodoroSound)
+            } header: {
+                Text("When a pomodoro ends")
+            } footer: {
+                Caption("Applies to pomodoro sessions and breaks longer than 30 seconds.")
+            }
+            Section {
+                LabeledContent("Volume") {
+                    HStack {
+                        Slider(value: $volume, in: 0...1).frame(width: 180)
+                        Text("\(Int((volume * 100).rounded()))%").monospacedDigit().frame(width: 44, alignment: .trailing)
+                        Button("Test") { Services.timers?.playAlertSound() }
+                    }
                 }
-                Toggle("Play a sound", isOn: $sounds)
+            } header: {
+                Text("Sound")
+            } footer: {
+                Caption("Affects both countdown and pomodoro alert sounds.")
             }
             Section("Pomodoro") {
                 Stepper("Work: \(work) minutes", value: $work, in: 1...180)
@@ -753,7 +1046,9 @@ struct ExportSettings: View {
     @Default(.exportDestinations) private var destinations
     @Default(.quickExportDestination) private var quick
     @Default(.omitKeywordInExport) private var omitKeyword
+    @Default(.exportFirstLineAsTitle) private var firstLineTitle
     @Default(.obsidianVault) private var vault
+    @Default(.customURLTemplate) private var customURL
 
     var body: some View {
         SettingsForm {
@@ -768,6 +1063,14 @@ struct ExportSettings: View {
                             Text("The vault's name from Obsidian's vault switcher, not a folder path.")
                         }
                         .disabled(!destinations.contains(.obsidian))
+                        .padding(.leading, 16)
+                    }
+                    if d == .customURL {
+                        TextField(text: $customURL, prompt: Text("myapp://create?title={TITLE}")) {
+                            Text("URL")
+                            Text("Sends notes to any app that accepts a URL scheme. Use {TITLE}, {CONTENT} and {DATE} as placeholders.")
+                        }
+                        .disabled(!destinations.contains(.customURL))
                         .padding(.leading, 16)
                     }
                 }
@@ -791,6 +1094,9 @@ struct ExportSettings: View {
             Section("Options") {
                 Captioned("Leaves the keyword line (e.g. “math”) out of exported notes.") {
                     Toggle("Omit keyword in exported notes", isOn: $omitKeyword)
+                }
+                Captioned("Otherwise notes are titled “Jotter - ” and the date they were last changed.") {
+                    Toggle("Use first line of note as title", isOn: $firstLineTitle)
                 }
             }
             Section {

@@ -37,11 +37,41 @@ public struct Shortcut: Codable, Hashable, Sendable {
         return s + Shortcut.keyName(keyCode)
     }
 
-    /// The menu-item key equivalent for this shortcut, when it maps to a printable character.
+    /// The menu-item key equivalent for this shortcut: its character, or the function-key character for arrows,
+    /// Return, Tab, Delete, Escape and F-keys ("" when there is none).
     public var keyEquivalent: String {
+        if let special = Shortcut.functionKeys.first(where: { $0.code == Int(keyCode) }) {
+            return String(Character(UnicodeScalar(special.character)!))
+        }
         let name = Shortcut.keyName(keyCode)
         return name.count == 1 ? name.lowercased() : ""
     }
+
+    /// The shortcut for a menu item's key equivalent and modifiers: the key that types `keyEquivalent` on the
+    /// current layout. Nil when no key does.
+    public init?(keyEquivalent: String, modifiers: NSEvent.ModifierFlags) {
+        guard let scalar = keyEquivalent.unicodeScalars.first, keyEquivalent.unicodeScalars.count == 1 else { return nil }
+        if let special = Shortcut.functionKeys.first(where: { $0.character == Int(scalar.value) }) {
+            self.init(key: special.code, modifiers: modifiers); return
+        }
+        let wanted = keyEquivalent.lowercased()
+        guard let code = (0..<128).first(where: { !Shortcut.isSpecial($0) && Shortcut.keyName(UInt32($0)).lowercased() == wanted })
+        else { return nil }
+        self.init(key: code, modifiers: modifiers)
+    }
+
+    /// Keys whose key equivalent is a function-key character rather than what they type.
+    private static let functionKeys: [(code: Int, character: Int)] = [
+        (kVK_UpArrow, NSUpArrowFunctionKey), (kVK_DownArrow, NSDownArrowFunctionKey),
+        (kVK_LeftArrow, NSLeftArrowFunctionKey), (kVK_RightArrow, NSRightArrowFunctionKey),
+        (kVK_Return, 0x0D), (kVK_Tab, 0x09), (kVK_Delete, 0x08), (kVK_Escape, 0x1B), (kVK_Space, 0x20),
+        (kVK_ForwardDelete, NSDeleteFunctionKey), (kVK_Home, NSHomeFunctionKey), (kVK_End, NSEndFunctionKey),
+        (kVK_PageUp, NSPageUpFunctionKey), (kVK_PageDown, NSPageDownFunctionKey),
+        (kVK_F1, NSF1FunctionKey), (kVK_F2, NSF2FunctionKey), (kVK_F3, NSF3FunctionKey), (kVK_F4, NSF4FunctionKey),
+        (kVK_F5, NSF5FunctionKey), (kVK_F6, NSF6FunctionKey), (kVK_F7, NSF7FunctionKey), (kVK_F8, NSF8FunctionKey),
+        (kVK_F9, NSF9FunctionKey), (kVK_F10, NSF10FunctionKey), (kVK_F11, NSF11FunctionKey), (kVK_F12, NSF12FunctionKey),
+    ]
+    private static func isSpecial(_ code: Int) -> Bool { functionKeys.contains { $0.code == code } }
 
 
     public static func keyName(_ code: UInt32) -> String {

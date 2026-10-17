@@ -25,8 +25,25 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
     private let pill = PillView()
     private let dropOverlay = DropOverlayView()
     private let linkTip = LinkTipView()
-    private let completion = CompletionPanel()
+    /// The `::` extension command list.
+    private let completion = CompletionPanel(footer: CompletionListView.commandFooter, maxRows: 8)
+    private var completionItems: [ExtensionCommandInfo] = []
+    /// The "/" list: the command palette's commands, inline.
+    private let slash = CompletionPanel(footer: CompletionListView.paletteFooter, maxRows: 9)
+    private var slashItems: [PaletteCommand] = []
+    /// Where a "/" list closed with Esc started; it stays closed while that "/" is being typed after.
+    private var slashDismissed: Int?
     private let autoPaste = AutoPasteMonitor()
+    /// Find and replace (⇧⌘F): the shelf under the note, its matches and the one shown.
+    private let findShelf = FindShelf()
+    private var findMatches: [NSRange] = []
+    private var findIndex: Int?
+    /// Where the caret was when the search started (typing a term searches from there).
+    private var findAnchor = 0
+    /// The shelf expanded every short link (so they can be searched); closing shortens them again.
+    private var linksExpandedForFind = false
+    private var scrollBottom: NSLayoutConstraint!
+    private var shelfHeight: NSLayoutConstraint!
     let vim = VimEngine()
 
     private(set) var links: [TrackedLink] = []
@@ -39,6 +56,12 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
     private var isNormalizing = false
     private var applyingVim = false
     private var saveWork: DispatchWorkItem?
+    /// Drops a half-typed Vim command after the motion timeout.
+    private var vimTimeout: DispatchWorkItem?
+    /// Copies a selection once it settles (Auto-copy selected text).
+    private var autoCopyWork: DispatchWorkItem?
+    /// Whether the styling follows the slotted theme pair (the note is slotted).
+    private var styledAsSlotted = false
     /// Container width the inline results were last placed for (re-placed when it changes).
     private var placedWidth: CGFloat = 0
     /// Baseline positions within a line fragment, per font and line height.
@@ -72,8 +95,6 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
         textView.isRichText = false
         textView.importsGraphics = false
         textView.allowsUndo = true
-        textView.usesFindBar = true
-        textView.isIncrementalSearchingEnabled = true
         textView.isAutomaticQuoteSubstitutionEnabled = false
         textView.isAutomaticDashSubstitutionEnabled = false
         textView.isAutomaticLinkDetectionEnabled = false
@@ -98,22 +119,28 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
         scrollView.autohidesScrollers = true
         scrollView.borderType = .noBorder
         scrollView.drawsBackground = true
-        scrollView.findBarPosition = .belowContent
         dropOverlay.isHidden = true
+        findShelf.isHidden = true
         modeLabel.isHidden = true
         modeLabel.font = .monospacedSystemFont(ofSize: 10, weight: .semibold)
         modeLabel.textColor = .gray
         linkTip.isHidden = true
-        for v in [scrollView, modeLabel, pill, dropOverlay] as [NSView] {
+        for v in [scrollView, findShelf, modeLabel, pill, dropOverlay] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(v)
         }
         view.addSubview(linkTip, positioned: .below, relativeTo: dropOverlay)   // placed by frame
+        scrollBottom = scrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        shelfHeight = findShelf.heightAnchor.constraint(equalToConstant: FindShelf.height(expanded: false))
         NSLayoutConstraint.activate([
             scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             scrollView.topAnchor.constraint(equalTo: view.topAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            scrollBottom,
+            findShelf.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            findShelf.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            findShelf.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            shelfHeight,
             modeLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 10),
             modeLabel.centerYAnchor.constraint(equalTo: view.bottomAnchor, constant: -15),
             pill.centerXAnchor.constraint(equalTo: view.centerXAnchor),
@@ -126,9 +153,14 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
         ])
     }
 
+    /// Slotted notes use the slotted theme pair when one is chosen.
+    private var theme: Theme { Theme.current(slotted: styledAsSlotted) }
+
     private func observeSettings() {
         let keys: [Defaults.Keys] = [.fontName, .textSize, .doubleFontSize, .lineSpacing, .paperType, .paperOpacity, .forceRTL, .lightTheme,
-                                     .darkTheme, .vimMode, .detectLinks, .allowTextReplacements]
+                                     .darkTheme, .slottedLightTheme, .slottedDarkTheme, .vimMode, .detectLinks,
+                                     .allowTextReplacements, .checkSpelling, .caretOffset, .caretOffsetInLists, .defaultListStyle,
+                                     .inlineCheckboxes, .inlineBullets, .inlineNumbered, .keywordsEnabled]
         let names = Set(keys.map(\.name))
         Defaults.changes.filter { names.contains($0) }.receive(on: RunLoop.main)
             .sink { [weak self] _ in MainActor.assumeIsolated { self?.applyAppearance() } }
@@ -144,7 +176,14 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
         NotificationCenter.default.publisher(for: NSView.frameDidChangeNotification, object: scrollView.contentView)
             .sink { [weak self] _ in MainActor.assumeIsolated { self?.visibleAreaChanged() } }
             .store(in: &cancellables)
-        completion.onAccept = { [weak self] item in self?.acceptCompletion(item) }
+        completion.onAccept = { [weak self] index in self?.acceptCompletion(index) }
+        findShelf.onSearch = { [weak self] in self?.refreshFind(selectFrom: self?.findAnchor) }
+        findShelf.onNext = { [weak self] backwards in self?.findStep(backwards: backwards) }
+        findShelf.onReplace = { [weak self] in self?.replaceCurrentMatch() }
+        findShelf.onReplaceAll = { [weak self] in self?.replaceAllMatches() }
+        findShelf.onClose = { [weak self] in self?.closeFind() }
+        findShelf.onResize = { [weak self] in self?.layoutFindShelf() }
+        slash.onAccept = { [weak self] index in self?.acceptSlash(index) }
         autoPaste.onNewString = { [weak self] s in self?.appendAutoPaste(s) }
     }
 
@@ -157,18 +196,24 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
     // MARK: - NoteEditing
 
     public func load(_ note: Note) {
+        closeFind(refocus: false)   // shortens the links it expanded before the note is saved
         save()
         stopAutoPaste(announce: false)
         completion.hide()
+        hideSlash()
         isLoading = true
         self.note = note
         links = []
         allLinksExpanded = false
+        if styledAsSlotted != (note.slot != nil) {
+            styledAsSlotted = note.slot != nil
+            applyAppearance()
+        }
         // "List updated to the new checkbox format.": list notes get their markers on load.
         var content = note.content
         if NoteMode.detect(firstLine: EditorLogic.Lines.ranges(content as NSString).first.map { (content as NSString).substring(with: $0) } ?? "").mode == .list,
            !note.isReadOnly {
-            content = EditorLogic.Lists.normalizedListNote(TextState(content)).text
+            content = EditorLogic.Lists.normalizedListNote(TextState(content), style: Defaults[.defaultListStyle]).text
         }
         textView.string = content
         links = EditorLogic.Links.locate(note.links, in: content)
@@ -205,7 +250,8 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
             } else {
                 apply(EditorLogic.Lists.toggle(st), action: "Toggle Checklist Item")
             }
-        case .cycleListStyle: if editable { apply(EditorLogic.Lists.cycle(state), action: "Change List Style") }
+        case .cycleListStyle:
+            if editable { apply(EditorLogic.Lists.cycle(state, start: Defaults[.defaultListStyle]), action: "Change List Style") }
         case .indent: if editable { apply(EditorLogic.Lists.indent(state, outdent: false), action: "Indent") }
         case .outdent: if editable { apply(EditorLogic.Lists.indent(state, outdent: true), action: "Outdent") }
         case .moveLineUp, .moveLineDown:
@@ -214,10 +260,10 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
             if editable { apply(EditorLogic.Lines.duplicate(state, up: command == .duplicateLineUp), action: "Duplicate Line") }
         case .strikethrough:
             if editable, let st = EditorLogic.Lines.strikethrough(state) { apply(st, action: "Strikethrough") }
-        case .find: textFinder(.showFindInterface)
-        case .findAndReplace: textFinder(.showReplaceInterface)
-        case .findNext: textFinder(.nextMatch)
-        case .findPrevious: textFinder(.previousMatch)
+        case .find: showFind(replace: false)
+        case .findAndReplace: showFind(replace: true)
+        case .findNext: findStep(backwards: false)
+        case .findPrevious: findStep(backwards: true)
         case .increaseTextSize: stepTextSize(1)
         case .decreaseTextSize: stepTextSize(-1)
         case .resetTextSize: Defaults.reset(.textSize); Defaults.reset(.doubleFontSize)
@@ -240,10 +286,124 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
         Defaults[.textSize] = all[min(max(i + delta, 0), all.count - 1)]
     }
 
-    private func textFinder(_ action: NSTextFinder.Action) {
-        let item = NSMenuItem()
-        item.tag = action.rawValue
-        textView.performTextFinderAction(item)
+    // MARK: - Find and replace
+
+    /// Opens the shelf (with its Replace row for Find and Replace), expanding short links so their addresses can be
+    /// found; a single-line selection becomes the search term.
+    private func showFind(replace: Bool) {
+        let picked = (textView.string as NSString).substring(with: textView.selectedRange())
+        let term = picked.isEmpty || picked.contains("\n") ? nil : picked
+        if findShelf.isHidden {
+            if !allLinksExpanded, links.contains(where: { !$0.expanded }), textView.isEditable {
+                toggleAllLinks()
+                linksExpandedForFind = true
+            }
+            findShelf.isHidden = false
+        }
+        if replace != findShelf.isExpanded { findShelf.setExpanded(replace) }
+        layoutFindShelf()
+        // The match highlight shows where the search is; Done selects the match then.
+        let sel = textView.selectedRange()
+        if sel.length > 0 { textView.setSelectedRange(NSRange(location: sel.location, length: 0)) }
+        findAnchor = sel.location
+        findShelf.focus(term: term)
+        refreshFind(selectFrom: findAnchor)
+    }
+
+    private func layoutFindShelf() {
+        shelfHeight.constant = FindShelf.height(expanded: findShelf.isExpanded)
+        scrollBottom.isActive = false
+        scrollBottom = findShelf.isHidden ? scrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+                                          : scrollView.bottomAnchor.constraint(equalTo: findShelf.topAnchor)
+        scrollBottom.isActive = true
+    }
+
+    /// Done / Esc: the shelf goes and the match last shown is selected.
+    private func closeFind(refocus: Bool = true) {
+        guard !findShelf.isHidden else { return }
+        let shown = findIndex.map { findMatches[$0] }
+        findShelf.isHidden = true
+        layoutFindShelf()
+        findMatches = []
+        findIndex = nil
+        highlightMatches()
+        if let shown, refocus, NSMaxRange(shown) <= storage.length { textView.setSelectedRange(shown) }
+        if linksExpandedForFind, allLinksExpanded { toggleAllLinks() }
+        linksExpandedForFind = false
+        if refocus { focus() }
+    }
+
+    /// Re-runs the search; with `location`, shows the first match from there.
+    private func refreshFind(selectFrom location: Int?) {
+        guard !findShelf.isHidden else { return }
+        findMatches = EditorLogic.Find.matches(of: findShelf.term, in: textView.string, options: findShelf.options)
+        findShelf.showFound(findShelf.term.isEmpty || !findMatches.isEmpty)
+        findIndex = findIndex.flatMap { findMatches.indices.contains($0) ? $0 : nil }
+        if let location { showMatch(EditorLogic.Find.next(from: location, in: findMatches, backwards: false)) }
+        highlightMatches()
+    }
+
+    /// ⌘G / ⇧⌘G, Return / ⇧Return and ‹ ›: the next or previous match (from the one shown, else the caret),
+    /// wrapping around.
+    private func findStep(backwards: Bool) {
+        guard !findShelf.isHidden else { return showFind(replace: false) }
+        findMatches = EditorLogic.Find.matches(of: findShelf.term, in: textView.string, options: findShelf.options)
+        let from: Int
+        if let i = findIndex, findMatches.indices.contains(i) {
+            from = backwards ? findMatches[i].location : findMatches[i].location + 1
+        } else {
+            from = textView.selectedRange().location
+        }
+        showMatch(EditorLogic.Find.next(from: from, in: findMatches, backwards: backwards))
+        highlightMatches()
+    }
+
+    /// Shows a match without moving the caret (the search field keeps the focus): scrolled into view and painted
+    /// in full `typeHighlight`.
+    private func showMatch(_ index: Int?) {
+        findIndex = index
+        guard let index else { return }
+        let r = findMatches[index]
+        textView.scrollRangeToVisible(r)
+        findAnchor = r.location
+    }
+
+    /// Every match gets a `typeHighlight` wash; the one shown gets the full colour.
+    private func highlightMatches() {
+        guard let lm = textView.layoutManager else { return }
+        lm.removeTemporaryAttribute(.backgroundColor, forCharacterRange: NSRange(location: 0, length: storage.length))
+        let color = NSColor(hex: theme.typeHighlight)
+        for (i, r) in findMatches.enumerated() where NSMaxRange(r) <= storage.length {
+            lm.addTemporaryAttribute(.backgroundColor, value: i == findIndex ? color : color.withAlphaComponent(0.45),
+                                     forCharacterRange: r)
+        }
+    }
+
+    /// Replace: the shown match becomes the replacement, then the next match is shown.
+    private func replaceCurrentMatch() {
+        guard textView.isEditable else { return toast("Note is read-only") }
+        guard let i = findIndex, findMatches.indices.contains(i) else { return findStep(backwards: false) }
+        let sel = findMatches[i]
+        let text = EditorLogic.Find.replacement(for: sel, in: textView.string, term: findShelf.term,
+                                                with: findShelf.replacement, options: findShelf.options)
+        guard EditorLogic.Links.check(sel, against: links) == .allowed else {
+            return toast("Cannot partially edit shortened links. Expand before editing.")
+        }
+        replace(sel, with: text, selection: NSRange(location: sel.location + (text as NSString).length, length: 0), action: "Replace")
+        findIndex = nil
+        refreshFind(selectFrom: sel.location + (text as NSString).length)
+    }
+
+    /// All: every match replaced as one undoable edit.
+    private func replaceAllMatches() {
+        guard textView.isEditable else { return toast("Note is read-only") }
+        let result = EditorLogic.Find.replacingAll(findShelf.term, with: findShelf.replacement, in: textView.string,
+                                                   options: findShelf.options)
+        guard result.count > 0 else { return toast("Nothing found") }
+        apply(TextState(result.text, caret: min(textView.selectedRange().location, (result.text as NSString).length)),
+              action: "Replace All")
+        refreshFind(selectFrom: nil)
+        toast("Replaced \(result.count) match\(result.count == 1 ? "" : "es")", kind: .success)
     }
 
     // MARK: - Editing primitives
@@ -314,11 +474,19 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
 
     public func textDidChange(_ notification: Notification) {
         guard !isLoading else { return }
-        if !isNormalizing, NoteMode.detect(firstLine: firstLine).mode == .list {
-            let normalized = EditorLogic.Lists.normalizedListNote(state)
-            if normalized.text != textView.string {
+        if !isNormalizing {
+            // A typed check trigger ("milk /x") checks the item off; list notes keep every line an item.
+            let listNote = NoteMode.detect(firstLine: firstLine).mode == .list
+            var next = state
+            if programmaticEdits == 0, mode != .code,
+               let checked = EditorLogic.Lists.checkOffByTrigger(next, triggers: Defaults[.checkTriggers], options: listOptions,
+                                                                 inListNote: listNote, behavior: Defaults[.checkedItemBehavior]) {
+                next = checked
+            }
+            if listNote { next = EditorLogic.Lists.normalizedListNote(next, style: Defaults[.defaultListStyle]) }
+            if next.text != textView.string {
                 isNormalizing = true
-                apply(normalized, action: nil, breakCoalescing: false)
+                apply(next, action: nil, breakCoalescing: false)
                 isNormalizing = false
                 return   // the nested change already refreshed
             }
@@ -326,6 +494,14 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
         refresh()
         scheduleSave()
         updateCompletion()
+        updateSlash()
+        refreshFind(selectFrom: nil)
+    }
+
+    /// Which markers make list items: all of them in list notes, the ones switched on in Settings elsewhere.
+    private var listOptions: EditorLogic.Lists.Options {
+        let options = EditorLogic.Lists.Options.current
+        return mode == .list ? options.allMarkers : options
     }
 
     /// The caret never stops inside a hidden checkbox/bullet marker (nil = keep `new`).
@@ -343,6 +519,23 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
         guard programmaticEdits == 0, !isLoading else { return }
         collapseLinksAwayFromCaret()
         if completion.isVisible, completionToken() == nil { completion.hide() }
+        if slash.isVisible, slashToken() == nil { hideSlash() }
+        scheduleAutoCopy()
+    }
+
+    /// Auto-copy selected text: a selection is copied once it has stayed put for a moment.
+    private func scheduleAutoCopy() {
+        autoCopyWork?.cancel()
+        let selection = textView.selectedRange()
+        guard Defaults[.autoCopySelection], selection.length > 0 else { return }
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.textView.selectedRange() == selection else { return }
+                self.copySelection(cut: false)
+            }
+        }
+        autoCopyWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
     }
 
     // MARK: - Analysis, styling, saving
@@ -367,7 +560,7 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
         }
         if analysis.mode != mode {
             mode = analysis.mode
-            textView.isContinuousSpellCheckingEnabled = mode != .code
+            applySpelling()
         }
         if mode != .autopaste, autoPaste.isRunning { stopAutoPaste(announce: false) }
         onAnalysis?(analysis)
@@ -376,7 +569,7 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
     private func restyle() {
         guard !textView.hasMarkedText(), let lm = textView.layoutManager, let tc = textView.textContainer else { return }
         let s = textView.string as NSString
-        let theme = Theme.current
+        let theme = self.theme
         let font = Typography.font()
         let codeFont = NSFont.monospacedSystemFont(ofSize: font.pointSize, weight: .regular)
         let bold = NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask)
@@ -415,6 +608,7 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
         model.font = font
         model.rightToLeft = rtl
         model.autoPasting = autoPaste.isRunning
+        model.caretNudge = CGFloat(Defaults[isList ? .caretOffsetInLists : .caretOffset])
 
         // Code: the body of a code note, or ``` fenced blocks elsewhere.
         var code: [(range: NSRange, language: CodeLanguage, block: NSRange)] = []
@@ -489,8 +683,9 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
         }
 
         // List markers: hidden and zero-width, drawn in the left gutter; wrapped lines align with the item text.
+        let options = listOptions
         for (i, line) in lines.enumerated() where !(hasKeyword && i == 0) && line.length > 0 && !inCode(line) {
-            guard let item = ListLine.parse(s.substring(with: line)) else { continue }
+            guard let item = options.item(s.substring(with: line)) else { continue }
             let isCheckbox: Bool = { if case .checkbox = item.kind { return true }; return false }()
             if mathish.contains(mode) && !isCheckbox { continue }
             let markerStart = line.location + (item.indent as NSString).length
@@ -635,7 +830,7 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
     private static let inlineCodeRegex = try! NSRegularExpression(pattern: #"`[^`\n]+`"#)
 
     func applyAppearance() {
-        let theme = Theme.current
+        let theme = self.theme
         let background = NSColor(hex: theme.background)
         textView.insertionPointColor = NSColor(hex: theme.accent1Main)
         textView.selectedTextAttributes = [.foregroundColor: NSColor(hex: theme.typeMain),
@@ -644,10 +839,19 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
         scrollView.backgroundColor = background
         (scrollView.verticalScroller as? ThinScroller)?.knobColor = NSColor(hex: theme.typeHighlight)
         textView.isAutomaticTextReplacementEnabled = Defaults[.allowTextReplacements]
+        applySpelling()
+        findShelf.apply(theme: theme)
+        highlightMatches()
         dropOverlay.theme = theme
         if !Defaults[.vimMode] { vim.reset() }
         updateModeLabel()
         restyle()
+    }
+
+    /// Settings → Editor → Check spelling (never in code notes).
+    private func applySpelling() {
+        let on = Defaults[.checkSpelling] && mode != .code
+        if textView.isContinuousSpellCheckingEnabled != on { textView.isContinuousSpellCheckingEnabled = on }
     }
 
     private func updateModeLabel() {
@@ -714,6 +918,23 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
             default: break
             }
         }
+        if slash.isVisible {
+            switch event.keyCode {
+            case 126: slash.move(-1); return true
+            case 125: slash.move(1); return true
+            case 48, 36, 76: acceptSlash(nil); return true
+            case 53:
+                slashDismissed = slashToken()?.range.location
+                hideSlash()
+                return true
+            default:
+                if mods.isEmpty, let token = slashToken(), let chars = event.characters,
+                   let row = EditorLogic.Slash.quickPick(chars, query: token.query, rows: slashItems.count) {
+                    acceptSlash(row)
+                    return true
+                }
+            }
+        }
         if event.keyCode == 53, autoPaste.isRunning { stopAutoPaste(announce: true); return true }
         guard Defaults[.vimMode], !mods.contains(.command) else { return false }
         guard let key = vimKey(event, mods: mods) else {
@@ -725,7 +946,23 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
         let out = vim.handle(key, text: textView.string, selection: textView.selectedRange())
         guard out.handled else { return false }
         applyVim(out)
+        scheduleVimTimeout()
         return true
+    }
+
+    /// A half-typed command ("d", "2", "g") is dropped when the next key doesn't come within the motion timeout.
+    private func scheduleVimTimeout() {
+        vimTimeout?.cancel()
+        guard vim.hasPendingInput else { return }
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.vim.hasPendingInput else { return }
+                self.vim.cancelPendingInput()
+                self.updateModeLabel()
+            }
+        }
+        vimTimeout = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(Defaults[.vimMotionTimeout], 50) / 1000, execute: work)
     }
 
     private func vimKey(_ event: NSEvent, mods: NSEvent.ModifierFlags) -> String? {
@@ -770,21 +1007,19 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
     func handleKeyEquivalent(_ event: NSEvent) -> Bool {
         let mods = event.modifierFlags.intersection([.command, .control, .option, .shift])
         if mods == .command, event.keyCode == 36 || event.keyCode == 76 { openLinkAtCaret(); return true }
-        if mods == [.command, .shift], event.charactersIgnoringModifiers?.lowercased() == "m", textView.isEditable {
-            perform(.cycleListStyle); return true
-        }
         return false
     }
 
     func handleReturn() -> Bool {
         if completion.isVisible { acceptCompletion(nil); return true }
+        if slash.isVisible { acceptSlash(nil); return true }
         guard textView.isEditable else { return false }
         if runExtensionCommandOnCurrentLine() { return true }
         let st = state
         if mode == .autopaste, EditorLogic.Lines.index(st.ns, at: st.selection.location) == 0, !autoPaste.isRunning {
             startAutoPaste()
         }
-        if mode != .code, Defaults[.listContinuity], let next = EditorLogic.Lists.continued(st) {
+        if mode != .code, Defaults[.listContinuity], let next = EditorLogic.Lists.continued(st, options: listOptions) {
             apply(next, action: "Typing")
             return true
         }
@@ -799,10 +1034,11 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
 
     func handleTab(backwards: Bool) -> Bool {
         if completion.isVisible, !backwards { acceptCompletion(nil); return true }
+        if slash.isVisible, !backwards { acceptSlash(nil); return true }
         guard textView.isEditable else { return false }
         let st = state
         let lines = EditorLogic.Lines.covered(st.ns, st.selection)
-        let isList = ListLine.parse(st.ns.substring(with: EditorLogic.Lines.range(st.ns, at: st.selection.location))) != nil
+        let isList = listOptions.item(st.ns.substring(with: EditorLogic.Lines.range(st.ns, at: st.selection.location))) != nil
         guard backwards || lines.count > 1 || (isList && mode != .code) else { return false }
         apply(EditorLogic.Lists.indent(st, outdent: backwards), action: backwards ? "Outdent" : "Indent")
         return true
@@ -813,7 +1049,7 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
         let st = state
         guard textView.isEditable, st.selection.length == 0, mode != .code else { return false }
         let line = EditorLogic.Lines.range(st.ns, at: st.selection.location)
-        guard let item = ListLine.parse(st.ns.substring(with: line)) else { return false }
+        guard let item = listOptions.item(st.ns.substring(with: line)) else { return false }
         let markerStart = line.location + (item.indent as NSString).length
         guard st.selection.location == markerStart + item.markerLength else { return false }
         if mode == .list {
@@ -898,7 +1134,7 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
             return
         }
         let below = textView.convert(NSPoint(x: p.x, y: textView.rect(for: range).maxY + 4), to: view)
-        linkTip.show(url + "\n" + hint, theme: Theme.current, endingAt: below, in: view.bounds)
+        linkTip.show(url + "\n" + hint, theme: theme, endingAt: below, in: view.bounds)
     }
 
     private func open(_ string: String) {
@@ -1108,12 +1344,13 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
         guard textView.isEditable, Defaults[.extensionsEnabled], let ext = Services.extensions,
               let token = completionToken() else { return completion.hide() }
         let caret = textView.firstRect(forCharacterRange: NSRange(location: NSMaxRange(token.range), length: 0), actualRange: nil)
-        completion.show(ext.complete(token.prefix), below: caret, parent: textView.window)
+        completionItems = Array(ext.complete(token.prefix).prefix(completion.maxRows))
+        completion.show(completionItems.map(CompletionRow.command), theme: theme, below: caret, parent: textView.window)
     }
 
-    private func acceptCompletion(_ chosen: ExtensionCommandInfo?) {
-        let items = completion.items
-        let item = chosen ?? (items.indices.contains(completion.selectedIndex) ? items[completion.selectedIndex] : nil)
+    private func acceptCompletion(_ index: Int?) {
+        let i = index ?? completion.selectedIndex
+        let item = completionItems.indices.contains(i) ? completionItems[i] : nil
         completion.hide()
         guard let item, let token = completionToken() else { return }
         let takesArguments = item.signature.contains("(") && !item.signature.contains("()")
@@ -1174,6 +1411,61 @@ public final class JotterEditor: NSObject, NoteEditing, NSTextViewDelegate, @pre
 
     /// Shows a message pill at the bottom of the note.
     func toast(_ message: String, kind: PillKind = .info) {
-        pill.show(message, kind: kind, theme: Theme.current)
+        pill.show(message, kind: kind, theme: theme)
+    }
+
+    // MARK: - "/" commands
+
+    /// The "/query" before the caret, when the "/" list may open there (only on an otherwise empty line in math-like
+    /// and code notes, and never inside code blocks).
+    private func slashToken() -> (range: NSRange, query: String)? {
+        let mathish: Set<NoteMode> = [.math, .sum, .average, .count, .code]
+        guard let token = EditorLogic.Slash.token(state, emptyLineOnly: mathish.contains(mode)) else { return nil }
+        guard !codeRanges.contains(where: { NSLocationInRange(token.range.location, $0) }) else { return nil }
+        return token
+    }
+
+    /// The "/" list's rows, numbered 1…9 for the quick pick.
+    static func slashRows(_ commands: [PaletteCommand]) -> [CompletionRow] {
+        commands.prefix(9).enumerated().map { i, command in CompletionRow.palette(command, number: i + 1) }
+    }
+
+    private func updateSlash() {
+        guard textView.isEditable, let panels = Services.panels, let token = slashToken() else { return hideSlash() }
+        if let dismissed = slashDismissed {
+            if dismissed == token.range.location { return hideSlash() }
+            slashDismissed = nil
+        }
+        slashItems = Array(EditorLogic.Slash.ordered(panels.commands(matching: token.query), query: token.query).prefix(slash.maxRows))
+        // Nothing matches (a path, a fraction): stay out of the way.
+        guard !slashItems.isEmpty else { return hideSlash() }
+        let caret = textView.firstRect(forCharacterRange: NSRange(location: token.range.location, length: 0), actualRange: nil)
+        slash.show(Self.slashRows(slashItems), theme: theme, below: caret, parent: textView.window)
+    }
+
+    private func hideSlash() {
+        slash.hide()
+        slashItems = []
+    }
+
+    /// Runs the chosen command: the "/query" text goes, then a keyword becomes the first line (one undoable edit)
+    /// or the palette command runs.
+    private func acceptSlash(_ index: Int?) {
+        let i = index ?? slash.selectedIndex
+        guard slashItems.indices.contains(i), let token = slashToken() else { return hideSlash() }
+        let command = slashItems[i]
+        hideSlash()
+        let removed = (textView.string as NSString).replacingCharacters(in: token.range, with: "")
+        if let keyword = command.keyword {
+            let text = NoteMode.settingKeyword(keyword, in: removed)
+            let change = EditorLogic.minimalChange(from: removed, to: text)
+            var caret = token.range.location
+            if caret >= NSMaxRange(change.range) { caret += (change.replacement as NSString).length - change.range.length }
+            apply(TextState(text, caret: caret), action: "Insert Keyword")
+        } else {
+            replace(token.range, with: "", selection: NSRange(location: token.range.location, length: 0), action: "Run Command")
+            save()   // the command may read the note from the store
+            command.action()
+        }
     }
 }

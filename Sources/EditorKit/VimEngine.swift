@@ -45,6 +45,14 @@ public final class VimEngine {
         return pending.isEmpty ? base : base + "  " + pending
     }
 
+    /// A count, operator or "g" is waiting for the rest of its command.
+    public var hasPendingInput: Bool { !count.isEmpty || pendingOperator != nil || pendingG }
+
+    /// Drops a half-typed command (the motion timeout ran out).
+    public func cancelPendingInput() {
+        count = ""; pendingOperator = nil; pendingG = false
+    }
+
     public func reset() {
         mode = .normal
         count = ""; pendingOperator = nil; pendingG = false; search = nil; desiredColumn = nil

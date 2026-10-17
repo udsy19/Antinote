@@ -151,7 +151,9 @@ enum Onboarding {
             """
             Can't remember something?
 
-            \(key("Command Palette…", "⌘K")) opens the command palette: every action, timer and note in one list.
+            Type “/” on an empty line: every keyword and command shows up right there, and 1–9 picks one.
+
+            \(key("Command Palette…", "⌘K")) opens the same commands, plus your notes, in their own window.
 
             Commands also run inside notes. Type ::today() on the empty line below and press Return.
 

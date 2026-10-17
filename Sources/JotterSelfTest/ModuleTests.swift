@@ -11,4 +11,6 @@ func registerModuleTests() {
     registerToolsParityTests()
     registerChromeParityTests()
     registerEditorParityTests()
+    registerSettingsBehaviourTests()
+    registerFindShelfTests()
 }

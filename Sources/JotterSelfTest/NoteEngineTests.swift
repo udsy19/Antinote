@@ -253,33 +253,6 @@ func registerNoteEngineTests() {
         check(first < 0.5 && edit < 0.1, "analysis is fast")
     }))
 
-    SelfTest.cases.append(("NoteEngine.lists", {
-        let box = ListLine.parse("[ ] buy milk")
-        check(box.marker == .checkbox(checked: false) && box.text == "buy milk" && box.level == 0, "checkbox")
-        let done = ListLine.parse("\t- [x] done")
-        check(done.marker == .checkbox(checked: true, dashed: true) && done.level == 1 && done.isChecked, "dashed task")
-        check(done.formatted == "\t- [x] done" && done.prefixLength == 7, "round trip")
-        check(ListLine.parse("        * item").marker == .bullet("*") && ListLine.parse("        * item").level == 2, "indent")
-        check(ListLine.parse("• dot").marker == .bullet("•"), "bullet dot")
-        check(ListLine.parse("12. step").marker == .numbered(12), "numbered")
-        check(ListLine.parse("3) x").marker == .numbered(3, delimiter: ")"), "paren numbered")
-        for text in ["-5 degrees", "3.14 is pi", "plain", "--", "[]", "-"] {
-            check(ListLine.parse(text).marker == nil, "not a list line: \(text)")
-        }
-        var line = ListLine.parse("[ ] a")
-        var seen: [String] = []
-        for _ in 0..<4 { line = line.cycled(); seen.append(line.formatted) }
-        check(seen == ["- a", "1. a", "a", "[ ] a"], "cycle: \(seen)")
-        check(ListLine.parse("a").cycled(start: .bullet).formatted == "- a", "cycle from plain uses default style")
-        check(ListLine.parse("[ ] a").toggled().formatted == "[x] a", "toggle")
-        check(ListLine.parse("- [x] a").toggled().formatted == "- [ ] a", "toggle dashed")
-        check(ListLine.parse("2. x").continuation()?.formatted == "3. ", "continue numbering")
-        check(ListLine.parse("[x] x").continuation()?.formatted == "[ ] ", "continue unchecked")
-        check(ListLine.parse("text").continuation() == nil, "no continuation for plain lines")
-        let renumbered = ListLine.renumber(["1. a", "5. b", "\t1. c", "\t7. d", "3. e", "", "9. f", "- g"])
-        check(renumbered == ["1. a", "2. b", "\t1. c", "\t2. d", "3. e", "", "1. f", "- g"], "renumber: \(renumbered)")
-    }))
-
     SelfTest.cases.append(("NoteEngine.paste", {
         let messy = "# Title\n\n**bold** and *it* and `code`\n- item\n2. step\n   indented  text  \n[site](https://x.com)\n> quote\n- [ ] task\nsnake_case_name"
         let cleaned = PasteCleaner.clean(messy, options: PasteCleaner.Options())

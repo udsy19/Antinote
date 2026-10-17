@@ -20,13 +20,23 @@ SelfTest.cases.append(("Core.modeDetection", {
 
 SelfTest.cases.append(("Core.themeTable", {
     let names = Theme.builtIn.map(\.name)
-    check(names == ["Default Light", "Default Dark", "Mecha", "Masquerade", "Cedar", "Arthouse", "Dune", "Fern",
-                    "Highland"], "built-in theme names and order")
+    check(names == ["Default Light", "Default Dark", "Mecha", "Masquerade", "Meadow", "Cedar", "Arthouse", "Dune", "Armor",
+                    "Stealth", "Fern", "Highland", "Spice", "Bubblegum"], "built-in theme names and order")
     check(Set(Theme.builtIn.map(\.id)).count == Theme.builtIn.count, "theme ids are unique")
     check(Theme.defaultLight.typeMain == "#473F37" && Theme.defaultDark.background == "#2A2626", "default pair values")
     check(Theme.builtIn.first { $0.name == "Fern" }?.background == "#F5FFF5", "named theme values")
-    check(Theme.builtIn.filter(\.isDark).map(\.name) == ["Default Dark", "Masquerade", "Cedar", "Arthouse", "Dune"],
-          "dark themes")
+    check(Theme.builtIn.filter(\.isDark).map(\.name) == ["Default Dark", "Masquerade", "Cedar", "Arthouse", "Dune", "Armor",
+                                                         "Stealth"], "dark themes")
+    // The five themes added last carry the reference's colours exactly (alpha as #RRGGBBAA).
+    func theme(_ name: String) -> Theme? { Theme.builtIn.first { $0.name == name } }
+    check(theme("Meadow")?.background == "#FAF5EB" && theme("Meadow")?.accent1Main == "#557D69"
+          && theme("Meadow")?.gridBold == "#AAAAA599", "Meadow values")
+    check(theme("Armor")?.background == "#0A0A0F" && theme("Armor")?.accent1Secondary == "#3C5082B2"
+          && theme("Armor")?.typeReverse == "#000000", "Armor values")
+    check(theme("Stealth")?.typeMain == "#CADEE8" && theme("Stealth")?.accent5Secondary == "#F2F6F7CC", "Stealth values")
+    check(theme("Spice")?.background == "#E1D2B4" && theme("Spice")?.accent2Main == "#2E92E5", "Spice values")
+    check(theme("Bubblegum")?.typeMain == "#E876B2" && theme("Bubblegum")?.accent2Secondary == "#69A76980",
+          "Bubblegum values")
     let half = NSColor(hex: Theme.defaultLight.accent2Secondary)
     check(abs(half.alphaComponent - 128.0 / 255) < 0.001 && abs(half.redComponent - 0xC1 / 255.0) < 0.001, "#RRGGBBAA alpha")
     check(NSColor(hex: "#0B486B").alphaComponent == 1, "#RRGGBB is opaque")

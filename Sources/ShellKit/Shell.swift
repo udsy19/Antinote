@@ -38,6 +38,10 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
     private var cancellables: Set<AnyCancellable> = []
     private var observations: [NSKeyValueObservation] = []
     private var timers: [Timer] = []
+    /// Asks for Touch ID once a locked note has stayed on screen (Settings → Notes → Ask to unlock automatically).
+    private var autoUnlockWork: DispatchWorkItem?
+    /// The theme the chrome was last painted with (slotted notes can have their own).
+    private var appliedThemeID = ""
 
     private var store: NoteStoring { Services.store }
     private var isSplit: Bool { Defaults[.shellKitSplit] }
@@ -162,12 +166,19 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
             MainActor.assumeIsolated { self?.flushEditors() }
         }
         store.changes.sink { [weak self] _ in self?.scheduleRefresh() }.store(in: &cancellables)
+        let themeKeys: [Defaults.Keys] = [.lightTheme, .darkTheme, .slottedLightTheme, .slottedDarkTheme, .translucent,
+                                          .translucencyOpacity, .solidBarsWhenTranslucent]
         Defaults.changes
-            .filter { ["lightTheme", "darkTheme", "translucent"].contains($0) }
+            .filter { name in themeKeys.contains { $0.name == name } }
             .sink { [weak self] _ in self?.applyTheme() }.store(in: &cancellables)
+        let chromeKeys: [Defaults.Keys] = [.showLatestNoteIndicator, .showNoteDates, .alwaysShowSlotsBar, .showBottomBar,
+                                           .showNoteCount, .showCreationDate]
         Defaults.changes
-            .filter { ["showLatestNoteIndicator", "showNoteDates", "alwaysShowSlotsBar"].contains($0) }
+            .filter { name in chromeKeys.contains { $0.name == name } }
             .sink { [weak self] _ in self?.refreshChrome() }.store(in: &cancellables)
+        Defaults.changes
+            .filter { $0 == Defaults.Keys.showArchivedInStack.name }
+            .sink { [weak self] _ in self?.scheduleRefresh() }.store(in: &cancellables)
         Defaults.changes
             .filter { ["shellKitSplit", "shellKitSplitHorizontal", "shellKitSwapPanes"].contains($0) }
             .sink { [weak self] _ in self?.splitChanged() }.store(in: &cancellables)
@@ -195,20 +206,26 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         })
     }
 
+    /// The note Jotter opens on: a fresh one with "Start with a new note", else the last note shown; the first
+    /// slotted note with "Use slotted notes as your main notes".
     private func restoreCurrentNote() {
         let deck = ephemeralDeck()
-        if let id = UUID(uuidString: Defaults[.shellKitCurrentNote]), deck.contains(where: { $0.id == id }) {
+        if Defaults[.startWithNewNote] {
+            if let front = deck.first, DeckNavigator.isBlank(front.content) { showEphemeral(front.id) } else { createNote() }
+        } else if let id = UUID(uuidString: Defaults[.shellKitCurrentNote]), deck.contains(where: { $0.id == id }) {
             showEphemeral(id)
         } else if let front = deck.first {
             showEphemeral(front.id)
         } else {
             createNote()
         }
+        if Defaults[.slottedAsMain], !Defaults[.startWithNewNote], let first = board().occupants.keys.min() { openSlot(first) }
     }
 
     // MARK: - WindowServicing
 
-    var currentNoteID: UUID? { pane(activeRole).noteID }
+    /// Nil until the window is built.
+    var currentNoteID: UUID? { ephemeralPane == nil ? nil : pane(activeRole).noteID }
 
     func showMain() {
         if !window.isVisible { startFreshIfInactive() }
@@ -218,6 +235,7 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         window.makeKeyAndOrderFront(nil)
         window.alignTrafficLights()
         focusActive()
+        scheduleAutoUnlock()
     }
 
     func toggleMain() {
@@ -258,8 +276,10 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
 
     // MARK: - Deck
 
-    /// Non-slotted notes, front first.
-    private func ephemeralDeck() -> [Note] { store.deck.filter { $0.slot == nil } }
+    /// Non-slotted notes, front first; archived notes follow at the back with "Show archived notes in the note stack".
+    private func ephemeralDeck() -> [Note] {
+        (Defaults[.showArchivedInStack] ? store.deck + store.archived : store.deck).filter { $0.slot == nil }
+    }
     private func board() -> SlotBoard { SlotBoard(notes: store.deck.map { ($0.id, $0.slot) }) }
     private func slotNote(_ slot: Int) -> Note? { store.deck.first { $0.slot == slot } }
 
@@ -511,8 +531,28 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
     private func afterNavigation() {
         if presented != nil { present(inWindow: nil) }
         relock.setFocused(isFocusedOnUnlockedLockedNote, at: Date())
+        applyThemeIfNeeded()
         refreshChrome()
         focusActive()
+        scheduleAutoUnlock()
+    }
+
+    /// "Ask to unlock automatically": once a locked note has stayed in front for the set delay, Touch ID comes up
+    /// by itself. Moving on cancels it; a cancelled prompt waits for the next visit.
+    private func scheduleAutoUnlock() {
+        autoUnlockWork?.cancel()
+        autoUnlockWork = nil
+        let delay = Defaults[.autoUnlockDelay], role = activeRole
+        guard delay >= 0, window.isVisible, pane(role).isShowingLock, let id = pane(role).noteID else { return }
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.window.isKeyWindow, self.activeRole == role, self.pane(role).isShowingLock,
+                      self.pane(role).noteID == id else { return }
+                self.requestUnlock(role)
+            }
+        }
+        autoUnlockWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
     private func focusActive() {
@@ -522,12 +562,18 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
 
     private func focusMoved() {
         relock.setFocused(isFocusedOnUnlockedLockedNote, at: Date())
+        applyThemeIfNeeded()
         refreshChrome()
     }
 
     func refreshChrome() {
         guard let bottomBar else { return }
-        let theme = Theme.current
+        let theme = chromeTheme
+        let showBar = Defaults[.showBottomBar]
+        if bottomBar.isHidden == showBar {
+            bottomBar.isHidden = !showBar
+            if !showBar { bottomBar.setRevealed(false, animated: false) }
+        }
         let b = board()
         var titles: [Int: String] = [:]
         for note in store.deck where note.slot != nil { titles[note.slot!] = note.isLocked ? "Locked note" : note.title }
@@ -547,7 +593,7 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
                 parts.append(status)
             } else {
                 let formatter = Defaults[.showNoteDates] ? Self.dateTimeFormatter : Self.dateFormatter
-                parts.append(formatter.string(from: note.modified))
+                parts.append(formatter.string(from: Defaults[.showCreationDate] ? note.created : note.modified))
             }
         }
         if role == .slot, let slot = openSlot {
@@ -555,7 +601,7 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         } else {
             let deck = ephemeralDeck()
             if let i = deck.firstIndex(where: { $0.id == id }) {
-                parts.append("\(i + 1) of \(deck.count)")
+                if Defaults[.showNoteCount] { parts.append("\(i + 1) of \(deck.count)") }
                 latest = i == 0
             }
         }
@@ -609,20 +655,32 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
 
     func pinStateChanged() { refreshChrome() }
 
+    /// The chrome follows the note in front: slotted notes can have their own theme pair.
+    private var chromeTheme: Theme { Theme.current(slotted: activeRole == .slot) }
+
+    private func applyThemeIfNeeded() {
+        if chromeTheme.id != appliedThemeID { applyTheme() }
+    }
+
     private func applyTheme() {
         guard titleBar != nil else { return }
-        let theme = Theme.current
+        let theme = chromeTheme
+        appliedThemeID = theme.id
         let background = NSColor(hex: theme.background)
         var translucent = false
         if #available(macOS 15, *) { translucent = Defaults[.translucent] }
         window.isOpaque = !translucent
         window.backgroundColor = translucent ? .clear : background
         effectView.isHidden = !translucent
-        tintView.layer?.backgroundColor = background.withAlphaComponent(translucent ? 0.5 : 1).cgColor
+        let opacity = translucent ? CGFloat(min(max(Defaults[.translucencyOpacity], 0), 1)) : 1
+        tintView.layer?.backgroundColor = background.withAlphaComponent(opacity).cgColor
+        let backdrop: HoverBar.Backdrop = !translucent ? .none : Defaults[.solidBarsWhenTranslucent] ? .solid(background) : .material
+        titleBar.setBackdrop(backdrop)
+        bottomBar.setBackdrop(backdrop)
         titleBar.apply(theme: theme)
         window.alignTrafficLights()
-        ephemeralPane.apply(theme: theme)
-        slotPane.apply(theme: theme)
+        ephemeralPane.apply(theme: Theme.current(slotted: false))
+        slotPane.apply(theme: Theme.current(slotted: true))
         refreshChrome()
     }
 
@@ -935,6 +993,6 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
     /// Keeps the Export submenu in sync with the enabled destinations.
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
-        for item in MainMenu.exportMenu(target: self).items { item.menu?.removeItem(item); menu.addItem(item) }
+        for item in MainMenu.exportMenu(target: self, forMainMenu: true).items { item.menu?.removeItem(item); menu.addItem(item) }
     }
 }

@@ -197,18 +197,37 @@ class HoverBar: NSView {
     var pinnedVisible = false { didSet { setRevealed(pinnedVisible, animated: false) } }
     var onHoverChange: ((Bool) -> Void)?
     let content = NSView()
+    /// Behind the buttons, fading with them: nothing in an opaque window; in a translucent one a `hudWindow`
+    /// material blended within the window, or the theme background with "Use solid colors for top and bottom bars
+    /// when translucent".
+    enum Backdrop: Equatable { case none, material, solid(NSColor) }
+    private let material = NSVisualEffectView()
 
     override init(frame: NSRect) {
         super.init(frame: frame)
         content.alphaValue = 0
+        content.wantsLayer = true
         content.translatesAutoresizingMaskIntoConstraints = false
         addSubview(content)
+        material.material = .hudWindow
+        material.blendingMode = .withinWindow
+        material.state = .active
+        material.isHidden = true
+        material.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(material)
         NSLayoutConstraint.activate([
             content.leadingAnchor.constraint(equalTo: leadingAnchor), content.trailingAnchor.constraint(equalTo: trailingAnchor),
             content.topAnchor.constraint(equalTo: topAnchor), content.bottomAnchor.constraint(equalTo: bottomAnchor),
+            material.leadingAnchor.constraint(equalTo: content.leadingAnchor), material.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            material.topAnchor.constraint(equalTo: content.topAnchor), material.bottomAnchor.constraint(equalTo: content.bottomAnchor),
         ])
     }
     required init?(coder: NSCoder) { fatalError() }
+
+    func setBackdrop(_ backdrop: Backdrop) {
+        material.isHidden = backdrop != .material
+        if case .solid(let color) = backdrop { content.layer?.backgroundColor = color.cgColor } else { content.layer?.backgroundColor = nil }
+    }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()

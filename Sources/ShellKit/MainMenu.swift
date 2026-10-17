@@ -8,38 +8,67 @@ extension Defaults.Keys {
 }
 
 /// Builds the menu bar: the app menu, File, Edit, Appearance, Navigate, Support, Window and Help. Every item with a
-/// key equivalent shows up in `shortcuts`, which Settings → Shortcuts lists — the menu is the single source of
-/// truth for keyboard shortcuts.
+/// key equivalent shows up in `shortcuts`, which Settings → Shortcuts lists and rebinds — the menu is the single
+/// source of truth for keyboard shortcuts, and rebinding changes the menu items themselves
+/// (`Defaults[.menuShortcuts]`).
 @MainActor
 enum MainMenu {
     struct ShortcutEntry: Identifiable {
         let menu: String
         let title: String
         let keys: String
-        var id: String { menu + "/" + title }
+        /// `MenuLogic.bindingID` of the item.
+        let id: String
+        /// The current shortcut, for the recorder (nil when the item has none).
+        let shortcut: Shortcut?
+        /// Rebound in Settings (not the built-in shortcut).
+        let isCustom: Bool
     }
 
     /// Items whose title or visibility follows app state (pin, read-only, archive, lock, slot shortcuts).
     private static let state = MenuState()
     private static var built: NSMenu?
+    /// File › Export Note › Quick Export: one lasting item, so its shortcut can be rebound like the others.
+    private static var quickExportItem: NSMenuItem?
 
-    /// The active key equivalents, menu by menu, in menu order (hidden items are skipped).
+    /// The rebindable items and their active shortcuts, menu by menu, in menu order (hidden items are skipped).
+    /// Items whose shortcut was removed are listed too, so one can be added back.
     static var shortcuts: [ShortcutEntry] {
         guard let built else { return [] }
+        let overrides = Defaults[.menuShortcuts]
         var entries: [ShortcutEntry] = []
         func walk(_ menu: NSMenu, section: String) {
             menu.delegate?.menuNeedsUpdate?(menu)   // fills lazily built menus (Export Note)
             for item in menu.items where !item.isHidden && !item.isSeparatorItem {
                 if let sub = item.submenu { walk(sub, section: section) }
-                if !item.keyEquivalent.isEmpty {
-                    entries.append(ShortcutEntry(menu: section, title: item.title,
-                                                 keys: MenuLogic.display(item.keyEquivalent, item.keyEquivalentModifierMask)))
-                }
+                guard let binding = state.bindings.first(where: { $0.item === item }) else { continue }
+                let key = item.keyEquivalent, mods = item.keyEquivalentModifierMask
+                entries.append(ShortcutEntry(menu: section, title: item.title, keys: key.isEmpty ? "" : MenuLogic.display(key, mods),
+                                             id: binding.id, shortcut: key.isEmpty ? nil : Shortcut(keyEquivalent: key, modifiers: mods),
+                                             isCustom: overrides[binding.id] != nil))
             }
         }
         for top in built.items { if let sub = top.submenu { walk(sub, section: top.title) } }
         return entries
     }
+
+    /// Why `shortcut` can't be used for the item `id`: it already belongs to another menu item.
+    static func conflict(_ shortcut: Shortcut, except id: String) -> String? {
+        let key = shortcut.keyEquivalent.lowercased(), mods = shortcut.modifiers.intersection(MenuLogic.bindingModifiers)
+        guard let owner = state.bindings.first(where: { b in
+            b.id != id && !b.item.keyEquivalent.isEmpty && b.item.keyEquivalent.lowercased() == key
+                && b.item.keyEquivalentModifierMask.intersection(MenuLogic.bindingModifiers) == mods
+        }) else { return nil }
+        return "\(shortcut.displayString) is already used by “\(owner.item.title)”."
+    }
+
+    /// Builds the menus without installing them, so Settings → Shortcuts has rows in offscreen renders.
+    static func buildForPreview() {
+        if built == nil { _ = build(target: Shell.shared) }
+    }
+
+    /// Puts every rebindable item back on its built-in shortcut.
+    static func restoreDefaultShortcuts() { Defaults[.menuShortcuts] = [:] }
 
     private static let up = MenuLogic.upArrow
     private static let down = MenuLogic.downArrow
@@ -47,6 +76,7 @@ enum MainMenu {
     static func build(target shell: Shell) -> NSMenu {
         let main = NSMenu()
         state.shell = shell
+        state.bindings = []
 
         func item(_ title: String, _ action: Selector?, _ key: String = "", _ mods: NSEvent.ModifierFlags = .command,
                   target: AnyObject? = shell, tag: Int = 0, object: Any? = nil) -> NSMenuItem {
@@ -55,6 +85,11 @@ enum MainMenu {
             i.target = target
             i.tag = tag
             i.representedObject = object
+            // Items that come with a shortcut can be rebound in Settings → Shortcuts.
+            if let action, !key.isEmpty {
+                state.bindings.append(MenuBinding(id: MenuLogic.bindingID(action: action, object: object as? String, tag: tag),
+                                                  item: i, key: key, modifiers: mods))
+            }
             return i
         }
         func editor(_ title: String, _ command: EditorCommand, _ key: String = "", _ mods: NSEvent.ModifierFlags = .command) -> NSMenuItem {
@@ -87,6 +122,7 @@ enum MainMenu {
             item("Quit Jotter", #selector(NSApplication.terminate(_:)), "q", target: NSApp),
         ])
 
+        quickExportItem = item("Quick Export", #selector(Shell.quickExport(_:)), "s")
         let export = NSMenuItem(title: "Export Note", action: nil, keyEquivalent: "")
         let exportMenu = NSMenu(title: "Export Note")
         exportMenu.delegate = shell
@@ -182,16 +218,27 @@ enum MainMenu {
 
         NSApp.helpMenu = add("Help", supportItems())
         built = main
-        state.observeSlotShortcuts()
+        state.observeBindings()
         return main
     }
 
-    static func exportMenu(target: Shell) -> NSMenu {
+    /// The Export Note menu. The main menu's copy (`forMainMenu`) holds the lasting Quick Export item; the others
+    /// get a copy with its current shortcut.
+    static func exportMenu(target: Shell, forMainMenu: Bool = false) -> NSMenu {
         let menu = NSMenu(title: "Export Note")
         for row in MenuLogic.exportRows(enabled: Defaults[.exportDestinations], quick: Defaults[.quickExportDestination]) {
             switch row {
             case .quickExport(let title):
-                menu.addItem(withTitle: title, action: #selector(Shell.quickExport(_:)), keyEquivalent: "s").target = target
+                if forMainMenu, let quick = quickExportItem {
+                    quick.menu?.removeItem(quick)
+                    quick.title = title
+                    menu.addItem(quick)
+                } else {
+                    let copy = menu.addItem(withTitle: title, action: #selector(Shell.quickExport(_:)),
+                                            keyEquivalent: quickExportItem?.keyEquivalent ?? "s")
+                    copy.keyEquivalentModifierMask = quickExportItem?.keyEquivalentModifierMask ?? .command
+                    copy.target = target
+                }
             case .destination(let title, let destination):
                 let item = menu.addItem(withTitle: title, action: #selector(Shell.exportItem(_:)), keyEquivalent: "")
                 item.target = target
@@ -236,17 +283,41 @@ public enum MenuLogic {
     /// Export Note: Quick Export first, then files (text, Markdown, PDF), then the apps notes are sent to — enabled
     /// destinations only, groups split by separators.
     public static func exportRows(enabled: Set<ExportDestination>, quick: ExportDestination?) -> [ExportRow] {
-        let files: [ExportDestination] = [.plainText, .markdown, .pdf], apps: [ExportDestination] = [.bear, .obsidian, .appleNotes]
+        let files: [ExportDestination] = [.plainText, .markdown, .pdf]
+        let apps: [ExportDestination] = [.bear, .obsidian, .appleNotes, .customURL]
         let groups: [[ExportRow]] = [
             quick.map { [.quickExport("Quick Export (\($0.displayName.replacingOccurrences(of: #" \(\..*\)$"#, with: "", options: .regularExpression)))")] } ?? [],
             files.filter(enabled.contains).map { .destination(exportName($0), $0) },
-            apps.filter(enabled.contains).map { .destination("Send to \(exportName($0))", $0) },
+            apps.filter(enabled.contains).map { .destination($0 == .customURL ? exportName($0) : "Send to \(exportName($0))", $0) },
         ].filter { !$0.isEmpty }
         return Array(groups.joined(separator: [.separator]))
     }
 
     public static func exportName(_ destination: ExportDestination) -> String {
-        destination == .pdf ? "PDF (.pdf)" : destination.displayName
+        switch destination {
+        case .pdf: "PDF (.pdf)"
+        case .customURL: "Custom Export"
+        default: destination.displayName
+        }
+    }
+
+    /// The modifiers a menu shortcut can use.
+    public static let bindingModifiers: NSEvent.ModifierFlags = [.command, .option, .control, .shift]
+
+    /// A menu item's id for its rebound shortcut: the action's name, then the command or slot it acts on
+    /// ("newNote", "editorCommand.findAndReplace", "openSlotItem.3").
+    public static func bindingID(action: Selector, object: String?, tag: Int) -> String {
+        var id = NSStringFromSelector(action)
+        if id.hasSuffix(":") { id.removeLast() }
+        if let object { return id + "." + object }
+        return tag != 0 || id.hasSuffix("SlotItem") ? id + ".\(tag)" : id
+    }
+
+    /// The shortcut a rebindable item gets: its override (nil = removed) or its built-in one.
+    public static func shortcut(builtIn key: String, _ mods: NSEvent.ModifierFlags, override: Shortcut??) -> (String, NSEvent.ModifierFlags) {
+        guard let override else { return (key, mods) }
+        guard let shortcut = override else { return ("", []) }
+        return (shortcut.keyEquivalent, shortcut.modifiers.intersection(bindingModifiers))
     }
 
     /// "⌃⌥⇧⌘K"-style text for a key equivalent.
@@ -265,8 +336,16 @@ public enum MenuLogic {
     }
 }
 
-/// Keeps state-dependent menu titles current ("Pin Jotter to Top" / "Unpin from Top", …) and shows the slot
-/// jumps only while ⌘1…⌘9 belong to the slots.
+/// A menu item whose shortcut can be rebound, with its built-in shortcut.
+struct MenuBinding {
+    let id: String
+    let item: NSMenuItem
+    let key: String
+    let modifiers: NSEvent.ModifierFlags
+}
+
+/// Keeps state-dependent menu titles current ("Pin Jotter to Top" / "Unpin from Top", …), shows the slot jumps
+/// only while ⌘1…⌘9 belong to the slots, and applies rebound shortcuts as soon as they change.
 @MainActor
 final class MenuState: NSObject, NSMenuDelegate {
     typealias Toggle = MenuLogic.Toggle
@@ -275,7 +354,8 @@ final class MenuState: NSObject, NSMenuDelegate {
     var toggles: [(NSMenuItem, Toggle)] = []
     weak var jumpToFront: NSMenuItem?
     var slotItems: [NSMenuItem] = []
-    private var cancellable: AnyCancellable?
+    var bindings: [MenuBinding] = []
+    private var cancellables: Set<AnyCancellable> = []
 
     private var currentNote: Note? { shell?.currentNoteID.flatMap { Services.store?.note($0) } }
 
@@ -294,14 +374,26 @@ final class MenuState: NSObject, NSMenuDelegate {
         }
     }
 
-    func observeSlotShortcuts() {
-        cancellable = Defaults.publisher(.shellKitSlotNumberShortcuts).sink { [weak self] in self?.applySlotShortcuts($0) }
+    func observeBindings() {
+        cancellables = []
+        for key in [Defaults.Keys.shellKitSlotNumberShortcuts, .menuShortcuts] {
+            Defaults.changes.filter { $0 == key.name }.sink { [weak self] _ in self?.applyBindings() }.store(in: &cancellables)
+        }
+        applyBindings()
     }
 
-    /// With slot shortcuts on, ⌘1…⌘9 open the slots and Jump to Front gives up ⌘1.
-    func applySlotShortcuts(_ on: Bool) {
-        slotItems.forEach { $0.isHidden = !on }
-        jumpToFront?.keyEquivalent = on ? "" : "1"
+    /// Every rebindable item gets its override or built-in shortcut. With slot shortcuts on, ⌘1…⌘9 open the
+    /// slots and Jump to Front gives up ⌘1.
+    func applyBindings() {
+        let slotsOn = Defaults[.shellKitSlotNumberShortcuts]
+        slotItems.forEach { $0.isHidden = !slotsOn }
+        let overrides = Defaults[.menuShortcuts]
+        for b in bindings {
+            let builtIn = b.item === jumpToFront && slotsOn ? "" : b.key
+            let (key, mods) = MenuLogic.shortcut(builtIn: builtIn, b.modifiers, override: overrides[b.id])
+            b.item.keyEquivalent = key
+            b.item.keyEquivalentModifierMask = mods
+        }
     }
 
     @objc func toggleArchive(_ sender: Any?) {

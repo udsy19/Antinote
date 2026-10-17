@@ -19,14 +19,21 @@ themeAppearanceObserver), `WindowTopBar` (buttonVisibilityState, isHovered), `Cu
 - Top bar (34 pt, hover): the traffic lights (centred 17 pt down), Settings and Search on the left, New Note and
   Pin on the right — line-art glyphs drawn in code (`ChromeIcon`), `typeHyperLight` hover, `typeLight` pressed,
   `accent3Main` when pinned. The strip drags the window even while hidden.
-- Bottom bar (30 pt, hover): Move to The Void on the left; the note's date ("Show note modified/created time"
-  adds the time) and position "14 of 18" in the middle; Previous, Next, Latest and Export (a menu of the export
-  destinations, Quick Export and Print) on the right.
+- Bottom bar (30 pt, hover; gone with "Show bottom bar" off): Move to The Void on the left; the note's date
+  ("Show note modified/created time" adds the time, "Show the note creation date" shows when it was created instead of
+  last changed) and position "14 of 18" ("Show note count") in the middle; Previous, Next, Latest and Export (a menu
+  of the export destinations, Quick Export and Print) on the right.
 - Latest-note dot: 5 pt `accent1Main`, 10 pt from the bottom-right corner, on the front note only
   (`showLatestNoteIndicator`).
 - The editor comes from `Services.editorFactory.makeEditor()`; each pane owns one editor.
-- Background = `Theme.current.background`; re-applied on appearance change, `Theme.didChange` and theme keys.
-- Translucent (`translucent`, macOS 15+ only): a behind-window visual-effect view under the theme background at 50%.
+- Background = the theme's background; re-applied on appearance change, `Theme.didChange` and theme keys. The chrome
+  follows the note in front: a slotted note uses the slotted theme pair when one is chosen
+  (`slottedLightTheme` / `slottedDarkTheme`, `Theme.current(slotted:)`).
+- Translucent (`translucent`, macOS 15+ only): a behind-window visual-effect view under the theme background at
+  `translucencyOpacity` (0 = the bare material). The top and bottom bars then float on a `hudWindow` material blended
+  within the window, or on the theme background with `solidBarsWhenTranslucent`.
+- Pseudo-menu-bar mode drops the window down under the status item at `dropdownWidth × dropdownHeight`
+  (`DropdownLayout`, kept on screen and above the window's minimum size).
 - `present(inWindow:)` puts a view (Search) over the whole note area; navigating to a note removes it.
 - Frame is autosaved (`setFrameAutosaveName`) in normal presence modes.
 - Closing the window hides it (the app keeps running); ⌘Q quits.
@@ -39,7 +46,10 @@ move to the previous or next note.", "Swipe sensitivity", "Higher values require
 "Empty note deleted", "Jumped to latest", "Note is already first", "Create a new note after",
 "Start with a new note", "Use latest empty note", tutorial "[←] Swipe or ⌘+[ to see the previous note."
 
-- The deck is `Services.store.deck` minus slotted notes, front (newest) first. Index 0 = latest.
+- The deck is `Services.store.deck` minus slotted notes, front (newest) first. Index 0 = latest. With
+  `showArchivedInStack`, archived notes follow at the back.
+- Launch opens the last note shown; "Start with a new note" (`startWithNewNote`) opens a fresh one (an empty front
+  note is reused); "Use slotted notes as your main notes" (`slottedAsMain`) opens the first slotted note.
 - Previous (older) = index + 1: two-finger swipe with fingers moving right, or ⌘[. Next (newer) = index − 1:
   fingers moving left, or ⌘].
 - Moving newer from the front note creates a new note — unless the front note is empty ("Already at latest").
@@ -102,7 +112,11 @@ unpinned.", "Restore pin state on open", "Launch Antinote at login", "Pin Antino
 ## Menus
 
 `MainMenu.build` is the single source for the menu bar and the Settings → Shortcuts list. Order, titles and
-default keys follow the reference app's command table (see `ui-parity.md`).
+default keys follow the reference app's command table (see `ui-parity.md`). Every item built with a shortcut is
+rebindable: Settings → Shortcuts shows a recorder per item, `Defaults[.menuShortcuts]` keeps the overrides by
+`MenuLogic.bindingID` (nil = no shortcut) and `MenuState.applyBindings()` rewrites the items' key equivalents as soon as
+they change, so menus, chrome tooltips and the Shortcuts list update together. A shortcut another item already uses
+is refused with its name; "Restore Defaults" clears every override.
 App: About, Settings… ⌘,, Services, Hide ⌘H, Hide Others ⌥⌘H, Show All, Quit ⌘Q.
 File: Create New Note ⌘N, Move Note to Front ⇧⌘1, Search All Notes ⌘F, Command Palette… ⌘K, Find and Replace ⇧⌘F,
 Toggle Split Screen ⇧⌘T, Swap Ephemeral vs. Slotted ⌘T, Make Read-Only/Allow Editing ⇧⌘R, Archive/Unarchive ⇧⌘A,
@@ -132,7 +146,9 @@ time a locked note was in focus. Quitting Antinote always locks them.", "Relock 
 - A locked, not-yet-authenticated note shows a lock screen (icon, title, Unlock button) instead of the editor.
 - `RelockSession`: unlocked IDs are session-only; the clock restarts whenever a locked note is in focus;
   once `relockAfterMinutes` pass without focus (0 = as soon as you leave), all are locked again.
-  Settings → Privacy has "Relock locked notes" (immediately).
+  Settings → Notes has "Relock locked notes" (immediately).
+- "Ask to unlock automatically" (`autoUnlockDelay`): a locked note that stays in front for that long asks for Touch ID
+  by itself; navigating away cancels it, and a cancelled prompt waits for the next visit.
 
 ## Settings window
 

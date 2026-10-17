@@ -29,10 +29,17 @@ public enum StorageKitModule {
         sync.start()
     }
 
-    /// Purges expired Void notes and makes the daily automatic backup.
+    /// Purges expired Void notes, sends long-unmodified notes to The Void (when set) and makes the automatic
+    /// backup once its interval has passed.
     @MainActor static func runMaintenance(_ store: SQLiteNoteStore) {
         store.purgeExpiredVoid()
-        guard Date().timeIntervalSince(Defaults[.storageLastAutoBackup]) >= 86_400 else { return }
+        let days = Defaults[.autoDeleteUnmodifiedDays]
+        if days > 0 {
+            let cutoff = Date().addingTimeInterval(-Double(days) * 86_400)
+            for note in store.deck where note.isUnmodified(since: cutoff) { store.moveToVoid(note.id) }
+        }
+        let interval = Double(max(Defaults[.backupIntervalHours], 1)) * 3600
+        guard Date().timeIntervalSince(Defaults[.storageLastAutoBackup]) >= interval else { return }
         do {
             _ = try store.backup()
             Defaults[.storageLastAutoBackup] = Date()

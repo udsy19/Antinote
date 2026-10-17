@@ -110,13 +110,11 @@ Evidence: "All the numbers in the text you write will be added together", tutori
 * Count ("Any of these will count all non-empty lines"): items = non-empty lines, lines = all lines, words,
   characters (no newlines) — excluding the keyword line and `//` lines.
 
-## Lists — `ListLine`
+## Lists
 
-Markers: `[ ]`, `[x]`/`[X]`, `- [ ]`/`- [x]` (markdown task), `- `, `* `, `• `, `+ `, `1. `, `1) `; indentation is
-kept verbatim and its level = tabs + spaces/4. `cycled()`: checkbox → bullet → numbered → plain → checkbox
-(Settings default style decides the first step from plain). `toggled()` flips a checkbox. `continuation()` gives
-the marker for the next line (unchecked box, same bullet, number + 1). `ListLine.renumber(_:)` renumbers runs of
-numbered lines per indentation level; a blank or non-list line ends a run.
+List markers are parsed and edited by the editor (`EditorKit`'s `ListLine` and `EditorLogic.Lists`, see
+editorkit.md): `[ ]`, `[x]`/`[X]`, `- `, `* `, `• `, `1. `. Settings → Keywords → List → "Default list style"
+decides what plain lines in a list note become and where "Cycle List Type" starts.
 
 ## Paste cleaning — `PasteCleaner`
 

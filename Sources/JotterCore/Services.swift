@@ -53,6 +53,8 @@ public protocol TimerServicing: AnyObject {
     func isRunning(noteID: UUID) -> Bool
     /// Text shown in the note while running, e.g. "12:04 · work".
     func status(noteID: UUID) -> String?
+    /// Plays the alert sound at the volume set in Settings → Timer (its Test button).
+    func playAlertSound()
 }
 
 @MainActor
@@ -78,6 +80,29 @@ public protocol WindowServicing: AnyObject {
     func present(inWindow view: NSView?)
 }
 
+/// One command of the ⌘K palette. The editor's inline "/" list offers the same commands.
+public struct PaletteCommand {
+    public var title: String
+    public var detail: String?
+    public var symbol: String
+    /// Right-aligned hint, e.g. a shortcut or "Slot 2".
+    public var trailing: String?
+    /// Extra searchable words (they rank below title matches).
+    public var keywords: String
+    /// Set for "go to note" commands, so full-text hits don't repeat them.
+    public var noteID: UUID?
+    /// Set for "Insert Keyword" commands: the keyword that becomes the note's first line. The editor makes that
+    /// change itself, as one undoable edit; everywhere else `action` writes the note.
+    public var keyword: String?
+    public var action: () -> Void
+
+    public init(title: String, detail: String? = nil, symbol: String, trailing: String? = nil, keywords: String = "",
+                noteID: UUID? = nil, keyword: String? = nil, action: @escaping () -> Void) {
+        self.title = title; self.detail = detail; self.symbol = symbol; self.trailing = trailing
+        self.keywords = keywords; self.noteID = noteID; self.keyword = keyword; self.action = action
+    }
+}
+
 /// Floating panels owned by ToolsKit.
 @MainActor
 public protocol PanelServicing: AnyObject {
@@ -86,6 +111,9 @@ public protocol PanelServicing: AnyObject {
     /// Asks, then permanently deletes every note in The Void.
     func emptyVoid()
     func showSearch()
+    /// The palette's commands matching `query` (fuzzy, best first; every command for an empty query), without its
+    /// note matches.
+    func commands(matching query: String) -> [PaletteCommand]
 }
 
 @MainActor

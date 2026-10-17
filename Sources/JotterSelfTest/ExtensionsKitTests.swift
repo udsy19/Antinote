@@ -142,7 +142,7 @@ func registerExtensionsKitTests() {
 // MARK: - Helpers
 
 /// Saves and restores the Defaults keys extension tests touch.
-private struct DefaultsSnapshot {
+struct DefaultsSnapshot {
     let values: [String: Any?]
     init(_ names: [String]) { values = Dictionary(uniqueKeysWithValues: names.map { ($0, Defaults.store.object(forKey: $0)) }) }
     func restore() {

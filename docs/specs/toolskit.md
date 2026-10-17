@@ -67,11 +67,13 @@ Sources: the class digest (`TimerManager`, `TimerPreferences`, `TimerCompleteAle
   `reset`, `togglePause`, `runningNoteIDs`, `showFullScreen(noteID:)`.
 - Menu bar (`Defaults[.timerInMenuBar]`): one `NSStatusItem` titled with the soonest-ending timer (stopwatches only when
   nothing counts down); its menu lists every timer with pause/resume, full screen, open note and stop.
-- Completion (`Defaults[.timerAlertStyle]`): `fullScreen` → a borderless overlay on the active screen with a big title,
-  an original encouraging line, Dismiss (Esc) and a "Breathe" button that switches to an animated breathing circle;
-  `notification` → `UNUserNotificationCenter` (only when running from an app bundle); `both`. Pomodoro transitions
-  ("Work Session Complete" + "Break time remaining:", "Next work session started.") use the same channels.
-  Sounds (`Defaults[.timerSounds]`): system sounds "Glass" (done), "Hero" (break), "Ping" (work).
+- Completion (`TimerAlert.settings(for:kind:)`): Settings → Timer has its own three switches for "When a countdown
+  finishes" (`countdownNotification`, `countdownFullScreen`, `countdownSound`) and "When a pomodoro ends"
+  (`pomodoro…`); pomodoro sessions or breaks of 30 seconds or less stay silent. Full screen → a borderless overlay on
+  the active screen; notification → `UNUserNotificationCenter` (only when running from an app bundle). Pomodoro
+  transitions ("Work Session Complete" + "Break time remaining:", "Break Over") use the same channels. Sounds: system
+  sounds "Glass" (done), "Hero" (break), "Ping" (work) at `Defaults[.timerVolume]`; Settings' Test button plays one
+  through `TimerServicing.playAlertSound()`.
 - Persistence: every state change is saved under the module key `toolsKit.timers`. On quit, with
   `Defaults[.pauseTimersOnQuit]` running timers are paused and flagged; on launch flagged timers resume. Without the
   setting timers keep counting in wall-clock time and anything that ended while the app was closed is marked done.
@@ -79,13 +81,16 @@ Sources: the class digest (`TimerManager`, `TimerPreferences`, `TimerCompleteAle
 
 ### Export (`ExportManager`, `ExportText`)
 - `ExportText` (pure): optional keyword removal (`Defaults[.omitKeywordInExport]`; the first line is dropped when
-  `NoteMode.detect` recognises it), title = first remaining line, Markdown conversion: `☐ ◻ □ [ ]` → `- [ ]`,
+  `NoteMode.detect` recognises it), title = first remaining line (`Defaults[.exportFirstLineAsTitle]`; otherwise
+  `datedTitle`, "Jotter - 2026-10-17 14-05-09" from the last change), Markdown conversion: `☐ ◻ □ [ ]` → `- [ ]`,
   `☑ ☒ ✓ ✔ [x]` → `- [x]`, `• ◦ ‣ ▪` → `-`; in list-mode notes unmarked lines become `- [ ]`. Indentation is kept.
 - Apple Notes: `NSAppleScript` `tell application "Notes" to make new note with properties {name:…, body:…}` (HTML
   body). Error -1743 explains how to allow Automation (System Settings → Privacy & Security → Automation).
 - Obsidian: `obsidian://new?vault=<Defaults[.obsidianVault]>&name=&content=` (vault omitted when empty).
-  Bear: `bear://x-callback-url/create?title=&text=`. URLs longer than 60 000 characters are refused with
-  "Note is too long. Export to txt, md, or copy/paste."
+  Bear: `bear://x-callback-url/create?title=&text=`. Custom URL scheme: `Defaults[.customURLTemplate]` with
+  `{TITLE}`, `{CONTENT}` and `{DATE}` (ISO 8601) percent-encoded (`ExportText.customURL`); the menu calls it
+  "Custom Export". URLs longer than 60 000 characters are refused with "Note is too long. Export to txt, md, or
+  copy/paste."
 - Plain text / Markdown: `NSSavePanel` named after the title. PDF: an `NSTextView` laid out with the editor font
   (`Defaults[.fontName]`/`[.fontSize]`, theme text colour forced to black on white paper) printed to file via
   `NSPrintOperation` (`jobDisposition = .save`). `print(_:)` shows the print panel.
@@ -111,9 +116,13 @@ Shell use: `open "jotter://append?text=$(python3 -c 'import urllib.parse,sys;pri
 ### Command palette (`CommandPalette`, `FuzzyMatcher`, `QuickPanel`)
 - `QuickPanel`: floating non-activating-style `NSPanel` (search field + table), ↑/↓ move, Enter runs, Esc or focus
   loss closes; shared by the palette and search.
-- Items: new note, go to note (deck titles), slots, export to each enabled destination, export all, print, toggle pin,
-  settings tabs, timer presets and running-timer controls, insert keyword (sets the current note's first line), extension
-  commands from `Services.extensions.commands` (appended as `::name()`), The Void, Search All Notes.
+- Items (`PaletteCommand`, the Core contract): new note, go to note (deck titles), slots, export to each enabled
+  destination, export all, print, toggle pin, settings tabs, timer presets and running-timer controls, insert keyword
+  (one per `NoteMode.keywordModes`, its main keyword and summary; sets the current note's first line with
+  `NoteMode.settingKeyword`), extension commands from `Services.extensions.commands` (appended as `::name()`),
+  The Void, Search All Notes.
+- `PanelServicing.commands(matching:)` returns the same ranked commands without note matches; the editor's inline
+  "/" list is built from it (see editorkit.md), so both surfaces share one command source.
 - `FuzzyMatcher.score` (pure): case-insensitive subsequence match; bonuses for exact/prefix match, word starts and
   consecutive characters, penalties for gaps and late starts. Ties keep the item order. Empty query lists actions.
 
@@ -132,4 +141,4 @@ Empty results: "Try a different search term".
 - Core: a timer-change publisher in `TimerServicing`, `pause/reset` in the protocol, `print` in `ExportServicing`,
   a shared settings-tab enum, an editor-insertion hook in `WindowServicing`; the app's Info.plist needs
   `CFBundleURLTypes` (`jotter`) and `NSAppleEventsUsageDescription`.
-- Not implemented: Notion and custom URL-template export, the "refresh db" URL command.
+- Not implemented: Notion export, the "refresh db" URL command.

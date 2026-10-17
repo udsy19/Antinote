@@ -191,18 +191,26 @@ public final class ICloudDriveSync: SyncServicing {
 enum PreferencesSync {
     /// Settings that make sense on every Mac (not per-machine paths, login items or privacy/sync switches).
     static let keyNames: Set<String> = Set(([
-        .appPresence, .globalHotkey, .pinOnTop, .restorePinState, .hideOnFocusLoss, .newNoteAfterMinutes,
+        .appPresence, .globalHotkey, .menuShortcuts, .pinOnTop, .restorePinState, .hideOnFocusLoss, .newNoteAfterMinutes,
         .swipeNavigation, .swipeSensitivity, .showLatestNoteIndicator, .showNoteDates, .alwaysShowSlotsBar, .forceRTL,
+        .startWithNewNote, .dropdownWidth, .dropdownHeight,
         .lightTheme, .darkTheme, .paperType, .paperOpacity, .fontName, .textSize, .doubleFontSize, .lineSpacing, .translucent, .appIcon,
+        .solidBarsWhenTranslucent, .translucencyOpacity, .showBottomBar, .showNoteCount, .showCreationDate,
+        .slottedLightTheme, .slottedDarkTheme,
         .vimMode, .keepIndentOnReturn, .allowTextReplacements, .shortenLinks, .detectLinks,
-        .defaultListStyle, .checkedItemBehavior, .listContinuity,
+        .checkSpelling, .vimMotionTimeout, .autoCopySelection, .caretOffset, .caretOffsetInLists,
+        .defaultListStyle, .checkedItemBehavior, .listContinuity, .inlineCheckboxes, .inlineBullets, .inlineNumbered,
+        .checkTriggers,
         .primaryCurrency, .secondaryCurrency, .decimalPlaces, .showCurrencySymbol, .autoUpdateRates, .preventEditingAnswers, .customRates,
         .cleanPaste, .pasteRemoveMarkdown, .pasteRemoveBullets, .pasteRemoveNumbering, .pasteRemoveLeadingWhitespace,
         .pasteRemoveEmptyLines, .copyWholeNoteWhenNoSelection, .cutLineWhenNoSelection, .skipKeywordWhenCopying,
-        .copyListItemsUnchecked, .skipListMarkersWhenCopying, .extraKeywords,
-        .timerAlertStyle, .timerSounds, .timerInMenuBar, .pauseTimersOnQuit, .pomodoroWorkMinutes, .pomodoroBreakMinutes,
-        .voidRetentionDays, .backupCount, .relockAfterMinutes, .exportDestinations, .quickExportDestination,
-        .omitKeywordInExport, .extensionsEnabled,
+        .copyListItemsUnchecked, .skipListMarkersWhenCopying, .extraKeywords, .mainKeywords, .keywordsEnabled,
+        .countdownNotification, .countdownFullScreen, .countdownSound, .pomodoroNotification, .pomodoroFullScreen,
+        .pomodoroSound, .timerVolume,
+        .timerInMenuBar, .pauseTimersOnQuit, .pomodoroWorkMinutes, .pomodoroBreakMinutes,
+        .voidRetentionDays, .backupCount, .backupIntervalHours, .autoDeleteUnmodifiedDays, .showArchivedInStack,
+        .autoUnlockDelay, .slottedAsMain, .relockAfterMinutes, .exportDestinations, .quickExportDestination,
+        .omitKeywordInExport, .exportFirstLineAsTitle, .customURLTemplate, .extensionsEnabled,
     ] as [Defaults.Keys]).map(\.name))
 
     static func sync(folder: SyncFolder) throws {

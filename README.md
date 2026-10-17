@@ -186,9 +186,10 @@ API keys you granted it.
   restore.
 - **Locked notes.** Lock a note behind Touch ID or your password; it relocks after a few minutes away.
   Read-only and archived notes too.
-- **Command palette and search.** <kbd>⌘K</kbd> runs any command, inserts keywords and extensions;
-  <kbd>⌘F</kbd> searches every note, archived ones included.
-- **Export.** Apple Notes, Obsidian, Bear, Markdown, plain text, PDF and print. Quick Export with
+- **Command palette and search.** <kbd>⌘K</kbd> runs any command, inserts keywords and extensions; type
+  <kbd>/</kbd> on an empty line for the same commands right in the note. <kbd>⌘F</kbd> searches every note,
+  archived ones included.
+- **Export.** Apple Notes, Obsidian, Bear, any app with a URL scheme, Markdown, plain text, PDF and print. Quick Export with
   <kbd>⌘S</kbd>, or export every note as Markdown plus a re-importable JSON file.
 - **Encrypted sync.** Optional sync through your own iCloud Drive; notes are sealed with AES-GCM on your Mac
   first.
@@ -204,7 +205,7 @@ API keys you granted it.
 ## Keyboard shortcuts
 
 The global hotkey is <kbd>⌥A</kbd> by default (change it in **Settings → Shortcuts**). Every menu shortcut is also
-listed in **Settings → Shortcuts**.
+listed in **Settings → Shortcuts**, where each one can be rebound.
 
 | Shortcut | Action |
 |---|---|

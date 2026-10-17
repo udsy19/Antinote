@@ -16,7 +16,7 @@ public final class ExportManager: ExportServicing {
         guard !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             HUD.show("No note to export", kind: .warning); return
         }
-        let title = ExportText.title(of: body)
+        let title = Defaults[.exportFirstLineAsTitle] ? ExportText.title(of: body) : ExportText.datedTitle(note.modified)
         let markdown = ExportText.markdownDocument(note.content, omitKeyword: omit)
         switch destination {
         case .appleNotes:
@@ -35,6 +35,11 @@ public final class ExportManager: ExportServicing {
             save(markdown, name: ExportText.fileName(title, ext: "md"), type: UTType(filenameExtension: "md") ?? .plainText)
         case .pdf:
             exportPDF(body, name: ExportText.fileName(title, ext: "pdf"))
+        case .customURL:
+            let date = ISO8601DateFormatter().string(from: note.modified)
+            guard let url = ExportText.customURL(template: Defaults[.customURLTemplate], title: title, content: body, date: date)
+            else { Alerts.error("Add the custom URL in Settings → Export first."); return }
+            openURL(url, app: "The app for this URL scheme")
         }
     }
 

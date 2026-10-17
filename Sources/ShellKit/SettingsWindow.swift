@@ -160,6 +160,21 @@ enum Maintenance {
         }
     }
 
+    /// "Delete all notes not modified since": after confirming, sends every ephemeral, unarchived note last changed
+    /// before that day to The Void.
+    static func voidNotes(notModifiedSince date: Date) {
+        let day = Calendar.current.startOfDay(for: date)
+        let notes = Services.store.deck.filter { $0.isUnmodified(since: day) }
+        guard !notes.isEmpty else { HUD.show("No notes to delete before that date"); return }
+        let count = "\(notes.count) note\(notes.count == 1 ? "" : "s")"
+        guard Alerts.confirm("Move \(count) to The Void?",
+                             info: "Every note not changed since \(day.formatted(date: .abbreviated, time: .omitted)) goes to "
+                                 + "The Void. You can restore them from there until it is emptied.",
+                             confirmTitle: "Move to The Void") else { return }
+        for note in notes { Services.store.moveToVoid(note.id) }
+        HUD.show("\(count) moved to The Void")
+    }
+
     static func copySyncKey() {
         guard let key = Services.sync?.exportKey() else { HUD.show("No encryption key yet"); return }
         NSPasteboard.general.clearContents()

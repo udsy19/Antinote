@@ -18,11 +18,21 @@ extension Scenes {
                     snapshot(SettingsPreview.page(tab: tab, height: height))
                 }
             }
+            + [Scene(name: "settings-shortcuts-rebound", size: NSSize(width: size.width, height: 900)) { reboundShortcuts() }]
+    }
+
+    /// Shortcuts with "Create New Note" moved to ⌥⌘N and "Delete Note" left without a shortcut.
+    private static func reboundShortcuts() -> NSView {
+        let none: Shortcut? = nil
+        Defaults[.menuShortcuts] = ["newNote": Shortcut(keyEquivalent: "n", modifiers: [.command, .option]), "moveToVoid": none]
+        defer { Defaults.reset(.menuShortcuts) }
+        return snapshot(SettingsPreview.page(tab: "shortcuts", height: 900))
     }
 
     /// Tall enough to show every section of each tab.
     private static let fullHeights: [String: CGFloat] = [
-        "appearance": 1900, "editor": 1900, "notes": 1600, "keywords": 3300, "privacy": 1100, "general": 1250,
+        "appearance": 2350, "editor": 2000, "notes": 1600, "keywords": 3000, "privacy": 1100, "general": 1250,
+        "shortcuts": 2600, "timer": 1100, "export": 1100,
     ]
 
     private static func settingsWindow(_ tab: String) -> NSView {

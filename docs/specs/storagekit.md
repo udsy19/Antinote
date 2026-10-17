@@ -56,7 +56,9 @@ Sources: the class digest (ivars/selectors), UI strings and the bundled `DataMod
 
 ### Backups and portability
 - `backup()` runs `VACUUM INTO` (consistent while open) into `JotterPaths.backups/notes-<timestamp>.sqlite` and keeps
-  the newest `Defaults[.backupCount]`. `StorageKitModule` makes one automatically per day.
+  the newest `Defaults[.backupCount]`. `StorageKitModule`'s hourly maintenance makes one automatically once
+  `Defaults[.backupIntervalHours]` (default 24) have passed, and moves ephemeral, unarchived notes not changed for
+  `Defaults[.autoDeleteUnmodifiedDays]` days to The Void (0 = never; `Note.isUnmodified(since:)`).
 - `restore(from:)` validates the file, saves the current notes as a new backup, closes the database, swaps the file
   (removing `-wal`/`-shm`), reopens, migrates, turns sync off and marks "local wins" for the next sync, then posts
   `.reloaded`. On failure the old database is reopened untouched.

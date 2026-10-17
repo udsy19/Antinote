@@ -18,6 +18,25 @@ public enum ExportText {
         return line.map { String($0.prefix(120)) } ?? "Untitled"
     }
 
+    /// The title when notes aren't named after their first line: "Jotter - 2026-10-17 14-05-09" (last modified).
+    public static func datedTitle(_ modified: Date, timeZone: TimeZone = .current) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = timeZone
+        f.dateFormat = "yyyy-MM-dd HH-mm-ss"
+        return "Jotter - " + f.string(from: modified)
+    }
+
+    /// The Custom URL scheme destination: `template` with {TITLE}, {CONTENT} and {DATE} replaced by the
+    /// percent-encoded values. Nil when the template is blank.
+    public static func customURL(template: String, title: String, content: String, date: String) -> String? {
+        let t = template.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return nil }
+        return t.replacingOccurrences(of: "{TITLE}", with: queryValue(title))
+            .replacingOccurrences(of: "{CONTENT}", with: queryValue(content))
+            .replacingOccurrences(of: "{DATE}", with: queryValue(date))
+    }
+
     /// A file name for `title` without extension (no path separators or colons, at most 80 characters).
     public static func baseName(_ title: String) -> String {
         let cleaned = title.map { "/:\\\0".contains($0) ? "-" : $0 }

@@ -81,7 +81,7 @@ public struct Theme: Codable, Hashable, Identifiable, Sendable {
         accent3Secondary: "#469521", accent4Main: "#FF9E3C", accent4Secondary: "#CE741A", accent5Main: "#FF7C75",
         accent5Secondary: "#C95B55", gridSuperlight: "#303336", gridClear: "#404448", gridBold: "#575B5F")
 
-    /// The default pair plus seven named themes.
+    /// The default pair plus twelve named themes, in the reference app's order.
     public static let builtIn: [Theme] = [
         defaultLight,
         defaultDark,
@@ -101,6 +101,14 @@ public struct Theme: Codable, Hashable, Identifiable, Sendable {
             accent1Tertiary: "#85ABA3", accent2Main: "#3C3C3C", accent2Secondary: "#282828B2", accent3Main: "#DC5A1E",
             accent3Secondary: "#B43C14", accent4Main: "#FF4514", accent4Secondary: "#C83214", accent5Main: "#F01414",
             accent5Secondary: "#B40F0F", gridSuperlight: "#30333699", gridClear: "#464B5099", gridBold: "#636A7199"),
+        Theme(
+            name: "Meadow", isDark: false,
+            background: "#FAF5EB", backgroundFade: "#E8DECD", typeMain: "#46321E", typeSubtle: "#5F8750",
+            typeSubtlePlus: "#6E5541", typeHighlight: "#FFE6A0", typeLight: "#B4B4B4", typeSuperlight: "#DCDCDC",
+            typeHyperLight: "#F0F0F0", typeReverse: "#FFFFFF", accent1Main: "#557D69", accent1Secondary: "#3C6450",
+            accent1Tertiary: "#8CAA64", accent2Main: "#D2B48C", accent2Secondary: "#A08264", accent3Main: "#FFA59B",
+            accent3Secondary: "#F0B4A0", accent4Main: "#C8A078", accent4Secondary: "#AA8264", accent5Main: "#78AA5A",
+            accent5Secondary: "#649650", gridSuperlight: "#D7D7C999", gridClear: "#BBBBAF99", gridBold: "#AAAAA599"),
         Theme(
             name: "Cedar", isDark: true,
             background: "#03180C", backgroundFade: "#0D2819", typeMain: "#DCDCDC", typeSubtle: "#85620F",
@@ -126,6 +134,22 @@ public struct Theme: Codable, Hashable, Identifiable, Sendable {
             accent3Secondary: "#8C9696", accent4Main: "#FF64C8", accent4Secondary: "#C83C8C", accent5Main: "#FF8C3C",
             accent5Secondary: "#C86428", gridSuperlight: "#3A3D4099", gridClear: "#3A3D40CC", gridBold: "#3A3D40"),
         Theme(
+            name: "Armor", isDark: true,
+            background: "#0A0A0F", backgroundFade: "#161822", typeMain: "#585858", typeSubtle: "#324664",
+            typeSubtlePlus: "#283C5A", typeHighlight: "#1C4B63", typeLight: "#828282", typeSuperlight: "#505050",
+            typeHyperLight: "#323232", typeReverse: "#000000", accent1Main: "#3C5082", accent1Secondary: "#3C5082B2",
+            accent1Tertiary: "#506496", accent2Main: "#32C832", accent2Secondary: "#28962880", accent3Main: "#FF3C3C",
+            accent3Secondary: "#B42828", accent4Main: "#FFC83C", accent4Secondary: "#C89628", accent5Main: "#B43CFF",
+            accent5Secondary: "#8C28C8", gridSuperlight: "#3A3D4099", gridClear: "#3A3D40CC", gridBold: "#3A3D40"),
+        Theme(
+            name: "Stealth", isDark: true,
+            background: "#292D2D", backgroundFade: "#374041", typeMain: "#CADEE8", typeSubtle: "#B5C2C8",
+            typeSubtlePlus: "#94AAB5", typeHighlight: "#7BC290", typeLight: "#859393", typeSuperlight: "#5C6464",
+            typeHyperLight: "#484E4E", typeReverse: "#000000", accent1Main: "#9BC6D3", accent1Secondary: "#5F9199",
+            accent1Tertiary: "#395458", accent2Main: "#850E17", accent2Secondary: "#9C131D", accent3Main: "#63907C",
+            accent3Secondary: "#A3C1B7", accent4Main: "#918070", accent4Secondary: "#66574B", accent5Main: "#F2F6F7",
+            accent5Secondary: "#F2F6F7CC", gridSuperlight: "#4E515499", gridClear: "#4E5154CC", gridBold: "#4E5154"),
+        Theme(
             name: "Fern", isDark: false,
             background: "#F5FFF5", backgroundFade: "#CEECCE", typeMain: "#323232", typeSubtle: "#821EA0",
             typeSubtlePlus: "#32C832", typeHighlight: "#B3F92C", typeLight: "#969696", typeSuperlight: "#C8C8C8",
@@ -141,6 +165,22 @@ public struct Theme: Codable, Hashable, Identifiable, Sendable {
             accent1Tertiary: "#FFA050", accent2Main: "#50AA50", accent2Secondary: "#3C823C80", accent3Main: "#7391A8",
             accent3Secondary: "#3B5A72", accent4Main: "#503214", accent4Secondary: "#3C1E0A", accent5Main: "#452423",
             accent5Secondary: "#7A3331", gridSuperlight: "#D2D2D299", gridClear: "#D2D2D2CC", gridBold: "#D2D2D2"),
+        Theme(
+            name: "Spice", isDark: false,
+            background: "#E1D2B4", backgroundFade: "#EDDEBF", typeMain: "#9F865E", typeSubtle: "#85704F",
+            typeSubtlePlus: "#78603A", typeHighlight: "#EFD978", typeLight: "#AE9C7E", typeSuperlight: "#B5A990",
+            typeHyperLight: "#CDBFA4", typeReverse: "#FFFFFF", accent1Main: "#99501A", accent1Secondary: "#5D3112",
+            accent1Tertiary: "#421F0E", accent2Main: "#2E92E5", accent2Secondary: "#2775B6", accent3Main: "#2A3735",
+            accent3Secondary: "#5A7378", accent4Main: "#C8B478", accent4Secondary: "#AA9664", accent5Main: "#401F0D",
+            accent5Secondary: "#642706", gridSuperlight: "#BEBEBE99", gridClear: "#BEBEBECC", gridBold: "#BEBEBE"),
+        Theme(
+            name: "Bubblegum", isDark: false,
+            background: "#FFFFFF", backgroundFade: "#F4E7ED", typeMain: "#E876B2", typeSubtle: "#F1BFDC",
+            typeSubtlePlus: "#D4A3BF", typeHighlight: "#CCE1D1", typeLight: "#9CCCE8", typeSuperlight: "#B1D3E7",
+            typeHyperLight: "#C4D9E5", typeReverse: "#FFFFFF", accent1Main: "#84B0DD", accent1Secondary: "#A9BDE1",
+            accent1Tertiary: "#B9CCD7", accent2Main: "#8EC58E", accent2Secondary: "#69A76980", accent3Main: "#A1BAA7",
+            accent3Secondary: "#6B918A", accent4Main: "#E9BFC3", accent4Secondary: "#E78AB9", accent5Main: "#D29BCB",
+            accent5Secondary: "#CC669A", gridSuperlight: "#DCDCDC99", gridClear: "#DCDCDCCC", gridBold: "#DCDCDC"),
     ]
 
     /// Built-ins plus valid custom theme files.
@@ -152,11 +192,20 @@ public struct Theme: Codable, Hashable, Identifiable, Sendable {
         return builtIn + custom
     }
 
-    /// The theme for the current appearance.
-    @MainActor public static var current: Theme {
+    /// The theme for the current appearance (ephemeral notes and the window chrome).
+    @MainActor public static var current: Theme { current(slotted: false) }
+
+    /// The theme for the current appearance; slotted notes use their own pair when one is chosen.
+    @MainActor public static func current(slotted: Bool) -> Theme {
         let dark = NSApp?.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        let id = dark ? Defaults[.darkTheme] : Defaults[.lightTheme]
+        let id = selectedID(dark: dark, slotted: slotted)
         return all.first { $0.id == id } ?? (dark ? defaultDark : defaultLight)
+    }
+
+    /// The chosen theme id: the slotted pair's when `slotted` and it is set, otherwise the ephemeral pair's.
+    public static func selectedID(dark: Bool, slotted: Bool) -> String {
+        let own = slotted ? Defaults[dark ? .slottedDarkTheme : .slottedLightTheme] : ""
+        return own.isEmpty ? Defaults[dark ? .darkTheme : .lightTheme] : own
     }
 
     public static let didChange = Notification.Name("JotterThemeDidChange")

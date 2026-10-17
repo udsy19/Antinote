@@ -19,7 +19,56 @@ enum Scenes {
         scenes.append(Scene(name: "editor-drop", size: window) { EditorPreview.dropOverlay(size: window) })
         scenes.append(Scene(name: "editor-autocomplete", size: window) { autocomplete() })
         scenes.append(Scene(name: "editor-autocomplete-dark", size: window, dark: true) { autocomplete() })
-        return scenes + windows + settings + tools
+        scenes.append(Scene(name: "editor-slash", size: window) { slashList(query: "") })
+        scenes.append(Scene(name: "editor-slash-dark", size: window, dark: true) { slashList(query: "") })
+        scenes.append(Scene(name: "editor-slash-filtered", size: window) { slashList(query: "ti") })
+        scenes.append(Scene(name: "editor-find", size: window) { EditorPreview.findShelf(Demo.notes[2].1, term: "the", replace: false) })
+        scenes.append(Scene(name: "editor-find-replace", size: window) {
+            EditorPreview.findShelf(Demo.notes[2].1, term: "the", replace: true)
+        })
+        scenes.append(Scene(name: "editor-find-replace-dark", size: window, dark: true) {
+            EditorPreview.findShelf(Demo.notes[2].1, term: "the", replace: true)
+        })
+        scenes.append(Scene(name: "editor-bullet-list", size: window) { listStyle(.bullet) })
+        // Last: each one leaves its theme selected (the editors restyle when the window lays them out).
+        let themes = Theme.builtIn.filter { ["Meadow", "Armor", "Stealth", "Spice", "Bubblegum"].contains($0.name) }.map { theme in
+            Scene(name: "theme-\(theme.id)", size: window, dark: theme.isDark) { themed(theme) }
+        }
+        return scenes + windows + settings + tools + themes
+    }
+
+    /// The "/" list under a line holding "/" plus `query`, filled with commands like the palette's.
+    static func slashList(query: String) -> NSView {
+        let view = editor("Groceries\nmilk and eggs\n/" + query)
+        var commands = NoteMode.keywordModes.map { mode in
+            PaletteCommand(title: "Insert Keyword: \(mode.mainKeyword)", detail: mode.summary, symbol: "text.insert",
+                           keywords: mode.keywords.joined(separator: " "), keyword: mode.mainKeyword) {}
+        }
+        commands += [PaletteCommand(title: "New Note", symbol: "square.and.pencil", trailing: "⌘N") {},
+                     PaletteCommand(title: "Search All Notes", symbol: "magnifyingglass", trailing: "⌘F") {}]
+        if !query.isEmpty {
+            commands = [PaletteCommand(title: "Insert Keyword: timer", detail: NoteMode.timer.summary, symbol: "text.insert",
+                                       keyword: "timer") {},
+                        PaletteCommand(title: "Start Pomodoro (25/5)", symbol: "timer") {},
+                        PaletteCommand(title: "Settings: Timer", symbol: "gearshape") {}]
+        }
+        let list = EditorPreview.slashList(commands, query: query, width: window.width)
+        list.setFrameOrigin(NSPoint(x: 33, y: window.height - 128 - list.frame.height))
+        view.addSubview(list)
+        return view
+    }
+
+    /// A list note whose plain lines took the bullet style.
+    static func listStyle(_ style: ListStyle) -> NSView {
+        Defaults[.defaultListStyle] = style
+        defer { Defaults.reset(.defaultListStyle) }
+        return editor("list: Weekend\nfarmers market\nfix the bike\n[x] call grandma\nbake bread")
+    }
+
+    /// The math demo note in `theme` (which stays selected for the rest of the run).
+    static func themed(_ theme: Theme) -> NSView {
+        Defaults[theme.isDark ? .darkTheme : .lightTheme] = theme.id
+        return editor(Demo.notes[0].1)
     }
 
     /// A note editor showing `text` with the caret at the end.
@@ -184,6 +233,7 @@ extension Scenes {
                 Scene(name: "window-revealed-dark", size: size, dark: true) { windowFrame(revealed: true) },
                 // Last: opening a slot changes the shared window's state.
                 Scene(name: "window-slot", size: size) { windowFrame(revealed: true, slot: 1) },
+                Scene(name: "window-slot-own-theme", size: size) { slottedThemeFrame() },
                 Scene(name: "window-locked", size: size) { lockedFrame() }]
             + chromeGlyphs
     }
@@ -199,6 +249,14 @@ extension Scenes {
             store.create(content: Demo.notes[0].1)
         }
         return Render.drawn(WindowPreview.frameView(revealed: revealed, slot: slot))
+    }
+
+    /// Slot five with its own theme (Meadow) while ephemeral notes keep the default pair.
+    private static func slottedThemeFrame() -> NSView {
+        Defaults[.slottedLightTheme] = "meadow"
+        defer { Defaults.reset(.slottedLightTheme) }
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))   // lets the editors restyle
+        return windowFrame(revealed: true, slot: 4)
     }
 
     /// A locked note in slot seven, shown behind its lock screen.

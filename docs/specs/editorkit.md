@@ -49,15 +49,35 @@ its UI strings (quoted below).
 - Markers live in the text: `[ ]`, `[x]`, `- `, `* `, `1. ` (after optional indentation). Their characters are
   hidden and take no width, so item text lines up with the body; the checkbox (`typeMain` outline, `accent2Main`
   on hover, `accent2Secondary` at half strength when checked), bullet dot or number is drawn in the gutter.
-- `list` notes: "Every line is automatically a new item." Non-empty lines without a marker get `[ ] ` added,
-  except `# headers` and `// comments`.
-- Click a checkbox to toggle; checked items are struck through in `typeLight`. `Defaults[.checkedItemBehavior]`:
-  keep, move to the bottom of the list block ("Moves to the bottom"), or delete.
+- `list` notes: "Every line is automatically a new item." Non-empty lines without a marker get the default list
+  style's marker (`Defaults[.defaultListStyle]`: `[ ] `, `- ` or `1. `, numbers then renumber), except
+  `# headers` and `// comments`.
+- Outside list notes, only the markers switched on in Settings → Editor → Automatic lists
+  (`inlineCheckboxes`, `inlineBullets`, `inlineNumbered`) become items: drawn in the gutter, continued on Return,
+  indented with Tab and removed with Backspace. The others stay plain text. List notes always use every marker
+  (`EditorLogic.Lists.Options`).
+- Click a checkbox to toggle; checked items are struck through in `typeLight`. Typing a check trigger
+  (`Defaults[.checkTriggers]`, default `/x`) at the end of an item (any line of a list note) checks it off as a
+  `[x]` item and removes the trigger. `Defaults[.checkedItemBehavior]`: keep, move to the bottom of the list block
+  ("Moves to the bottom"), or delete.
 - Return continues the list (`Defaults[.listContinuity]`, new checkbox unchecked, numbers +1); Return on an
   empty item removes the marker (ends the list). Otherwise Return keeps the previous line's indentation
   (`Defaults[.keepIndentOnReturn]`, "Maintain tab indent on enter").
 - Tab / Shift-Tab indent / outdent list lines and multi-line selections ("Tab Highlighted Lines",
-  "Untab Highlighted Lines"). ⌘⇧M cycles none → checkbox → bullet → numbered → checkbox. Numbered runs renumber.
+  "Untab Highlighted Lines"). ⌘⇧M cycles none → the default list style, then checkbox → bullet → numbered →
+  checkbox. Numbered runs renumber.
+
+## The "/" command list
+
+- Typing `/` at the start of a line (after any indentation or list marker) or after a space opens the command
+  palette's commands under the caret (`PanelServicing.commands(matching:)`, the same source as ⌘K, without note
+  matches). In math, sum, avg, count and code notes, and inside code blocks, it only opens on an otherwise empty
+  line. Letters after the `/` filter the list.
+- A bare `/` lists the keyword commands first (`NoteMode.keywordModes` order, each keyword in its colour with what
+  it does), then the rest. Rows 1–9 are numbered: typing the digit, Return, Tab or a click runs the row; ↑/↓ move.
+  Esc closes it until the next `/`; `//` (a comment) or a space closes it.
+- A keyword command removes the `/query` and makes its keyword (`NoteMode.mainKeyword`) the note's first line as
+  one undoable edit (`NoteMode.settingKeyword`). Other commands remove the `/query`, save, then run.
 
 ## Math & summaries ("Calculated results can't be edited.")
 
@@ -120,15 +140,35 @@ its UI strings (quoted below).
   (`skipKeywordWhenCopying`). All copies expand short links; outside code, `copyListItemsUnchecked` turns `[x]`
   into `[ ]` and `skipListMarkersWhenCopying` drops markers. A toast names what happened.
 - ⌘X without a selection cuts the current line (`cutLineWhenNoSelection`).
+- "Auto-copy selected text" (`autoCopySelection`): a selection is copied, with the same rules, once it has stayed
+  put for 0.35 s.
+
+## Typing & typography
+
+- "Check spelling" (`checkSpelling`) turns continuous spell checking on or off; code notes are never checked.
+- "Caret height offset" / "… in lists" (`caretOffset`, `caretOffsetInLists`, −5…5 pt) raise or lower the caret
+  (`EditorLogic.caretRect(nudge:)`); "Reset Font & Offsets to Defaults" resets them with the font and RTL.
+- Slotted notes are styled with the slotted theme pair when one is chosen (`Theme.current(slotted:)`).
 
 ## Commands (`EditorCommand`)
 
 toggleCheckbox (adds `[ ] ` to a plain line, toggles otherwise), cycleListStyle, indent, outdent, moveLineUp/Down,
 duplicateLineUp/Down ("Duplicate Line Up/Down"), strikethrough (toggles `~~text~~` around the selection or line
-content — "Strikethrough Text"), find / findAndReplace / findNext / findPrevious (the system find bar via
-`NSTextFinder`, which has Ignore Case and Full Word options — "Find and Replace", "Matches Word"),
+content — "Strikethrough Text"), find / findAndReplace / findNext / findPrevious (the find shelf, below),
 increase/decrease/resetTextSize, copyAll ("Copied all to clipboard"), selectLine, expandAllLinks,
 showExtensionAutocomplete. Each programmatic edit is one undo step.
+
+## Find and replace (`FindShelf`, `EditorLogic.Find`)
+
+- ⇧⌘F docks a shelf under the note on `backgroundFade` with a hairline: a chevron that shows the Replace row, the
+  search field with an "Aa" (match case) toggle and a match-type popup (Contains, Matches Word, Starts With, Ends
+  With, Regex), ‹ › and Done; the second row has the Replace field and Replace | All.
+- Opening it expands every short link (so addresses can be found) and takes a single-line selection as the term;
+  closing shortens them again and selects the match last shown. Matches are washed in `typeHighlight` at 45%, the
+  shown one in full; the caret stays put while the field has focus. Return / ⇧Return, ‹ › and ⌘G / ⇧⌘G step
+  through matches, wrapping. A term that finds nothing turns red.
+- Replace swaps the shown match (regex templates such as `$1` expand) and moves on; All replaces every match as one
+  undoable edit ("Replaced N matches"). Esc or Done closes; switching notes closes it too.
 
 ## Vim ("Modal editing with Normal, Insert, and Visual modes. Press Escape to return to Normal mode.", "Visual Line")
 
@@ -136,6 +176,8 @@ showExtensionAutocomplete. Each programmatic edit is one undo step.
   the bottom-left corner.
 - Motions with counts: h j k l w b e 0 $ ^ gg G. Operators: x, d, y, c with motions, dd yy cc, D C, p P (linewise
   aware), o O i a I A, v V (d y c x in visual), u, ctrl-r, `/pattern` then n N, Esc.
+- "Motion timeout" (`vimMotionTimeout`, 200–3000 ms): a half-typed command (a count, an operator or `g`) is dropped
+  when its next key doesn't arrive in time (`VimEngine.cancelPendingInput()`).
 
 ## Read-only & locked
 

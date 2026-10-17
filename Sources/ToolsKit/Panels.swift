@@ -18,6 +18,10 @@ public final class ToolsPanels: PanelServicing {
 
     public func showVoid() { void.show() }
 
+    public func commands(matching query: String) -> [PaletteCommand] {
+        palette.ranked(query, includeNotes: false).map(\.command)
+    }
+
     public func emptyVoid() { VoidModel().emptyVoid() }
 
     public func showSearch() { showSearch(query: "") }

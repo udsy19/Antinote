@@ -154,21 +154,66 @@ final class LinkTipView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
-/// The `::` command list shown under the caret. Keys stay with the text view; this panel only displays and
-/// accepts clicks.
+/// One row of an inline command list: the `::` extension commands or the "/" palette commands.
+struct CompletionRow: Equatable {
+    var title: String
+    /// Theme role of the title (the keyword's colour for keyword rows); `typeMain` otherwise.
+    var titleRole: KeyPath<Theme, String> = \.typeMain
+    /// "/" rows: 1…9, typed to pick the row.
+    var number: Int?
+    /// Small text after the title: the extension name (on a fill) or a keyword's summary (plain).
+    var tag: String?
+    var tagFilled = true
+    /// Right-aligned: an extension action badge, or a palette shortcut in `typeLight`.
+    var badge: String?
+    var trailing: String?
+
+    static func command(_ c: ExtensionCommandInfo) -> CompletionRow {
+        CompletionRow(title: c.name, tag: c.extensionName, badge: c.action)
+    }
+
+    /// A palette command: keyword commands show the keyword in its colour plus what it does; others their title
+    /// and shortcut.
+    static func palette(_ c: PaletteCommand, number: Int?) -> CompletionRow {
+        guard let keyword = c.keyword else {
+            return CompletionRow(title: c.title, number: number, trailing: c.trailing)
+        }
+        let mode = NoteMode.keywordModes.first { $0.keywords.contains(keyword) } ?? .plain
+        return CompletionRow(title: keyword, titleRole: keywordRole(mode), number: number, tag: c.detail, tagFilled: false)
+    }
+
+    /// The theme role of a keyword's colour (as `Theme.keyword(_:)` picks it).
+    static func keywordRole(_ mode: NoteMode) -> KeyPath<Theme, String> {
+        switch mode {
+        case .plain: \.typeMain
+        case .math: \.accent1Main
+        case .list: \.accent2Main
+        case .sum, .autopaste: \.accent3Main
+        case .average, .code, .timer: \.accent4Main
+        case .count: \.accent5Main
+        }
+    }
+}
+
+/// An inline command list under the caret (the `::` list and the "/" list). Keys stay with the text view; this
+/// panel only displays and accepts clicks.
 @MainActor
 final class CompletionPanel {
     private let panel: NSPanel
     private let list = CompletionListView()
-    var items: [ExtensionCommandInfo] { list.items }
+    let maxRows: Int
+    var rows: [CompletionRow] { list.rows }
     var selectedIndex: Int { list.selected }
     var isVisible: Bool { panel.isVisible }
-    var onAccept: ((ExtensionCommandInfo) -> Void)? {
+    /// Called with the clicked row's index.
+    var onAccept: ((Int) -> Void)? {
         get { list.onAccept }
         set { list.onAccept = newValue }
     }
 
-    init() {
+    init(footer: String, maxRows: Int) {
+        self.maxRows = maxRows
+        list.footer = footer
         panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 320, height: 100),
                         styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
         panel.isOpaque = false
@@ -178,14 +223,14 @@ final class CompletionPanel {
         panel.contentView = list
     }
 
-    /// Shows `items` (or the empty state) under the caret, about 60% as wide as the note window; above the caret
+    /// Shows `rows` (or the empty state) under the caret, about 60% as wide as the note window; above the caret
     /// when the caret is in the lower 40% of the window.
-    func show(_ items: [ExtensionCommandInfo], below screenRect: NSRect, parent: NSWindow?) {
-        list.theme = Theme.current
-        list.items = Array(items.prefix(8))
-        list.selected = min(list.selected, max(0, list.items.count - 1))
+    func show(_ rows: [CompletionRow], theme: Theme, below screenRect: NSRect, parent: NSWindow?) {
+        list.theme = theme
+        list.rows = Array(rows.prefix(maxRows))
+        list.selected = min(list.selected, max(0, list.rows.count - 1))
         let width = CompletionListView.width(forWindow: parent?.frame.width ?? 400)
-        let height = CompletionListView.height(rows: list.items.count)
+        let height = CompletionListView.height(rows: list.rows.count)
         let frame = parent?.frame ?? .zero
         let above = parent != nil && screenRect.minY < frame.maxY - frame.height * 0.6
         let y = above ? screenRect.maxY + 6 : screenRect.minY - height - 6
@@ -205,23 +250,27 @@ final class CompletionPanel {
     }
 
     func move(_ delta: Int) {
-        guard !list.items.isEmpty else { return }
-        list.selected = (list.selected + delta + list.items.count) % list.items.count
+        guard !list.rows.isEmpty else { return }
+        list.selected = (list.selected + delta + list.rows.count) % list.rows.count
         list.needsDisplay = true
     }
 }
 
-/// Rows (12 × 8 pt padding): a bold chevron on the selected row, the command name, a small extension tag and an
-/// action badge (symbol + action on the action's colour); a key-hint footer below a divider.
+/// Rows (12 × 8 pt padding): a bold chevron on the selected row (the row's number in the "/" list), the title, a
+/// small tag and, right-aligned, an action badge (symbol + action on the action's colour) or a shortcut; a key-hint
+/// footer below a divider.
 final class CompletionListView: NSView {
     static let rowHeight: CGFloat = 34
     static let footerHeight: CGFloat = 30
     static func height(rows: Int) -> CGFloat { 6 + CGFloat(max(rows, 2)) * rowHeight + footerHeight }
     /// About 60% of the note window, never narrower than 280 pt.
     static func width(forWindow width: CGFloat) -> CGFloat { max(280, width * 0.6) }
+    static let commandFooter = "↑↓ to navigate  •  ⇥ or ⏎ to select"
+    static let paletteFooter = "1–9 or ⏎ to run  •  esc to close"
 
-    var items: [ExtensionCommandInfo] = []
+    var rows: [CompletionRow] = []
     var selected = 0
+    var footer = CompletionListView.commandFooter
     /// `background` fill with a 1 px `typeSuperlight` border, 8 pt corners.
     var theme: Theme = .defaultLight {
         didSet {
@@ -230,7 +279,7 @@ final class CompletionListView: NSView {
             needsDisplay = true
         }
     }
-    var onAccept: ((ExtensionCommandInfo) -> Void)?
+    var onAccept: ((Int) -> Void)?
     override var isFlipped: Bool { true }
 
     override init(frame: NSRect) {
@@ -244,7 +293,7 @@ final class CompletionListView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         let main = NSColor(hex: theme.typeMain), light = NSColor(hex: theme.typeLight)
-        if items.isEmpty {
+        if rows.isEmpty {
             let title = NSAttributedString(string: "No commands found",
                                            attributes: [.font: NSFont.systemFont(ofSize: 13, weight: .medium), .foregroundColor: main])
             let detail = NSAttributedString(string: "Try a different search term",
@@ -252,49 +301,79 @@ final class CompletionListView: NSView {
             title.draw(at: NSPoint(x: (bounds.width - title.size().width) / 2, y: 14))
             detail.draw(at: NSPoint(x: (bounds.width - detail.size().width) / 2, y: 18 + title.size().height))
         }
-        for (i, item) in items.enumerated() {
+        for (i, item) in rows.enumerated() {
             let row = NSRect(x: 0, y: 3 + CGFloat(i) * Self.rowHeight, width: bounds.width, height: Self.rowHeight)
             if i == selected {
                 NSColor(hex: theme.typeHyperLight).setFill()
                 row.fill()
+            }
+            if let number = item.number {
+                let digit = NSAttributedString(string: "\(number)", attributes: [
+                    .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium), .foregroundColor: light,
+                ])
+                digit.draw(at: NSPoint(x: 12 + 6 - digit.size().width / 2, y: row.midY - digit.size().height / 2))
+            } else if i == selected {
                 Self.symbol("chevron.right", size: 10, weight: .bold, color: main)
                     .map { draw($0, centeredAt: NSPoint(x: 12 + 6, y: row.midY)) }
             }
-            // The badge, right-aligned: symbol and action name in `typeReverse` on the action's colour.
-            let (symbolName, fill) = Self.badge(item.action, theme: theme)
-            let reverse = NSColor(hex: theme.typeReverse)
-            let label = NSAttributedString(string: item.action,
-                                           attributes: [.font: NSFont.systemFont(ofSize: 10, weight: .medium), .foregroundColor: reverse])
-            let icon = Self.symbol(symbolName, size: 9, weight: .medium, color: reverse)
-            let iconWidth = icon.map { $0.size.width + 4 } ?? 0
-            let badgeRect = NSRect(x: row.maxX - 12 - (label.size().width + iconWidth + 16), y: row.midY - (label.size().height + 6) / 2,
-                                   width: label.size().width + iconWidth + 16, height: label.size().height + 6)
-            fill.setFill()
-            NSBezierPath(roundedRect: badgeRect, xRadius: 4, yRadius: 4).fill()
-            if let icon { draw(icon, centeredAt: NSPoint(x: badgeRect.minX + 8 + icon.size.width / 2, y: badgeRect.midY)) }
-            label.draw(at: NSPoint(x: badgeRect.minX + 8 + iconWidth, y: badgeRect.minY + 3))
-
-            let name = NSAttributedString(string: item.name, attributes: [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: main])
-            let tag = NSAttributedString(string: item.extensionName, attributes: [.font: NSFont.systemFont(ofSize: 9), .foregroundColor: light])
-            let tagRect = NSRect(x: badgeRect.minX - 8 - (tag.size().width + 8), y: row.midY - (tag.size().height + 4) / 2,
-                                 width: tag.size().width + 8, height: tag.size().height + 4)
-            let nameX: CGFloat = 12 + 12 + 8
-            let showTag = tagRect.minX > nameX + name.size().width + 8
-            if showTag {
-                NSColor(hex: theme.typeHyperLight).setFill()
-                NSBezierPath(roundedRect: tagRect, xRadius: 3, yRadius: 3).fill()
-                tag.draw(at: NSPoint(x: tagRect.minX + 4, y: tagRect.minY + 2))
+            // Right edge: the action badge (symbol and action name in `typeReverse` on the action's colour), or the
+            // shortcut in `typeLight`.
+            var right = row.maxX - 12
+            if let action = item.badge {
+                let (symbolName, fill) = Self.badge(action, theme: theme)
+                let reverse = NSColor(hex: theme.typeReverse)
+                let label = NSAttributedString(string: action,
+                                               attributes: [.font: NSFont.systemFont(ofSize: 10, weight: .medium), .foregroundColor: reverse])
+                let icon = Self.symbol(symbolName, size: 9, weight: .medium, color: reverse)
+                let iconWidth = icon.map { $0.size.width + 4 } ?? 0
+                let badgeRect = NSRect(x: right - (label.size().width + iconWidth + 16), y: row.midY - (label.size().height + 6) / 2,
+                                       width: label.size().width + iconWidth + 16, height: label.size().height + 6)
+                fill.setFill()
+                NSBezierPath(roundedRect: badgeRect, xRadius: 4, yRadius: 4).fill()
+                if let icon { draw(icon, centeredAt: NSPoint(x: badgeRect.minX + 8 + icon.size.width / 2, y: badgeRect.midY)) }
+                label.draw(at: NSPoint(x: badgeRect.minX + 8 + iconWidth, y: badgeRect.minY + 3))
+                right = badgeRect.minX
+            } else if let trailing = item.trailing {
+                let hint = NSAttributedString(string: trailing, attributes: [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: light])
+                hint.draw(at: NSPoint(x: right - hint.size().width, y: row.midY - hint.size().height / 2))
+                right -= hint.size().width
             }
-            let nameRect = NSRect(x: nameX, y: row.midY - name.size().height / 2, width: (showTag ? tagRect.minX : badgeRect.minX) - 8 - nameX,
-                                  height: name.size().height)
+
+            let name = NSAttributedString(string: item.title, attributes: [
+                .font: NSFont.systemFont(ofSize: 12), .foregroundColor: NSColor(hex: theme[keyPath: item.titleRole]),
+            ])
+            let nameX: CGFloat = 12 + 12 + 8
+            var nameEnd = right - 8
+            if let tagText = item.tag {
+                let tag = NSAttributedString(string: tagText, attributes: [
+                    .font: NSFont.systemFont(ofSize: item.tagFilled ? 9 : 11), .foregroundColor: light,
+                ])
+                if item.tagFilled {
+                    let tagRect = NSRect(x: right - 8 - (tag.size().width + 8), y: row.midY - (tag.size().height + 4) / 2,
+                                         width: tag.size().width + 8, height: tag.size().height + 4)
+                    if tagRect.minX > nameX + name.size().width + 8 {
+                        NSColor(hex: theme.typeHyperLight).setFill()
+                        NSBezierPath(roundedRect: tagRect, xRadius: 3, yRadius: 3).fill()
+                        tag.draw(at: NSPoint(x: tagRect.minX + 4, y: tagRect.minY + 2))
+                        nameEnd = tagRect.minX - 8
+                    }
+                } else {
+                    // A plain description after the title, truncated to the space left.
+                    let x = nameX + name.size().width + 10
+                    if right - 8 - x > 40 {
+                        tag.draw(with: NSRect(x: x, y: row.midY - tag.size().height / 2, width: right - 8 - x, height: tag.size().height),
+                                 options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+                    }
+                }
+            }
+            let nameRect = NSRect(x: nameX, y: row.midY - name.size().height / 2, width: nameEnd - nameX, height: name.size().height)
             name.draw(with: nameRect, options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
         }
-        let footer = NSRect(x: 0, y: bounds.height - Self.footerHeight, width: bounds.width, height: Self.footerHeight)
+        let footerRect = NSRect(x: 0, y: bounds.height - Self.footerHeight, width: bounds.width, height: Self.footerHeight)
         NSColor(hex: theme.typeSuperlight).setFill()
-        NSRect(x: 0, y: footer.minY, width: bounds.width, height: 1).fill()
-        let hint = NSAttributedString(string: "↑↓ to navigate  •  ⇥ or ⏎ to select",
-                                      attributes: [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: light])
-        hint.draw(at: NSPoint(x: 12, y: footer.midY - hint.size().height / 2))
+        NSRect(x: 0, y: footerRect.minY, width: bounds.width, height: 1).fill()
+        let hint = NSAttributedString(string: footer, attributes: [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: light])
+        hint.draw(at: NSPoint(x: 12, y: footerRect.midY - hint.size().height / 2))
     }
 
     private func draw(_ image: NSImage, centeredAt c: NSPoint) {
@@ -317,9 +396,9 @@ final class CompletionListView: NSView {
     override func mouseDown(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
         let i = Int((p.y - 3) / Self.rowHeight)
-        guard items.indices.contains(i), p.y < bounds.height - Self.footerHeight else { return }
+        guard rows.indices.contains(i), p.y < bounds.height - Self.footerHeight else { return }
         selected = i
-        onAccept?(items[i])
+        onAccept?(i)
     }
 }
 
@@ -327,12 +406,35 @@ final class CompletionListView: NSView {
 public enum EditorPreview {
     /// The `::` command list as it appears under the caret in a note window `width` points wide.
     @MainActor public static func completionList(_ items: [ExtensionCommandInfo], selected: Int = 0, width: CGFloat) -> NSView {
+        list(items.prefix(8).map(CompletionRow.command), footer: CompletionListView.commandFooter, selected: selected, width: width)
+    }
+
+    /// The "/" command list for `commands` as the palette returns them for `query`.
+    @MainActor public static func slashList(_ commands: [PaletteCommand], query: String = "", selected: Int = 0,
+                                            width: CGFloat) -> NSView {
+        list(JotterEditor.slashRows(EditorLogic.Slash.ordered(commands, query: query)), footer: CompletionListView.paletteFooter, selected: selected,
+             width: width)
+    }
+
+    @MainActor private static func list(_ rows: [CompletionRow], footer: String, selected: Int, width: CGFloat) -> NSView {
         let list = CompletionListView(frame: NSRect(x: 0, y: 0, width: CompletionListView.width(forWindow: width),
-                                                    height: CompletionListView.height(rows: min(items.count, 8))))
+                                                    height: CompletionListView.height(rows: rows.count)))
         list.theme = Theme.current
-        list.items = Array(items.prefix(8))
+        list.footer = footer
+        list.rows = rows
         list.selected = selected
         return list
+    }
+
+    /// A note editor showing `text` with the find shelf open on the first `term` (and its Replace row when
+    /// `replace`).
+    @MainActor public static func findShelf(_ text: String, term: String, replace: Bool) -> NSView {
+        let editor = JotterEditor()
+        editor.load(Note(content: text))
+        let r = (text as NSString).range(of: term)
+        if r.location != NSNotFound { editor.textView.setSelectedRange(r) }
+        editor.perform(replace ? .findAndReplace : .find)
+        return editor.view
     }
 
     /// The image-drop overlay filling a note window of `size`.

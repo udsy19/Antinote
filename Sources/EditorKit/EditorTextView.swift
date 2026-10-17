@@ -26,6 +26,8 @@ struct RenderModel {
     var blockCaret = false
     /// AutoPaste is listening: a blinking clipboard sits in the gutter at the first line.
     var autoPasting = false
+    /// Points the caret is raised (Settings → Editor → Caret height offset).
+    var caretNudge: CGFloat = 0
 }
 
 /// Note geometry for a size preset. The text starts after a fixed gutter (32 pt, wider with "Double font size"),
@@ -337,8 +339,8 @@ final class EditorTextView: NSTextView {
             if flag { color.withAlphaComponent(0.45).setFill(); r.fill() } else { setNeedsDisplay(r, avoidAdditionalLayout: true) }
             return
         }
-        guard flag else { return setNeedsDisplay(rect, avoidAdditionalLayout: true) }
-        let caret = EditorLogic.caretRect(lineRect: rect, capHeight: font.capHeight, leading: font.leading)
+        guard flag else { return setNeedsDisplay(rect.insetBy(dx: 0, dy: -abs(model.caretNudge)), avoidAdditionalLayout: true) }
+        let caret = EditorLogic.caretRect(lineRect: rect, capHeight: font.capHeight, leading: font.leading, nudge: model.caretNudge)
         color.setFill()
         NSBezierPath(roundedRect: caret, xRadius: 1, yRadius: 1).fill()
     }

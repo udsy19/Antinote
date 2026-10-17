@@ -31,6 +31,11 @@ public struct Note: Identifiable, Codable, Hashable, Sendable {
     }
 
     public var isInVoid: Bool { deletedAt != nil }
+    /// Whether "Delete all notes not modified since" / "Auto-delete unmodified notes" take this note: an ephemeral,
+    /// unarchived note outside The Void last changed before `date`.
+    public func isUnmodified(since date: Date) -> Bool {
+        slot == nil && !isArchived && !isInVoid && modified < date
+    }
     /// First non-empty line, used as a title in lists and exports.
     public var title: String {
         content.split(whereSeparator: \.isNewline).first.map { String($0).trimmingCharacters(in: .whitespaces) } ?? ""

@@ -3,6 +3,26 @@
 All notable changes to Jotter are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org).
 
+## [1.1.0] — 2026-10-17
+
+### Added
+- "/" palette: type "/" at the start of a line (or after a space) for keywords and commands; digits pick, letters
+  filter, "//" or Esc closes it.
+- Every menu shortcut can be rebound in Settings → Shortcuts, with conflict checks and per-row reset.
+- A find-and-replace bar with match case and Contains / Matches Word / Starts With / Ends With / Regex modes.
+- Five more themes: Meadow, Armor, Stealth, Spice and Bubblegum.
+- Settings: start with a new note, drop-down window size, solid bars and translucency opacity, a separate theme
+  for slotted notes, spell check, Vim motion timeout, per-marker automatic lists, auto-copy, caret offsets,
+  "Check off items with" (`/x`), separate timer alert sounds with volume, first-line titles and custom URL export.
+
+### Changed
+- The look follows Antinote closely: theme colours, text sizes and spacing, list markers, a 350 × 400 window,
+  30 pt top-bar buttons, the "date | N of M" bottom bar, menus and an 800 × 500 Settings window.
+- Two-finger swipes switch notes as soon as the gesture starts, one note per flick.
+- Math results show a fixed number of decimal places (2 by default) without the primary currency symbol.
+- ⌘F opens Search All Notes and ⌘D deletes the note; ⌘1–⌘9 for slots is off by default.
+- "Default list style" now applies to new list items.
+
 ## [1.0.0] — 2026-10-17
 
 First public release.
