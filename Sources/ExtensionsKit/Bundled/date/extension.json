@@ -1,0 +1,12 @@
+{
+  "name": "date",
+  "version": "1.0.0",
+  "author": "jotter",
+  "description": "Insert today's, tomorrow's or yesterday's date, or a date a number of business days away.",
+  "license": "MIT",
+  "category": "Date & Time",
+  "dataScope": "none",
+  "endpoints": [],
+  "requiredAPIKeys": [],
+  "isService": false
+}

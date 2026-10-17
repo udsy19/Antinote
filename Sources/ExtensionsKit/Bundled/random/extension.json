@@ -1,0 +1,12 @@
+{
+  "name": "random",
+  "version": "1.0.0",
+  "author": "jotter",
+  "description": "Roll dice, flip a coin, make UUIDs and passwords, pick a random item.",
+  "license": "MIT",
+  "category": "Random Generators",
+  "dataScope": "none",
+  "dependencies": [],
+  "endpoints": [],
+  "requiredAPIKeys": []
+}

@@ -1,0 +1,12 @@
+{
+  "name": "text",
+  "version": "1.0.0",
+  "author": "jotter",
+  "description": "Change the case of a line (upper, lower, title, sentence), make slugs and identifiers, count characters.",
+  "license": "MIT",
+  "category": "Text Formatting",
+  "dataScope": "line",
+  "dependencies": [],
+  "endpoints": [],
+  "requiredAPIKeys": []
+}

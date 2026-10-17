@@ -1,0 +1,12 @@
+{
+  "name": "templates",
+  "version": "1.0.0",
+  "author": "jotter",
+  "description": "Insert meeting, standup and journal templates.",
+  "license": "MIT",
+  "category": "Templates",
+  "dataScope": "none",
+  "dependencies": ["date"],
+  "endpoints": [],
+  "requiredAPIKeys": []
+}

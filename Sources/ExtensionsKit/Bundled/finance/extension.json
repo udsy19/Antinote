@@ -1,0 +1,12 @@
+{
+  "name": "finance",
+  "version": "1.0.0",
+  "author": "jotter",
+  "description": "Loan payments, tips, percentage change and compound interest.",
+  "license": "MIT",
+  "category": "Finance",
+  "dataScope": "none",
+  "dependencies": [],
+  "endpoints": [],
+  "requiredAPIKeys": []
+}

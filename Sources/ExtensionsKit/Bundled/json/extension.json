@@ -1,0 +1,12 @@
+{
+  "name": "json",
+  "version": "1.0.0",
+  "author": "jotter",
+  "description": "Format, minify and validate JSON notes.",
+  "license": "MIT",
+  "category": "Developer",
+  "dataScope": "full",
+  "dependencies": [],
+  "endpoints": [],
+  "requiredAPIKeys": []
+}

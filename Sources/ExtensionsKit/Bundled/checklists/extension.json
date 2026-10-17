@@ -1,0 +1,12 @@
+{
+  "name": "checklists",
+  "version": "1.0.0",
+  "author": "jotter",
+  "description": "Check, uncheck, remove or move checked [x] items.",
+  "license": "MIT",
+  "category": "Text Manipulation",
+  "dataScope": "full",
+  "dependencies": [],
+  "endpoints": [],
+  "requiredAPIKeys": []
+}

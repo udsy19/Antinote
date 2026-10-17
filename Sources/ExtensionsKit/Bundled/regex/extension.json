@@ -1,0 +1,12 @@
+{
+  "name": "regex",
+  "version": "1.0.0",
+  "author": "jotter",
+  "description": "Find and replace across the note with a regular expression.",
+  "license": "MIT",
+  "category": "Text Manipulation",
+  "dataScope": "full",
+  "dependencies": [],
+  "endpoints": [],
+  "requiredAPIKeys": []
+}

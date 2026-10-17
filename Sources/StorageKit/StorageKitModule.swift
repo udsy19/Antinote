@@ -1,0 +1,43 @@
+import AppKit
+import JotterCore
+
+extension Defaults.Keys {
+    static let storageLastAutoBackup = Key<Date>("storageKit.lastAutoBackup", default: .distantPast)
+}
+
+/// Registers this module's services in `Services` (called once at launch).
+public enum StorageKitModule {
+    @MainActor private static var maintenance: Timer?
+
+    @MainActor public static func install() {
+        let store: SQLiteNoteStore
+        do {
+            store = try SQLiteNoteStore()   // opens and migrates
+        } catch {
+            Alerts.error("Jotter couldn't open its notes database. Notes written now are kept in a temporary file.", error)
+            let temp = FileManager.default.temporaryDirectory.appendingPathComponent("Jotter-\(UUID().uuidString).sqlite")
+            store = try! SQLiteNoteStore(url: temp)
+        }
+        let sync = ICloudDriveSync(store: store)
+        Services.store = store
+        Services.sync = sync
+
+        runMaintenance(store)
+        maintenance = Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { _ in
+            MainActor.assumeIsolated { runMaintenance(store) }
+        }
+        sync.start()
+    }
+
+    /// Purges expired Void notes and makes the daily automatic backup.
+    @MainActor static func runMaintenance(_ store: SQLiteNoteStore) {
+        store.purgeExpiredVoid()
+        guard Date().timeIntervalSince(Defaults[.storageLastAutoBackup]) >= 86_400 else { return }
+        do {
+            _ = try store.backup()
+            Defaults[.storageLastAutoBackup] = Date()
+        } catch {
+            Log.store.error("automatic backup failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+}

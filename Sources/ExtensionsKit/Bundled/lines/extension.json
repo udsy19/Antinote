@@ -1,0 +1,12 @@
+{
+  "name": "lines",
+  "version": "1.0.0",
+  "author": "jotter",
+  "description": "Sort, reverse, shuffle, de-duplicate, number and trim the lines of a note.",
+  "license": "MIT",
+  "category": "Text Manipulation",
+  "dataScope": "full",
+  "dependencies": [],
+  "endpoints": [],
+  "requiredAPIKeys": []
+}
