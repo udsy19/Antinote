@@ -21,7 +21,7 @@ Xcode is optional.
 3. For UI changes, include a screenshot or a short recording.
 4. Follow the conventions in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): modules depend only on `SuperNotesCore` and
    talk through `Services`, notes stay plain text, settings use typed `Defaults` keys, no third-party dependencies.
-5. Anything that touches the network gets its own switch in **Settings → Privacy** and stays off by default.
+5. Anything that touches the network gets its own switch in **Settings → Privacy**. It stays off by default unless the app depends on it (currency rates and automatic updates start on; say so in PRIVACY.md).
 6. Keep changes focused and remove any code your change makes obsolete.
 
 ## Writing an extension

@@ -5,7 +5,8 @@
 ## What Super Notes does not do
 
 - **No accounts.** There is nothing to sign up for.
-- **No analytics or telemetry.** Super Notes never phones home, tracks usage or sends crash reports.
+- **No analytics or telemetry.** Super Notes never tracks usage or sends crash reports. The only routine request is
+  the update check, which asks GitHub for the latest release and sends nothing about you.
 - **No servers.** The project doesn't operate any; there is nowhere for your notes to go.
 
 ## Every network call has its own switch
@@ -17,6 +18,7 @@ off, Super Notes works fully offline.
 | Switch | Default | What it calls | What is sent |
 |---|---|---|---|
 | Currency rates | **On** | `open.er-api.com` (fiat) and CoinGecko (crypto), at most once a day | A plain request for the latest rates. No note text, no identifiers. |
+| Install updates automatically | **On** | `api.github.com` for this project's latest release, every six hours while Super Notes runs and never more often than every four; `github.com` and GitHub's download servers only when a newer version exists | One anonymous HTTPS request with a `SuperNotes/<version>` User-Agent. No cookies, no note text, no identifiers. |
 | Extension updates | Off | `raw.githubusercontent.com`, for extensions you installed from GitHub | The extension's repository path |
 | Extension APIs | Off | Only the endpoints an extension declares in its manifest (for example the `llm` extension's OpenAI, Anthropic, Gemini, OpenRouter or local Ollama endpoint) | Whatever that command needs, such as the line you asked about. You choose the provider and supply your own API key. |
 | Sync notes | Off | Your own iCloud Drive folder | Notes encrypted on this Mac with AES-GCM before they are written |
@@ -24,6 +26,25 @@ off, Super Notes works fully offline.
 
 Currency rates are on out of the box so `$32 USD to JPY =` works on day one. Turning the switch off keeps the last
 saved rates, and you can type your own rates in **Settings → Math**.
+
+## Updates
+
+Super Notes keeps itself up to date without asking. A minute after launch, and every six hours while it runs, it asks
+GitHub for the latest release of `udsy19/super-notes`. When there is a newer version it downloads `SuperNotes.dmg`
+and only uses it if:
+
+- its SHA-256 matches the one published in the release notes,
+- the app inside passes a strict code-signature check and is signed with the same identity as the copy you run,
+- it is Super Notes (`com.udsy.supernotes`) and the version the release advertises.
+
+The verified copy waits next to the app and goes in when you quit, or sooner when your Mac has been idle for ten
+minutes with the Super Notes window hidden or in the background, no timer running and every edit saved: Super Notes
+then quits and reopens in the background, on the note you left. The previous version goes to the Trash. Anything
+that fails is logged and tried again later; you are never interrupted. If Super Notes can't write to the folder it
+lives in, it doesn't update itself.
+
+Turn off **Settings → Privacy → Install updates automatically** to stop the check and the downloads. You can still
+update with the one-line installer or the DMG.
 
 ## What stays on your Mac
 

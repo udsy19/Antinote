@@ -3,6 +3,21 @@
 All notable changes to Super Notes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org).
 
+## [1.3.0] — 2026-10-17
+
+### Added
+- In-app updates: Super Notes checks GitHub Releases in the background, downloads a newer version, verifies its
+  SHA-256 and code signature, and installs it when you quit, or while your Mac sits idle by reopening unseen.
+  "Updated to …" shows once afterwards. Settings → Updates shows when it last checked, and Settings → Privacy →
+  Install updates automatically turns it off.
+- The welcome note teaches the global shortcut and says that notes stay on this Mac; reaching the last tutorial
+  note shows "The tutorial is over".
+
+### Changed
+- New minimal app icon: three ink lines on a white squircle. The menu bar glyph matches, and the alternate icons
+  are now Light, Dark, Paper and Sage colourways of it.
+- New website.
+
 ## [1.2.0] — 2026-10-17
 
 ### Changed

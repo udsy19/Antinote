@@ -2,486 +2,599 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Super Notes — a scratchpad for your Mac</title>
-  <meta name="description" content="Super Notes is a free, open-source scratchpad for macOS. Press ⌥A, type, and the first word turns the note into a checklist, a calculator or a timer. Your notes stay on your Mac.">
-  <meta name="theme-color" content="#1F4E47">
-  <link rel="icon" type="image/png" href="assets/icon-64.png">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Super Notes: the fastest place to put a thought</title>
+  <meta name="description" content="Super Notes is a free, open-source scratchpad for macOS. Press ⌥A, type, and the first word turns a note into a checklist, a calculator or a timer. Your notes stay on your Mac.">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <link rel="icon" type="image/svg+xml" href="assets/icon.svg">
+  <link rel="icon" type="image/png" sizes="64x64" href="assets/icon-64.png">
   <link rel="apple-touch-icon" href="assets/icon-256.png">
+  <link rel="canonical" href="https://udsy19.github.io/super-notes/">
   <meta property="og:type" content="website">
-  <meta property="og:title" content="Super Notes — a scratchpad for your Mac">
-  <meta property="og:description" content="Press ⌥A and type. The first word turns a note into a checklist, a calculator or a timer. Free, open source, and your notes stay on your Mac.">
+  <meta property="og:site_name" content="Super Notes">
+  <meta property="og:title" content="Super Notes: the fastest place to put a thought">
+  <meta property="og:description" content="A free, open-source scratchpad for your Mac. Press ⌥A and type. The first word turns a note into a checklist, a calculator or a timer.">
   <meta property="og:image" content="https://udsy19.github.io/super-notes/assets/og.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Super Notes: a dark note window answering math, next to the headline “The fastest place to put a thought.”">
   <meta property="og:url" content="https://udsy19.github.io/super-notes/">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wdth,wght@75..112.5,300..700&family=Schibsted+Grotesk:ital,wght@0,400..700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400..600&display=swap">
   <link rel="stylesheet" href="style.css">
+  <script>
+    // ?theme=light or ?theme=dark overrides the system appearance (handy for screenshots and links).
+    (function (d) {
+      d.classList.add("js");
+      var t = new URLSearchParams(location.search).get("theme");
+      if (t === "light" || t === "dark") d.dataset.theme = t;
+    })(document.documentElement);
+  </script>
+  <script src="main.js" defer></script>
 </head>
 <body>
-  <a class="skip" href="#keywords">Skip to the features</a>
+  <a class="skip" href="#sn-input">Skip to the live demo</a>
 
-  <!-- ============ Hero: the green field and the deck ============ -->
-  <header class="field hero" id="top">
-    <nav class="wrap nav" aria-label="Main">
-      <a class="brand" href="#top"><img src="assets/icon-64.png" alt="" width="30" height="30">Super Notes</a>
-      <div class="nav-links">
+  <!-- Glyphs drawn after the app's own chrome (Sources/ShellKit/ChromeIcons.swift): 30-unit canvas, y down. -->
+  <svg class="sprite" aria-hidden="true" focusable="false">
+    <symbol id="g-settings" viewBox="0 0 30 30"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6.75 9.25h6M17.75 9.25h5.5M6.75 15.25H17.5M22.5 15.25h.75M6.75 20.75H9.5M14.5 20.75h8.75"/><g stroke-width="1.9"><circle cx="15.25" cy="9.25" r="1.75"/><circle cx="20" cy="15.25" r="1.75"/><circle cx="12" cy="20.75" r="1.75"/></g></g><circle cx="7" cy="12" r="1" fill="currentColor"/></symbol>
+    <symbol id="g-search" viewBox="0 0 30 30"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="14.75" cy="13.5" r="6.8"/><path d="M5.85 14.5a8.9 1.6 0 0 0 17.8 0" style="stroke:var(--knock)" stroke-width="2.7"/><path d="M7.95 13.47a8.9 1.6 0 0 0-2.1 1.03 8.9 1.6 0 0 0 17.8 0 8.9 1.6 0 0 0-2.1-1.03M18.6 20.6l2 3.4"/></g><path d="M21.9 18.3c.28.83.28.83 1.1 1.1-.82.28-.82.28-1.1 1.1-.27-.82-.27-.82-1.1-1.1.83-.27.83-.27 1.1-1.1z" fill="currentColor"/></symbol>
+    <symbol id="g-new" viewBox="0 0 30 30"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="6.75" y="6.75" width="16.5" height="16.5" rx="3.5"/><path d="M14.9 15.1 22 8"/></g><path d="M24.4 3.9c.33.98.33.98 1.3 1.3-.97.33-.97.33-1.3 1.3-.32-.97-.32-.97-1.3-1.3.98-.32.98-.32 1.3-1.3z" fill="currentColor"/></symbol>
+    <symbol id="g-pin" viewBox="0 0 30 30"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="15.25" cy="10.75" r="4.5"/><path d="M15 15.5v7M6.75 23.25h16.5"/></g><circle cx="18.5" cy="20.5" r="1" fill="currentColor"/></symbol>
+    <symbol id="g-prev" viewBox="0 0 30 30"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m7.75 15 7-3.75v7.5z"/><path d="M14.75 15h4.75" stroke-width="1"/><path d="M19.5 6.75V23" stroke-width="1.25"/></g><circle cx="16.5" cy="6.75" r="1" fill="currentColor"/></symbol>
+    <symbol id="g-next" viewBox="0 0 30 30"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.75 6.75v16.5" stroke-width="1.25"/><path d="M10.75 15h4.5" stroke-width="1"/><path d="m15.25 11.25 6.5 3.75-6.5 3.75z"/></g><circle cx="7.75" cy="22.75" r="1" fill="currentColor"/></symbol>
+    <symbol id="g-front" viewBox="0 0 30 30"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 15h14.75" stroke-width="1"/><path d="M11.5 10.75v8.5M15 6.75v16.5" stroke-width="1.25"/><path d="m19.75 11.25 6.5 3.75-6.5 3.75z"/></g></symbol>
+    <symbol id="g-export" viewBox="0 0 30 30"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5.75 3.75 6h-7.5z"/><rect x="6.75" y="13.75" width="16.5" height="9" rx="2.5"/><path d="M15 12.5v4" stroke-width="1.25"/></g><circle cx="15" cy="18.4" r="1" fill="currentColor"/></symbol>
+    <symbol id="g-delete" viewBox="0 0 30 30"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5.25" y="7.25" width="19.5" height="2" rx="1"/><path d="M6.75 10v11.5a4 4 0 0 0 4 4h8.5a4 4 0 0 0 4-4V10M11.25 15v4M14.75 15v4M18.75 15v4"/></g><circle cx="15" cy="4.75" r="1" fill="currentColor"/></symbol>
+    <!-- The nine slots are the planets, Mercury to Pluto. -->
+    <symbol id="p1" viewBox="0 0 30 30"><circle cx="14.5" cy="15" r="2" fill="currentColor"/></symbol>
+    <symbol id="p2" viewBox="0 0 30 30"><circle cx="15" cy="15" r="4.25" fill="currentColor"/><path d="M10.5 15.2c3-1.3 5.5 1.2 9 .2" fill="none" style="stroke:var(--knock)" stroke-width=".6"/></symbol>
+    <symbol id="p3" viewBox="0 0 30 30"><g fill="currentColor"><circle cx="15.4" cy="14.75" r="5.25"/><circle cx="8.5" cy="11.75" r=".75"/></g></symbol>
+    <symbol id="p4" viewBox="0 0 30 30"><circle cx="15" cy="15" r="4.25" fill="currentColor"/><path d="M13.4 11.9h3M13.4 18.1h3" style="stroke:var(--knock)" stroke-width=".5"/></symbol>
+    <symbol id="p5" viewBox="0 0 30 30"><circle cx="15" cy="15" r="11.75" fill="currentColor"/><circle cx="18.9" cy="18" r="1.8" style="fill:var(--knock)"/></symbol>
+    <symbol id="p6" viewBox="0 0 30 30"><g transform="translate(15 14.6) rotate(-12.2)" fill="none"><ellipse rx="12.9" ry="2.4" stroke="currentColor" stroke-width="1.2"/></g><circle cx="15" cy="14.75" r="7.25" fill="currentColor"/><g transform="translate(15 14.6) rotate(-12.2)" fill="none"><path d="M-12.9 0a12.9 2.4 0 0 0 25.8 0" style="stroke:var(--knock)" stroke-width="2.6"/><path d="M-12.9 0a12.9 2.4 0 0 0 25.8 0" stroke="currentColor" stroke-width="1.2"/></g></symbol>
+    <symbol id="p7" viewBox="0 0 30 30"><ellipse rx="1.3" ry="10.4" transform="translate(14.75 14.9) rotate(8.2)" fill="none" stroke="currentColor" stroke-width=".55"/><circle cx="15" cy="14.75" r="6" fill="currentColor"/></symbol>
+    <symbol id="p8" viewBox="0 0 30 30"><circle cx="15" cy="14.75" r="6" fill="currentColor"/></symbol>
+    <symbol id="p9" viewBox="0 0 30 30"><circle cx="14.75" cy="14.75" r="1.5" fill="currentColor"/></symbol>
+    <symbol id="i-download" viewBox="0 0 16 16"><path d="M8 2v8.2m0 0L4.6 6.8M8 10.2l3.4-3.4M3 13.5h10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4"><rect x="5.5" y="5.5" width="8" height="8" rx="2"/><path d="M10.5 3.5v-.25A1.75 1.75 0 0 0 8.75 1.5h-5.5A1.75 1.75 0 0 0 1.5 3.25v5.5c0 .97.78 1.75 1.75 1.75h.25"/></g></symbol>
+    <symbol id="i-check" viewBox="0 0 16 16"><path d="m3 8.5 3 3 7-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-github" viewBox="0 0 16 16"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></symbol>
+  </svg>
+
+  <header class="nav">
+    <div class="wrap nav-inner">
+      <a class="brand" href="#top" aria-label="Super Notes, back to top">
+        <img src="assets/icon.svg" alt="" width="26" height="26">
+        <span>Super Notes</span>
+      </a>
+      <nav class="nav-links" aria-label="Sections">
         <a href="#keywords">Keywords</a>
-        <a href="#extensions">Extensions</a>
-        <a href="#privacy">Privacy</a>
+        <a href="#features">Features</a>
         <a href="#shortcuts">Shortcuts</a>
-        <a href="https://github.com/udsy19/super-notes">GitHub</a>
-      </div>
-      <a class="btn btn-small" href="https://github.com/udsy19/super-notes/releases/latest/download/SuperNotes.dmg">Download</a>
-    </nav>
-
-    <div class="wrap hero-grid">
-      <div class="hero-copy">
-        <p class="hotkey"><kbd>⌥</kbd><kbd>A</kbd><span>from anywhere on your Mac</span></p>
-        <h1>Jot first,<br>sort never.</h1>
-        <p class="lede">Super Notes is a scratchpad one keystroke away. Type, and the first word turns the note into a
-          checklist, a calculator or a timer. Free, open source, and your notes stay on your Mac.</p>
-
-        <div class="install" data-copy>
-          <code><span class="prompt" aria-hidden="true">$ </span><span data-copy-text>curl -fsSL https://udsy19.github.io/super-notes/install.sh | bash</span></code>
-          <button type="button" class="copy" aria-label="Copy install command">Copy</button>
-        </div>
-        <div class="cta">
-          <a class="btn" href="https://github.com/udsy19/super-notes/releases/latest/download/SuperNotes.dmg">
-            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v8.2m0 0L4.6 6.8M8 10.2l3.4-3.4M3 13.5h10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            Download for Mac
-          </a>
-          <a class="btn-text" href="https://github.com/udsy19/super-notes">Read the source</a>
-        </div>
-        <p class="meta">Version 1.0.0 · macOS 14 or later · Apple silicon and Intel · MIT license</p>
-      </div>
-
-      <div class="deck" role="group" aria-label="A math note in Super Notes, on top of other notes in the deck">
-        <div class="win back back-1" aria-hidden="true">
-          </div>
-        <div class="win back back-2" aria-hidden="true">
-          </div>
-        <figure class="win front">
-          <div class="chrome" aria-hidden="true">
-            <span class="lights"><i></i><i></i><i></i></span>
-            <span class="tools">
-              <svg viewBox="0 0 16 16"><path d="M7 3H4.5A1.5 1.5 0 0 0 3 4.5v7A1.5 1.5 0 0 0 4.5 13h7a1.5 1.5 0 0 0 1.5-1.5V9M8 8l5-5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-              <svg viewBox="0 0 16 16"><circle cx="8" cy="5.5" r="2.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 8.1V13M5 13h6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-            </span>
-          </div>
-          <div class="note type">
-            <p class="ln kw" style="--n:20;--d:.4s"><span class="t">math: Lisbon weekend</span><i class="c"></i></p>
-            <p class="ln" style="--n:9;--d:1.55s"><span class="t">nights: 3</span><i class="c"></i></p>
-            <p class="ln" style="--n:21;--d:2.2s"><span class="t">hotel: €96 × nights =</span><i class="c"></i><b class="r">€288.00</b></p>
-            <p class="ln" style="--n:20;--d:3.6s"><span class="t">food: €40 × nights =</span><i class="c"></i><b class="r">€120.00</b></p>
-            <p class="ln" style="--n:7;--d:4.95s"><span class="t">total =</span><i class="c"></i><b class="r">€408.00</b></p>
-            <p class="ln" style="--n:15;--d:5.7s"><span class="t">each: ans / 3 =</span><i class="c"></i><b class="r">€136.00</b></p>
-            <p class="ln">&nbsp;</p>
-            <p class="ln comment" style="--n:19;--d:6.9s"><span class="t">// walking to Belém</span><i class="c"></i></p>
-            <p class="ln" style="--n:12;--d:7.95s"><span class="t">7 km in mi =</span><i class="c last"></i><b class="r">4.3496 mi</b></p>
-          </div>
-          <div class="bar"><span></span><span class="pos">1 / 12<i class="latest" title="Latest note"></i></span></div>
-        </figure>
+        <a href="#privacy">Privacy</a>
+        <a href="#faq">FAQ</a>
+      </nav>
+      <div class="nav-end">
+        <a class="nav-gh" href="https://github.com/udsy19/super-notes" aria-label="Super Notes on GitHub"><svg width="18" height="18" aria-hidden="true"><use href="#i-github"/></svg></a>
+        <a class="btn btn-primary btn-sm" href="https://github.com/udsy19/super-notes/releases/latest/download/SuperNotes.dmg">Download</a>
       </div>
     </div>
-
-    <p class="wrap gatekeeper">Downloaded the DMG? Super Notes isn’t notarized, so the first launch needs
-      <b>System Settings → Privacy &amp; Security → Open Anyway</b>. The install command skips this.</p>
   </header>
 
-  <main>
-    <!-- ============ Keyword modes ============ -->
-    <section class="band" id="keywords">
-      <div class="wrap">
-        <div class="head">
-          <h2>The first word decides what a note does.</h2>
-          <p>Every note starts as plain text. Put one keyword on the first line and it becomes a checklist, a
-            calculator or a timer. Delete the word and it’s plain text again.</p>
+  <main id="top">
+    <!-- ============ Hero: the live window ============ -->
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-light" aria-hidden="true"></div>
+      <div class="wrap hero-grid">
+        <div class="hero-copy">
+          <a class="eyebrow" href="https://github.com/udsy19/super-notes/releases/latest">
+            <span class="eyebrow-tag">1.3</span> Free and open source for macOS
+          </a>
+          <h1 id="hero-title">The fastest place to put&nbsp;a&nbsp;thought.</h1>
+          <p class="lede">Press <kbd>⌥A</kbd> from anywhere and start typing. The first word turns a note into a checklist, a calculator or a timer. No account, no folders, and your notes stay on your Mac.</p>
+          <div class="cta-row">
+            <a class="btn btn-primary" href="https://github.com/udsy19/super-notes/releases/latest/download/SuperNotes.dmg">
+              <svg width="16" height="16" aria-hidden="true"><use href="#i-download"/></svg>Download for Mac
+            </a>
+            <a class="btn btn-ghost" href="https://github.com/udsy19/super-notes">
+              <svg width="16" height="16" aria-hidden="true"><use href="#i-github"/></svg>View the source
+            </a>
+          </div>
+          <div class="install">
+            <span class="install-prompt" aria-hidden="true">$</span>
+            <code id="install-hero">curl -fsSL https://udsy19.github.io/super-notes/install.sh | bash</code>
+            <button type="button" class="copy" data-copy-target="#install-hero" aria-label="Copy the install command">
+              <svg class="ic-copy" width="14" height="14" aria-hidden="true"><use href="#i-copy"/></svg><svg class="ic-done" width="14" height="14" aria-hidden="true"><use href="#i-check"/></svg><span>Copy</span>
+            </button>
+          </div>
+          <p class="meta">macOS 14 Sonoma or later · Apple silicon and Intel · MIT license</p>
         </div>
 
-        <div class="modes">
-          <figure class="mode">
-            <div class="win">
-              <div class="note">
-                <p class="ln kw">list: Saturday</p>
-                <p class="ln item done"><i class="box"></i>farmers market</p>
-                <p class="ln item done"><i class="box"></i>return library books</p>
-                <p class="ln item"><i class="box"></i>fix the bike light</p>
-                <p class="ln item"><i class="box"></i>call grandma</p>
-                <p class="ln item"><i class="box"></i>book the train to Porto</p>
-                <p class="ln item"><i class="box"></i>water the basil</p>
-                <p class="ln item"><i class="box"></i>pick up the dry cleaning</p>
-              </div>
-              <div class="bar"><span></span><span class="pos">2 / 12</span></div>
-            </div>
-            <figcaption>
-              <p class="kws"><code>list</code><code>todo</code><code>checklist</code><code>tasks</code></p>
-              <p>Every line gets a checkbox. Click to tick it, or press <kbd>⇧⌘M</kbd>. Return starts the next item.</p>
-            </figcaption>
-          </figure>
+        <div class="hero-demo" id="demo">
+          <div class="chips" role="group" aria-label="Load an example note">
+            <span class="chips-label">Try</span>
+            <button type="button" class="chip" data-load="math">math</button>
+            <button type="button" class="chip" data-load="list">list</button>
+            <button type="button" class="chip" data-load="sum">sum</button>
+            <button type="button" class="chip" data-load="timer">timer</button>
+            <button type="button" class="chip" data-load="code">code</button>
+            <button type="button" class="chip" data-load="ext">::</button>
+          </div>
 
-          <figure class="mode">
-            <div class="win">
-              <div class="note">
-                <p class="ln kw">math</p>
-                <p class="ln">89 miles to km = <b class="r">143.232 km</b></p>
-                <p class="ln">5 ft 3 in to cm = <b class="r">160.02 cm</b></p>
-                <p class="ln">100 F to C = <b class="r">37.7778°C</b></p>
-                <p class="ln">$200 - 25% = <b class="r">$150.00</b></p>
-                <p class="ln">20% of 80 = <b class="r">16</b></p>
-                <p class="ln">$32 USD to JPY = <b class="r">¥4,800</b></p>
-                <p class="ln">sqrt(16) + 2^10 = <b class="r">1,028</b></p>
-                <p class="ln">1 cup in ml = <b class="r">236.588 ml</b></p>
-                <p class="ln">3 m * 4 m = <b class="r">12 m²</b></p>
-                <p class="ln">2 weeks in days = <b class="r">14 days</b></p>
-              </div>
-              <div class="bar"><span></span><span class="pos">3 / 12</span></div>
-            </div>
-            <figcaption>
-              <p class="kws"><code>math</code><code>calc</code></p>
-              <p>Lines ending in <code>=</code> get answered. Units, currencies, crypto, percentages and variables.</p>
-            </figcaption>
-          </figure>
+          <div class="tilt" id="tilt">
+            <div class="ghost ghost-1" aria-hidden="true"></div>
+            <div class="ghost ghost-2" aria-hidden="true"></div>
 
-          <figure class="mode">
-            <div class="win">
-              <div class="note">
-                <p class="ln kw">sum: splitting groceries</p>
-                <p class="ln">bread $4.20</p>
-                <p class="ln">cheese $11.50</p>
-                <p class="ln">olive oil $9.80</p>
-                <p class="ln comment">// the wine is on Sam</p>
-                <p class="ln">tomatoes $3.25</p>
-                <p class="ln">pasta $3.40</p>
-                <p class="ln">lemons $2.10</p>
+            <div class="sn-window" id="sn-window" data-mode="plain">
+              <div class="sn-top">
+                <span class="lights" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span class="sn-glyph sn-settings" aria-hidden="true"><svg><use href="#g-settings"/></svg></span>
+                <span class="sn-glyph sn-search" aria-hidden="true"><svg><use href="#g-search"/></svg></span>
+                <button type="button" class="sn-btn sn-new" id="sn-new" aria-label="New note" title="New Note - ⌘N"><svg aria-hidden="true"><use href="#g-new"/></svg></button>
+                <span class="sn-glyph sn-pin" aria-hidden="true"><svg><use href="#g-pin"/></svg></span>
               </div>
-              <div class="bar"><span class="sum">Total: $34.25</span><span class="pos">4 / 12</span></div>
-            </div>
-            <figcaption>
-              <p class="kws"><code>sum</code><code>avg</code><code>count</code></p>
-              <p>Adds up every number below it, even inside sentences. <code>avg</code> averages them and
-                <code>count</code> tallies lines, words and characters.</p>
-            </figcaption>
-          </figure>
 
-          <figure class="mode">
-            <div class="win">
-              <div class="gutter" aria-hidden="true"><span class="clock"><b data-mm>18</b><b data-ss>42</b></span><span class="track"><i data-fill style="height:25%"></i></span></div>
-              <div class="note">
-                <p class="ln kw">timer pomo</p>
-                <p class="ln">Chapter 3 rewrite</p>
-                <p class="ln">&nbsp;</p>
-                <p class="ln">tighten the intro</p>
-                <p class="ln">move the chart up</p>
-                <p class="ln">cut the second example</p>
-                <p class="ln">check the citations</p>
-                <p class="ln">send to Maya by 6</p>
-              </div>
-              <div class="bar"><span class="sum" data-status>18:42 · work 2</span><span class="pos">5 / 12</span></div>
-            </div>
-            <figcaption>
-              <p class="kws"><code>timer</code><code>stopwatch</code><code>pomodoro</code></p>
-              <p><code>timer 5</code> counts down, <code>timer</code> alone is a stopwatch, <code>timer pomo</code> runs
-                25/5 rounds and <code>timer breathe</code> slows you down.</p>
-            </figcaption>
-          </figure>
-
-          <figure class="mode">
-            <div class="win">
-              <div class="note">
-                <p class="ln kw">code bash</p>
-                <div class="code">
-                  <p class="ln"><span class="tk-c"># resize every png</span></p>
-                  <p class="ln"><span class="tk-k">for</span> f <span class="tk-k">in</span> *.png; <span class="tk-k">do</span></p>
-                  <p class="ln">  sips -Z <span class="tk-n">1200</span> <span class="tk-s">"$f"</span></p>
-                  <p class="ln"><span class="tk-k">done</span></p>
-                  <p class="ln">&nbsp;</p>
-                  <p class="ln"><span class="tk-c"># five newest downloads</span></p>
-                  <p class="ln">ls -t ~/Downloads | head -<span class="tk-n">5</span></p>
+              <div class="sn-body" id="sn-body">
+                <div class="sn-stage">
+                  <textarea id="sn-input" class="sn-input" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off"
+                    aria-label="A Super Notes note. Type here: a keyword on the first line changes what the note does."
+                    aria-describedby="demo-hint"></textarea>
+                  <div class="sn-mirror" id="sn-mirror" aria-hidden="true"></div>
                 </div>
               </div>
-              <div class="bar"><span></span><span class="pos">6 / 12</span></div>
-            </div>
-            <figcaption>
-              <p class="kws"><code>code</code><code>snippet</code></p>
-              <p>Highlights Swift, Python, JavaScript, Go, Rust, shell, SQL and more. Pasted code stays exactly as you copied it.</p>
-            </figcaption>
-          </figure>
 
-          <figure class="mode">
-            <div class="win">
-              <div class="note">
-                <p class="ln kw">paste</p>
-                <p class="ln"><u>github.com/…/pull/42</u></p>
-                <p class="ln">“Ship small, ship often.”</p>
-                <p class="ln">milk, eggs, coffee filters</p>
-                <p class="ln">Gate B32, boarding 18:05</p>
-                <p class="ln"><u>apple.com/…/macos</u></p>
+              <div class="sn-slots" aria-hidden="true">
+                <svg><use href="#p1"/></svg><svg><use href="#p2"/></svg><svg><use href="#p3"/></svg><svg><use href="#p4"/></svg><svg><use href="#p5"/></svg><svg><use href="#p6"/></svg><svg><use href="#p7"/></svg><svg><use href="#p8"/></svg><svg><use href="#p9"/></svg>
               </div>
-              <p class="toast">AutoPaste started. Press ESC to stop.</p>
+
+              <div class="sn-bottom">
+                <button type="button" class="sn-btn" id="sn-delete" aria-label="Delete note" title="Delete Note - ⌘D"><svg aria-hidden="true"><use href="#g-delete"/></svg></button>
+                <p class="sn-info"><span id="sn-date">Oct 17</span><span class="sn-bar" aria-hidden="true">|</span><span id="sn-pos">1 of 6</span></p>
+                <button type="button" class="sn-btn" id="sn-prev" aria-label="Previous note" title="Previous Note - ⌘["><svg aria-hidden="true"><use href="#g-prev"/></svg></button>
+                <button type="button" class="sn-btn" id="sn-next" aria-label="Next note" title="Next Note - ⌘]"><svg aria-hidden="true"><use href="#g-next"/></svg></button>
+                <button type="button" class="sn-btn" id="sn-front" aria-label="Go to first note" title="Go to First Note - ⌘1"><svg aria-hidden="true"><use href="#g-front"/></svg></button>
+                <span class="sn-glyph" aria-hidden="true"><svg><use href="#g-export"/></svg></span>
+              </div>
+
+              <p class="sn-toast" id="sn-toast" aria-hidden="true"></p>
             </div>
-            <figcaption>
-              <p class="kws"><code>paste</code><code>autopaste</code></p>
-              <p>Press Return on the first line and everything you copy lands here, cleaned up, until you press Esc.</p>
-            </figcaption>
-          </figure>
+          </div>
+          <p class="demo-hint" id="demo-hint">This window is live. Type on a new line, end it with <code>=</code>, or switch the first word.
+            <span class="demo-note">Currency uses fixed sample rates here.</span></p>
+          <p class="sr-only" id="sn-live" aria-live="polite"></p>
         </div>
       </div>
+
+      <!-- The notes in the demo deck, newest first. -->
+      <template data-note="math">
+math: weekend in Lisbon
+nights: 3
+hotel: €96 × nights =
+food: €40 × nights =
+total =
+each: ans / 3 =
+
+10 km in mi =
+$200 - 25% =
+</template>
+      <template data-note="list">
+list: Saturday
+farmers market
+fix the bike light
+call grandma
+book the train to Porto
+water the basil
+</template>
+      <template data-note="sum">
+sum: splitting groceries
+bread €4.20
+cheese €11.50
+olive oil €9.80
+// the wine is on Sam
+tomatoes €3.25
+</template>
+      <template data-note="timer">
+timer 5m tea
+
+Try timer 25 5 for a pomodoro,
+or timer breathe.
+</template>
+      <template data-note="code">
+code js
+// split the bill three ways
+const total = 288 + 120
+const each = total / 3
+console.log(each.toFixed(2))
+</template>
+      <template data-note="ext">
+Press Return on a :: line.
+::today
+::tip(120, 20, 4)
+::pick(pizza, sushi, tacos)
+</template>
     </section>
 
-    <!-- ============ Extensions ============ -->
-    <section class="band band-alt" id="extensions">
-      <div class="wrap split">
-        <div class="split-copy">
-          <h2>Two colons, and a line runs a command.</h2>
-          <p>Type <code>::</code> anywhere to pick from the built-in extensions, then press Return. They’re small
-            JavaScript files you can read, change, or install from GitHub.</p>
-          <dl class="cmds">
-            <div><dt>::today</dt><dd>October 17, 2026</dd></div>
-            <div><dt>::today(7, eu)</dt><dd>24/10/2026</dd></div>
-            <div><dt>::workday(3)</dt><dd>October 21, 2026</dd></div>
-            <div><dt>::tip(120, 20, 4)</dt><dd>Tip: 24.00 · Total: 144.00 · Each: 36.00</dd></div>
-            <div><dt>::pick(pizza, sushi, tacos)</dt><dd>sushi</dd></div>
-            <div><dt>::sort · ::dedupe · ::trim</dt><dd>Tidy the lines of a note</dd></div>
-            <div><dt>::format · ::replace_regex</dt><dd>Pretty-print JSON, find and replace with a pattern</dd></div>
-            <div><dt>::meeting(Design review)</dt><dd>Meeting notes titled “Design review”</dd></div>
-            <div><dt>::ask · ::summarize · ::translate</dt><dd>Your own OpenAI, Anthropic, Gemini or OpenRouter key, or a local Ollama model</dd></div>
-          </dl>
-          <p class="fine">Extensions that call the internet only work after you switch on <b>Extension APIs</b>, and only
-            at the addresses they declare.</p>
-        </div>
-
-        <figure class="win ext-win">
-          <div class="note">
-            <p class="ln">standup</p>
-            <p class="ln">October 17, 2026</p>
-            <p class="ln item bullet"><i class="dot"></i>shipped the export menu</p>
-            <p class="ln item bullet"><i class="dot"></i>reviewed Maya’s pull request</p>
-            <p class="ln item bullet"><i class="dot"></i>demo on <span class="typed">::t</span><i class="c on"></i></p>
-            <p class="ln item bullet"><i class="dot"></i>blocked on the icon files</p>
-          </div>
-          <div class="complete" role="presentation">
-            <p class="sel"><b>today</b><span>Insert today’s date</span></p>
-            <p><b>tomorrow</b><span>Insert tomorrow’s date</span></p>
-            <p><b>tip</b><span>Tip and total for a bill</span></p>
-            <p><b>title</b><span>Capitalize Every Word</span></p>
-          </div>
-          <div class="bar"><span></span><span class="pos">7 / 12</span></div>
-        </figure>
-      </div>
-    </section>
-
-    <!-- ============ Everything else ============ -->
-    <section class="band" id="more">
+    <!-- ============ Keywords ============ -->
+    <section class="section" id="keywords" aria-labelledby="keywords-title">
       <div class="wrap">
-        <div class="head">
-          <h2>Small app, deep pockets.</h2>
-          <p>No folders and no titles to think up. Notes pile into a deck, newest on top, and everything else stays
-            out of the way until you need it.</p>
+        <header class="section-head" data-reveal>
+          <p class="kicker">Keywords</p>
+          <h2 id="keywords-title">The first word decides.</h2>
+          <p>Every note starts as plain text. Put a keyword on the first line and the note changes what it does. Delete the word and it’s plain text again.</p>
+        </header>
+        <ul class="kw-grid" role="list">
+          <li class="kw" data-reveal>
+            <p class="kw-name"><code>list</code><span>todo · checklist · tasks</span></p>
+            <p>Every line becomes a checkbox. Click to tick it, or end the line with <code>/x</code>.</p>
+            <div class="kw-ex" aria-hidden="true"><p class="done"><i class="box"></i>farmers market</p><p><i class="box"></i>fix the bike light</p></div>
+            <button type="button" class="kw-try" data-try="list">Try it</button>
+          </li>
+          <li class="kw" data-reveal>
+            <p class="kw-name"><code>math</code><span>calc</span></p>
+            <p>Lines ending in <code>=</code> get answered. Units, currencies, percentages, variables and <code>ans</code>.</p>
+            <div class="kw-ex" aria-hidden="true"><p>89 miles to km = <b>143.23 km</b></p><p>€96 × 3 = <b>€288.00</b></p></div>
+            <button type="button" class="kw-try" data-try="math">Try it</button>
+          </li>
+          <li class="kw" data-reveal>
+            <p class="kw-name"><code>sum</code><span>avg · count</span></p>
+            <p>Totals everything below the first line, even numbers inside sentences. <code>//</code> skips a line.</p>
+            <div class="kw-ex" aria-hidden="true"><p>bread €4.20</p><p>cheese €11.50</p><p class="tot">Total: €15.70</p></div>
+            <button type="button" class="kw-try" data-try="sum">Try it</button>
+          </li>
+          <li class="kw" data-reveal>
+            <p class="kw-name"><code>timer</code><span>stopwatch · pomodoro · breathe</span></p>
+            <p>Countdowns, stopwatches, pomodoros and a breathing rhythm. They keep running in the menu bar.</p>
+            <div class="kw-ex" aria-hidden="true"><p><span class="kwc">timer 5:30 tea</span> <b class="tm">05:30 · tea</b></p></div>
+            <button type="button" class="kw-try" data-try="timer">Try it</button>
+          </li>
+          <li class="kw" data-reveal>
+            <p class="kw-name"><code>code</code><span>snippet</span></p>
+            <p>Highlighting for Swift, Python, JavaScript, Go, Rust, SQL and more. Pasted text stays exactly as copied.</p>
+            <div class="kw-ex" aria-hidden="true"><p><span class="c-k">const</span> each = total / <span class="c-n">3</span></p></div>
+            <button type="button" class="kw-try" data-try="code">Try it</button>
+          </li>
+          <li class="kw" data-reveal>
+            <p class="kw-name"><code>paste</code><span>autopaste</span></p>
+            <p>Press Return on the first line and everything you copy lands here, cleaned up, one item per line.</p>
+            <div class="kw-ex" aria-hidden="true"><p>https://maps.app/lisbon</p><p>Rua Augusta 24</p></div>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ============ Bento ============ -->
+    <section class="section" id="features" aria-labelledby="features-title">
+      <div class="wrap">
+        <header class="section-head" data-reveal>
+          <p class="kicker">Everything else</p>
+          <h2 id="features-title">Small window. Deep pockets.</h2>
+          <p>Native Swift and AppKit, no Electron, no dependencies. Here’s what lives behind the blank page.</p>
+        </header>
+
+        <div class="bento">
+          <article class="card card-wide" data-reveal>
+            <div class="viz viz-deck" aria-hidden="true">
+              <div class="deck">
+                <div class="mini m-a"><p><span class="mk">list</span>: Saturday</p><p>farmers market</p><p>call grandma</p></div>
+                <div class="mini m-b"><p><span class="mk">math</span>: rent</p><p>1,950 / 3 = <b>650.00</b></p></div>
+                <div class="mini m-c"><p>gate code 4471</p><p>ask Sam about Porto</p></div>
+              </div>
+              <div class="slots">
+                <svg><use href="#p1"/></svg><svg><use href="#p2"/></svg><svg><use href="#p3"/></svg><svg><use href="#p4"/></svg><svg><use href="#p5"/></svg><svg><use href="#p6"/></svg><svg><use href="#p7"/></svg><svg><use href="#p8"/></svg><svg><use href="#p9"/></svg>
+              </div>
+              <p class="viz-keys"><kbd>⌘[</kbd><kbd>⌘]</kbd></p>
+            </div>
+            <div class="txt">
+              <h3>A deck, not a filing cabinet.</h3>
+              <p>Notes pile up newest first. Swipe with two fingers or press ⌘[ and ⌘] to move through them, and keep the ones that matter in nine slots, Mercury to Pluto.</p>
+            </div>
+          </article>
+
+          <article class="card" data-reveal>
+            <div class="viz viz-palette" aria-hidden="true">
+              <div class="pal">
+                <p class="pal-line">/<i class="caret"></i></p>
+                <ul class="pal-menu">
+                  <li><span class="mk">list</span>Checklist</li>
+                  <li><span class="mk">math</span>Calculator</li>
+                  <li><span class="mk">sum</span>Running total</li>
+                  <li><span class="mk">timer</span>Countdown</li>
+                  <li><span class="mk">code</span>Highlighting</li>
+                </ul>
+              </div>
+              <p class="viz-keys"><kbd>⌘K</kbd></p>
+            </div>
+            <div class="txt">
+              <h3>/ and ⌘K</h3>
+              <p>Type / on an empty line, or press ⌘K anywhere, for every keyword and command without leaving the keyboard.</p>
+            </div>
+          </article>
+
+          <article class="card" data-reveal>
+            <div class="viz viz-themes" aria-hidden="true">
+              <div class="themes">
+                <div class="th" style="--b:#2A2626;--t:#EBE3DB;--a:#58C2FF;--r:#39DB62"><p><span>math</span>: budget</p><p>1,200 × 12 = <b>14,400.00</b></p><em>Default Dark</em></div>
+                <div class="th" style="--b:#FAF5EB;--t:#46321E;--a:#557D69;--r:#C8A078"><p><span>math</span>: budget</p><p>1,200 × 12 = <b>14,400.00</b></p><em>Meadow</em></div>
+                <div class="th" style="--b:#03180C;--t:#DCDCDC;--a:#289A28;--r:#7FD4C7"><p><span>math</span>: budget</p><p>1,200 × 12 = <b>14,400.00</b></p><em>Cedar</em></div>
+                <div class="th" style="--b:#0A0A28;--t:#F0F0F0;--a:#F5DC3C;--r:#8CC8C8"><p><span>math</span>: budget</p><p>1,200 × 12 = <b>14,400.00</b></p><em>Dune</em></div>
+                <div class="th" style="--b:#292D2D;--t:#CADEE8;--a:#9BC6D3;--r:#63907C"><p><span>math</span>: budget</p><p>1,200 × 12 = <b>14,400.00</b></p><em>Stealth</em></div>
+                <div class="th" style="--b:#F3F1EB;--t:#3C280A;--a:#FF7828;--r:#7391A8"><p><span>math</span>: budget</p><p>1,200 × 12 = <b>14,400.00</b></p><em>Highland</em></div>
+              </div>
+            </div>
+            <div class="txt">
+              <h3>Themes, or your own.</h3>
+              <p>Built-in light and dark themes, theme files you can write, lined, dotted or grid paper, and translucency on macOS 15 and later.</p>
+            </div>
+          </article>
+
+          <article class="card card-wide" data-reveal>
+            <div class="viz viz-ext" aria-hidden="true">
+              <div class="ext-note">
+                <p class="ext-row"><span class="ext-in">::today</span><span class="ext-out">October 17, 2026</span></p>
+                <p class="ext-row"><span class="ext-in">::tip(120, 20, 4)</span><span class="ext-out">Tip: 24.00 · Total: 144.00 · Each: 36.00</span></p>
+                <p class="ext-row"><span class="ext-in">::ask(three names for a grey cat)</span><span class="ext-out">Ash, Pebble, Smoke</span></p>
+              </div>
+              <pre class="ext-code"><span class="c-c">// Extensions/finance/index.js</span>
+<span class="c-k">new</span> <span class="c-f">Command</span>({
+  name: <span class="c-s">"tip"</span>, type: <span class="c-s">"insert"</span>,
+  execute: <span class="c-k">function</span> (payload) {
+    <span class="c-k">var</span> p = <span class="c-k">this</span>.<span class="c-f">getParsedParams</span>(payload);
+    <span class="c-k">var</span> tip = p[<span class="c-n">0</span>] * p[<span class="c-n">1</span>] / <span class="c-n">100</span>;
+    <span class="c-k">return</span> <span class="c-f">ok</span>(<span class="c-s">"Tip: "</span> + <span class="c-f">money</span>(tip));
+  }
+});</pre>
+            </div>
+            <div class="txt">
+              <h3>:: commands you can read and rewrite.</h3>
+              <p>Dates, tips, JSON, regex, text and line tools, each a small JavaScript extension. The llm extension asks, summarizes, rewrites and translates with your own OpenAI, Anthropic, Gemini or OpenRouter key, or a local Ollama model.</p>
+            </div>
+          </article>
+
+          <article class="card" data-reveal>
+            <div class="viz viz-void" aria-hidden="true">
+              <div class="void"><i class="ring r1"></i><i class="ring r2"></i><i class="ring r3"></i></div>
+              <div class="void-note"><p>old wifi password</p><p>tv4-guest-2b</p></div>
+              <p class="pill">Recover · 30 days left</p>
+            </div>
+            <div class="txt">
+              <h3>The Void keeps what you delete.</h3>
+              <p>Deleted notes stay recoverable for 1, 7, 30 or 90 days, or forever. Daily backups, with restore.</p>
+            </div>
+          </article>
+
+          <article class="card" data-reveal>
+            <div class="viz viz-lock" aria-hidden="true">
+              <div class="lock-note"><p>passport no. ███████</p><p>locker ██-███</p></div>
+              <div class="touch">
+                <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 21c2.2-6.5 7.7-10 14-10s11.8 3.5 14 10"/><path d="M14.5 34c-1-2.8-1.4-5.6-1.4-8.6C13.1 19.6 18 15.5 24 15.5s10.9 4.1 10.9 9.9c0 1.9-.2 3.8-.6 5.6"/><path d="M19.2 38.5c-1.4-3.3-2-6.6-2-11 0-4 3-6.9 6.8-6.9s6.8 2.9 6.8 6.9c0 4.7-1 8.7-3 12"/><path d="M24 26.5c0 5-1.1 9.2-3.6 13"/><path d="M27.8 30.5c-.5 3-1.4 5.8-2.9 8.5"/></svg>
+                <i class="scan"></i>
+              </div>
+              <p class="pill">Touch ID to unlock</p>
+            </div>
+            <div class="txt">
+              <h3>Lock a note with Touch ID.</h3>
+              <p>Or with your password. Locked notes relock after a few minutes away. Read-only and archived notes, too.</p>
+            </div>
+          </article>
+
+          <article class="card" data-reveal>
+            <div class="viz viz-sync" aria-hidden="true">
+              <div class="sync-note"><p>gate code 4471</p></div>
+              <div class="sync-path"><i></i><i></i><i></i></div>
+              <div class="sync-folder">
+                <p class="sync-name">iCloud Drive › Super Notes</p>
+                <p class="cipher">9f3a c1e0 77b2 0d4e</p>
+                <p class="cipher">e81f 5a09 c3d7 2b6a</p>
+                <p class="sync-tag">AES-GCM</p>
+              </div>
+            </div>
+            <div class="txt">
+              <h3>Sync, sealed first.</h3>
+              <p>Optional sync through your own iCloud Drive. Each note is encrypted on your Mac before it’s written there.</p>
+            </div>
+          </article>
+
+          <article class="card" data-reveal>
+            <div class="viz viz-export" aria-hidden="true">
+              <div class="exp-note"><p><span class="mk">list</span>: Saturday</p><p>call grandma</p></div>
+              <ul class="exp-list">
+                <li>Apple Notes</li><li>Obsidian</li><li>Bear</li><li>Markdown</li><li>PDF</li>
+              </ul>
+              <p class="viz-keys"><kbd>⌘S</kbd></p>
+            </div>
+            <div class="txt">
+              <h3>Out in one keystroke.</h3>
+              <p>Apple Notes, Obsidian, Bear, Markdown, plain text or PDF. Pick a destination once and ⌘S sends it there again.</p>
+            </div>
+          </article>
+
+          <article class="card" data-reveal>
+            <div class="viz viz-vim" aria-hidden="true">
+              <p class="vim-line"><span>the </span><span class="vim-w">quick</span><span> brown fox</span><i class="vim-cursor"></i></p>
+              <p class="vim-mode"><span class="vm-n">NORMAL</span><span class="vm-i">INSERT</span><span class="vm-v">VISUAL</span></p>
+              <p class="vim-keys">w · ciw · v · esc</p>
+            </div>
+            <div class="txt">
+              <h3>Vim mode.</h3>
+              <p>Normal, insert and visual modes, right in the scratchpad. Off until you want it.</p>
+            </div>
+          </article>
+
+          <article class="card" data-reveal>
+            <div class="viz viz-url" aria-hidden="true">
+              <p class="term"><span class="term-p">$</span> open "supernotes://append?text=buy%20milk"</p>
+              <div class="url-note"><p><span class="mk">list</span>: errands</p><p>post the parcel</p><p class="url-new">buy milk</p></div>
+            </div>
+            <div class="txt">
+              <h3>Scriptable.</h3>
+              <p><code>supernotes://</code> links create, append and open notes from Shortcuts, Raycast, Alfred or the shell.</p>
+            </div>
+          </article>
         </div>
-        <dl class="more">
-          <div><dt>The deck</dt><dd>Swipe with two fingers or press <kbd>⌘[</kbd> <kbd>⌘]</kbd>. Swipe past the newest note for a fresh one; empty notes tidy themselves away.</dd></div>
-          <div><dt>Nine slots</dt><dd>Pin the notes you keep coming back to on <kbd>⌘1…9</kbd>. Open one beside the deck in split view.</dd></div>
-          <div><dt>The Void</dt><dd>Deleted notes drift here for 30 days, or as long as you choose, before they’re gone. Daily backups too.</dd></div>
-          <div><dt>Locked notes</dt><dd>Lock a note behind Touch ID or your password. It locks again a few minutes after you leave it.</dd></div>
-          <div><dt>Export</dt><dd>Send a note to Apple Notes, Obsidian or Bear, or save it as Markdown, text or PDF.</dd></div>
-          <div><dt>Encrypted sync</dt><dd>Optional. Notes are encrypted on your Mac, then synced through your own iCloud Drive.</dd></div>
-          <div><dt>Palette &amp; search</dt><dd><kbd>⌘K</kbd> runs any command, <kbd>⇧⌘F</kbd> searches every note, archived ones included.</dd></div>
-          <div><dt>Themes &amp; paper</dt><dd>Built-in light and dark themes or your own, lined, dotted or grid paper, and a translucent window.</dd></div>
-          <div><dt>Where it lives</dt><dd>Dock, menu bar, a drop-down under the menu bar, or nowhere but the hotkey.</dd></div>
-          <div><dt>Vim mode</dt><dd>Normal, Insert and Visual modes with counts, motions and operators.</dd></div>
-          <div><dt>Text from images</dt><dd>Drop a screenshot onto a note and its text is typed in for you, recognised on-device.</dd></div>
-          <div><dt>supernotes://</dt><dd>Create, append to and open notes from Shortcuts, Raycast, Alfred or the shell.</dd></div>
+      </div>
+    </section>
+
+    <!-- ============ Shortcuts ============ -->
+    <section class="section shortcuts" id="shortcuts" aria-labelledby="shortcuts-title">
+      <div class="wrap">
+        <div class="bigkeys" data-reveal aria-hidden="true">
+          <span class="bigkey" id="cap-option"><b>⌥</b><small>option</small></span>
+          <span class="plus">+</span>
+          <span class="bigkey bigkey-a" id="cap-a"><b>A</b></span>
+        </div>
+        <header class="section-head center" data-reveal>
+          <h2 id="shortcuts-title">One hotkey. From anywhere.</h2>
+          <p>Press <kbd>⌥A</kbd> and Super Notes is there. Press it again and it’s gone. Try it on this page. Every shortcut below can be rebound in Settings.</p>
+        </header>
+        <dl class="keys" data-reveal>
+          <div><dt><kbd>⌘</kbd><kbd>N</kbd></dt><dd>New note</dd></div>
+          <div><dt><kbd>⌘</kbd><kbd>[</kbd> <kbd>⌘</kbd><kbd>]</kbd></dt><dd>Previous and next note</dd></div>
+          <div><dt><kbd>⌘</kbd><kbd>1</kbd></dt><dd>Jump to the newest note</dd></div>
+          <div><dt><kbd>⌘</kbd><kbd>K</kbd></dt><dd>Command palette</dd></div>
+          <div><dt><kbd>⌘</kbd><kbd>F</kbd></dt><dd>Search all notes</dd></div>
+          <div><dt><kbd>⇧</kbd><kbd>⌘</kbd><kbd>F</kbd></dt><dd>Find and replace</dd></div>
+          <div><dt><kbd>⇧</kbd><kbd>⌘</kbd><kbd>K</kbd></dt><dd>Check off the line</dd></div>
+          <div><dt><kbd>⌃</kbd><kbd>⌘</kbd><kbd>1–9</kbd></dt><dd>Put the note in a slot</dd></div>
+          <div><dt><kbd>⌘</kbd><kbd>D</kbd></dt><dd>Delete to The Void</dd></div>
+          <div><dt><kbd>⇧</kbd><kbd>⌘</kbd><kbd>L</kbd></dt><dd>Lock or unlock</dd></div>
+          <div><dt><kbd>⌘</kbd><kbd>S</kbd></dt><dd>Quick Export</dd></div>
+          <div><dt><kbd>⌘</kbd><kbd>P</kbd></dt><dd>Pin on top</dd></div>
         </dl>
       </div>
     </section>
 
     <!-- ============ Privacy ============ -->
-    <section class="field band privacy" id="privacy">
-      <div class="wrap split">
-        <div class="split-copy">
-          <h2>Your notes stay on&nbsp;your&nbsp;Mac.</h2>
-          <p>Super Notes is a local app. There’s no account, no analytics and no server. Your notes never leave your Mac
-            unless you turn on a feature that needs the network, and every one of those has its own switch.</p>
-          <ul class="facts">
-            <li>Notes live in one SQLite file in your Library folder.</li>
-            <li>Sync encrypts every note on your Mac before it reaches iCloud Drive.</li>
-            <li>Extensions reach only the URLs they declare, with API keys you grant them.</li>
-            <li>Currency rates are the only switch that starts on. It downloads today’s rates and sends nothing of yours.</li>
+    <section class="section" id="privacy" aria-labelledby="privacy-title">
+      <div class="wrap privacy">
+        <div class="privacy-copy" data-reveal>
+          <p class="kicker">Privacy</p>
+          <h2 id="privacy-title">Your notes stay on your Mac.</h2>
+          <p>Notes live in a SQLite database in your Library folder. There’s no account, no analytics and no telemetry. Anything that touches the network has its own switch, and Turn Everything Off makes Super Notes fully offline.</p>
+          <ul class="facts" role="list">
+            <li>No account</li>
+            <li>No analytics</li>
+            <li>No telemetry</li>
+            <li>Open source</li>
           </ul>
-          <a class="btn-text on-field" href="https://github.com/udsy19/super-notes/blob/main/PRIVACY.md">Read the privacy policy</a>
         </div>
-
-        <figure class="settings" aria-label="Super Notes’ Privacy settings: currency rates on, all other network features off">
-          <div class="settings-top"><span class="lights" aria-hidden="true"><i></i><i></i><i></i></span><b>Privacy</b></div>
-          <div class="settings-body">
-            <p class="group">Allow these network calls</p>
-            <p class="caption">Super Notes works fully offline. Each switch below is the only way the feature next to it reaches the network.</p>
-            <div class="row"><div><b>Currency rates</b><span>Fetches daily exchange rates for currency conversions in math notes.</span></div><i class="switch on" role="img" aria-label="On"></i></div>
-            <div class="row"><div><b>Extension updates</b><span>Checks the community extensions repository on GitHub for new extensions and updates.</span></div><i class="switch" role="img" aria-label="Off"></i></div>
-            <div class="row"><div><b>Extension APIs</b><span>Lets extensions call their own web APIs (only the ones they declare).</span></div><i class="switch" role="img" aria-label="Off"></i></div>
-            <div class="row"><div><b>Sync notes</b><span>Writes encrypted notes to your own iCloud Drive to keep your Macs in step.</span></div><i class="switch" role="img" aria-label="Off"></i></div>
-            <div class="row"><div><b>Sync preferences</b><span>Keeps settings, keywords and themes the same on your other Macs.</span></div><i class="switch" role="img" aria-label="Off"></i></div>
-            <p class="off"><span class="pill">Turn Everything Off</span></p>
-          </div>
-        </figure>
-      </div>
-    </section>
-
-    <!-- ============ Shortcuts ============ -->
-    <section class="band" id="shortcuts">
-      <div class="wrap">
-        <div class="head">
-          <h2>Hands stay on the keys.</h2>
-          <p>Every menu command has a shortcut, and you can choose your own global hotkey in Settings → General.</p>
-        </div>
-        <div class="keys">
-          <div class="keygroup">
-            <h3>Get around</h3>
-            <p><span>Show or hide Super Notes</span><kbd>⌥A</kbd></p>
-            <p><span>New note</span><kbd>⌘N</kbd></p>
-            <p><span>Previous · next note</span><kbd>⌘[</kbd><kbd>⌘]</kbd></p>
-            <p><span>Newest note</span><kbd>⌘1</kbd></p>
-            <p><span>Swap ephemeral · slotted</span><kbd>⌘T</kbd></p>
-            <p><span>Put the note in a slot</span><kbd>⌃⌘1…9</kbd></p>
-          </div>
-          <div class="keygroup">
-            <h3>Find</h3>
-            <p><span>Command palette</span><kbd>⌘K</kbd></p>
-            <p><span>Search all notes</span><kbd>⌘F</kbd></p>
-            <p><span>Find &amp; replace</span><kbd>⇧⌘F</kbd></p>
-            <p><span>Extension autocomplete</span><kbd>⌃Space</kbd></p>
-          </div>
-          <div class="keygroup">
-            <h3>Write</h3>
-            <p><span>Check off the current line</span><kbd>⇧⌘K</kbd></p>
-            <p><span>Cycle list style</span><kbd>⇧⌘M</kbd></p>
-            <p><span>Move line up · down</span><kbd>⌥↑</kbd><kbd>⌥↓</kbd></p>
-            <p><span>Duplicate line</span><kbd>⌥⇧↓</kbd></p>
-            <p><span>Strikethrough</span><kbd>⇧⌘X</kbd></p>
-            <p><span>Copy the whole note</span><kbd>⌥⌘C</kbd></p>
-          </div>
-          <div class="keygroup">
-            <h3>Keep &amp; let go</h3>
-            <p><span>Delete note (to The Void)</span><kbd>⌘D</kbd></p>
-            <p><span>Lock note</span><kbd>⇧⌘L</kbd></p>
-            <p><span>Archive</span><kbd>⇧⌘A</kbd></p>
-            <p><span>Quick Export</span><kbd>⌘S</kbd></p>
-            <p><span>Pin on top</span><kbd>⌘P</kbd></p>
-            <p><span>Split view</span><kbd>⇧⌘T</kbd></p>
-          </div>
+        <div class="panel" data-reveal>
+          <p class="panel-title">Settings › Privacy</p>
+          <ul class="switches" role="list">
+            <li><div><p>Currency rates</p><span>Downloads daily exchange rates for currency math. Sends nothing of yours.</span></div><i class="switch on" aria-hidden="true"></i><span class="sr-only">On by default</span></li>
+            <li><div><p>App updates</p><span>Checks GitHub Releases every few hours and installs new versions in the background. Sends nothing of yours.</span></div><i class="switch on" aria-hidden="true"></i><span class="sr-only">On by default</span></li>
+            <li><div><p>Extension updates</p><span>Checks GitHub for updates to extensions you installed from there.</span></div><i class="switch" aria-hidden="true"></i><span class="sr-only">Off by default</span></li>
+            <li><div><p>Extension APIs</p><span>Lets extensions call the endpoints they declare, with keys you grant.</span></div><i class="switch" aria-hidden="true"></i><span class="sr-only">Off by default</span></li>
+            <li><div><p>Sync notes and preferences</p><span>Writes end-to-end encrypted copies to your own iCloud Drive.</span></div><i class="switch" aria-hidden="true"></i><span class="sr-only">Off by default</span></li>
+          </ul>
+          <p class="panel-foot">Currency rates and app updates are the two switches that start on. Turn rates off and currency math uses the last rates it saw, or your own.</p>
         </div>
       </div>
     </section>
 
     <!-- ============ FAQ ============ -->
-    <section class="band band-alt" id="faq">
-      <div class="wrap faq">
-        <h2>Questions</h2>
-        <div class="qa">
-          <details open>
+    <section class="section" id="faq" aria-labelledby="faq-title">
+      <div class="wrap faq-wrap">
+        <header class="section-head" data-reveal>
+          <p class="kicker">Questions</p>
+          <h2 id="faq-title">Good to know.</h2>
+        </header>
+        <div class="faq" data-reveal>
+          <details>
             <summary>Is it really free?</summary>
-            <p>Yes. Super Notes is MIT-licensed open source. There’s no account, no subscription and no pro tier.</p>
+            <p>Yes. Super Notes is MIT licensed, with no account, no subscription and no paid tier. The source is on <a href="https://github.com/udsy19/super-notes">GitHub</a>.</p>
           </details>
           <details>
-            <summary>Why does macOS say Super Notes can’t be opened?</summary>
-            <p>Super Notes isn’t notarized by Apple. The first time you open a copy downloaded in your browser, go to
-              <b>System Settings → Privacy &amp; Security</b>, scroll down and click <b>Open Anyway</b>. You only do this
-              once, and the one-line installer doesn’t need it.</p>
+            <summary>macOS says it can’t open Super Notes. Now what?</summary>
+            <p>Super Notes isn’t notarized by Apple, so the first launch of a downloaded DMG needs <b>System Settings › Privacy &amp; Security › Open Anyway</b>, once. The one-line installer doesn’t need this step.</p>
           </details>
           <details>
-            <summary>Does anything go online?</summary>
-            <p>Only what you allow in <b>Settings → Privacy</b>. Currency rates start on so currency math works right
-              away; extension updates, extension APIs and sync start off. <b>Turn Everything Off</b> makes Super Notes fully
-              offline.</p>
+            <summary>Which Macs does it run on?</summary>
+            <p>macOS 14 Sonoma or later, on Apple silicon and Intel. It’s a native Swift app with no third-party dependencies.</p>
           </details>
           <details>
-            <summary>How do I use it on two Macs?</summary>
-            <p>Turn on <b>Sync notes</b> on both. Notes are encrypted on your Mac and synced through your own iCloud
-              Drive. The key travels in iCloud Keychain, or you can copy it across by hand.</p>
+            <summary>Does anything leave my Mac?</summary>
+            <p>Only when a network feature is switched on. Currency rates start on and download daily exchange rates without sending anything of yours. Extension updates, extension APIs and sync start off. Settings › Privacy has a switch for each, plus Turn Everything Off.</p>
           </details>
           <details>
-            <summary>Can I use an AI model?</summary>
-            <p>The bundled <code>llm</code> extension adds <code>::ask</code>, <code>::summarize</code>,
-              <code>::rewrite</code> and <code>::translate</code>. Bring your own OpenAI, Anthropic, Gemini or OpenRouter
-              key, or point it at a local Ollama model. It does nothing until you switch on <b>Extension APIs</b>.</p>
+            <summary>Can I use it on more than one Mac?</summary>
+            <p>Turn on sync and Super Notes writes end-to-end encrypted copies to your own iCloud Drive. Notes are sealed with AES-GCM on your Mac first.</p>
           </details>
           <details>
-            <summary>Can I get my notes out?</summary>
-            <p>Any time. Export a note to Apple Notes, Obsidian, Bear, Markdown, text or PDF, or export every note at
-              once as Markdown files plus a JSON file that another Mac can import.</p>
+            <summary>Can I write my own :: commands?</summary>
+            <p>Yes. An extension is a folder with an <code>extension.json</code> and an <code>index.js</code>, run in its own JavaScript context. Install more from GitHub in Settings › Extensions, or drop a folder into <code>~/Library/Application Support/Super Notes/Extensions</code>.</p>
           </details>
           <details>
-            <summary>What do I need?</summary>
-            <p>macOS 14 Sonoma or later, on Apple silicon or Intel. Run the install command again to update, or add
-              <code>-s -- --uninstall</code> after <code>bash</code> to remove Super Notes.</p>
+            <summary>How do I update or uninstall?</summary>
+            <p>Run the install command again to update. To remove it, add <code>-s -- --uninstall</code> after <code>bash</code>.</p>
           </details>
+          <details>
+            <summary>I used Jotter. What happens to my notes?</summary>
+            <p>Super Notes was called Jotter. Your notes, settings and keys move over automatically the first time it opens.</p>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ Download ============ -->
+    <section class="section final" id="download" aria-labelledby="download-title">
+      <div class="final-light" aria-hidden="true"></div>
+      <div class="wrap final-inner" data-reveal>
+        <img class="final-icon" src="assets/icon-128.png" srcset="assets/icon-128.png 1x, assets/icon-256.png 2x" width="112" height="112" alt="The Super Notes app icon: three ink lines on a white square">
+        <h2 id="download-title">Put it one keystroke away.</h2>
+        <p>Free and open source. macOS 14 or later, on Apple silicon and Intel.</p>
+        <div class="cta-row center">
+          <a class="btn btn-primary" href="https://github.com/udsy19/super-notes/releases/latest/download/SuperNotes.dmg">
+            <svg width="16" height="16" aria-hidden="true"><use href="#i-download"/></svg>Download for Mac
+          </a>
+        </div>
+        <div class="install">
+          <span class="install-prompt" aria-hidden="true">$</span>
+          <code id="install-final">curl -fsSL https://udsy19.github.io/super-notes/install.sh | bash</code>
+          <button type="button" class="copy" data-copy-target="#install-final" aria-label="Copy the install command">
+            <svg class="ic-copy" width="14" height="14" aria-hidden="true"><use href="#i-copy"/></svg><svg class="ic-done" width="14" height="14" aria-hidden="true"><use href="#i-check"/></svg><span>Copy</span>
+          </button>
         </div>
       </div>
     </section>
   </main>
 
-  <!-- ============ Footer ============ -->
-  <footer class="field foot">
-    <div class="wrap">
-      <div class="foot-cta">
-        <p class="foot-title">Press <kbd>⌥</kbd><kbd>A</kbd> and write something down.</p>
-        <div class="install" data-copy>
-          <code><span class="prompt" aria-hidden="true">$ </span><span data-copy-text>curl -fsSL https://udsy19.github.io/super-notes/install.sh | bash</span></code>
-          <button type="button" class="copy" aria-label="Copy install command">Copy</button>
-        </div>
-        <a class="btn" href="https://github.com/udsy19/super-notes/releases/latest/download/SuperNotes.dmg">
-          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v8.2m0 0L4.6 6.8M8 10.2l3.4-3.4M3 13.5h10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          Download for Mac
-        </a>
+  <footer class="footer">
+    <div class="wrap footer-top">
+      <div class="footer-brand">
+        <a class="brand" href="#top"><img src="assets/icon.svg" alt="" width="26" height="26"><span>Super Notes</span></a>
+        <p>A scratchpad for your Mac. Formerly Jotter.</p>
       </div>
-      <div class="foot-meta">
-        <p class="foot-brand"><img src="assets/icon-64.png" alt="" width="24" height="24">Super Notes <span>MIT © 2026 Udaya Vijay Anand</span></p>
-        <p class="foot-links">
-          <a href="https://github.com/udsy19/super-notes">Source</a>
-          <a href="https://github.com/udsy19/super-notes/releases">Releases</a>
+      <nav class="footer-links" aria-label="Project">
+        <div>
+          <p>Get it</p>
+          <a href="https://github.com/udsy19/super-notes/releases/latest/download/SuperNotes.dmg">Download</a>
           <a href="https://github.com/udsy19/super-notes/blob/main/CHANGELOG.md">Changelog</a>
+          <a href="https://github.com/udsy19/super-notes/releases">Releases</a>
+        </div>
+        <div>
+          <p>Project</p>
+          <a href="https://github.com/udsy19/super-notes">GitHub</a>
+          <a href="https://github.com/udsy19/super-notes/issues">Issues</a>
+          <a href="https://github.com/udsy19/super-notes/blob/main/CONTRIBUTING.md">Contributing</a>
+        </div>
+        <div>
+          <p>Legal</p>
           <a href="https://github.com/udsy19/super-notes/blob/main/PRIVACY.md">Privacy</a>
-          <a href="https://github.com/udsy19/super-notes/issues">Report a bug</a>
-        </p>
-        <p class="credit">Super Notes is an independent project inspired by Antinote. It isn’t affiliated with Antinote and
-          contains none of its code.</p>
-      </div>
+          <a href="https://github.com/udsy19/super-notes/blob/main/LICENSE">MIT License</a>
+          <a href="https://github.com/udsy19/super-notes/blob/main/SECURITY.md">Security</a>
+        </div>
+      </nav>
     </div>
+    <div class="wrap footer-base">
+      <p>© 2026 Udaya Vijay Anand. MIT licensed.</p>
+      <p>Made for macOS.</p>
+    </div>
+    <p class="wordmark" aria-hidden="true">Super Notes</p>
   </footer>
-
-  <script>
-    // Copy buttons for the install command.
-    document.querySelectorAll('[data-copy]').forEach(function (box) {
-      var button = box.querySelector('.copy');
-      var text = box.querySelector('[data-copy-text]').textContent;
-      button.addEventListener('click', function () {
-        var done = function () {
-          button.textContent = 'Copied';
-          setTimeout(function () { button.textContent = 'Copy'; }, 1600);
-        };
-        if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, function () {});
-      });
-    });
-
-    // The pomodoro note counts down for real: 25-minute work round, 18:42 left when the page opens.
-    (function () {
-      var mm = document.querySelector('[data-mm]'), ss = document.querySelector('[data-ss]');
-      var fill = document.querySelector('[data-fill]'), status = document.querySelector('[data-status]');
-      if (!mm || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-      var left = 18 * 60 + 42, total = 25 * 60;
-      var two = function (n) { return (n < 10 ? '0' : '') + n; };
-      setInterval(function () {
-        left = left > 0 ? left - 1 : total;
-        var m = two(Math.floor(left / 60)), s = two(left % 60);
-        mm.textContent = m; ss.textContent = s;
-        fill.style.height = (100 * (total - left) / total).toFixed(1) + '%';
-        status.textContent = m + ':' + s + ' · work 2';
-      }, 1000);
-    })();
-  </script>
 </body>
 </html>

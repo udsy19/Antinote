@@ -873,6 +873,7 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
     private var persistedContent: String { EditorLogic.Links.collapsed(textView.string, links: links) }
 
     public func flush() { save() }
+    public var hasUnsavedChanges: Bool { saveWork != nil }
 
     private func save() {
         saveWork?.cancel()

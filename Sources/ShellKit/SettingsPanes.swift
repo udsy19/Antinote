@@ -1163,6 +1163,7 @@ struct PrivacySettings: View {
     @Default(.syncNotes) private var syncNotes
     @Default(.syncPreferences) private var syncPreferences
     @Default(.syncExtensions) private var syncExtensions
+    @Default(.installUpdates) private var installUpdates
 
     private struct Call: Identifiable {
         let title: String
@@ -1185,6 +1186,11 @@ struct PrivacySettings: View {
             Call(title: "Fetch currency conversion rates", detail: "Custom rates in Keywords › Math work without it.",
                  endpoint: "open.er-api.com, api.coingecko.com", isOn: $rates),
          ]),
+         ("Updates", "Calls that keep Super Notes itself up to date.", [
+            Call(title: "Install updates automatically",
+                 detail: "Checks GitHub every few hours and installs new versions in the background.",
+                 endpoint: "api.github.com, github.com (release downloads)", isOn: $installUpdates),
+         ]),
          ("Extensions", "Calls to find community extensions on GitHub, and the calls extensions make to their own services.", [
             Call(title: "Check GitHub for extension updates", detail: "Looks for new community extensions and updates.",
                  endpoint: "github.com, raw.githubusercontent.com", isOn: $extensionUpdates),
@@ -1199,7 +1205,7 @@ struct PrivacySettings: View {
                 LabeledContent {
                     Button("Turn Everything Off") {
                         for key in [Defaults.Keys.allowCurrencyRates, .allowExtensionUpdates, .allowExtensionAPIs,
-                                    .syncNotes, .syncPreferences, .syncExtensions] { Defaults[key] = false }
+                                    .syncNotes, .syncPreferences, .syncExtensions, .installUpdates] { Defaults[key] = false }
                     }
                 } label: {
                     Text("Network access")
@@ -1232,6 +1238,15 @@ struct PrivacySettings: View {
 // MARK: - Updates
 
 struct UpdatesSettings: View {
+    @Default(.installUpdates) private var installUpdates
+    @Default(.lastUpdateCheck) private var lastCheck
+
+    private var updateStatus: String {
+        guard installUpdates else { return "Automatic updates are turned off in Privacy settings." }
+        guard lastCheck > 0 else { return "Not checked for updates yet." }
+        return "Last checked " + Date(timeIntervalSince1970: lastCheck).formatted(date: .abbreviated, time: .shortened) + "."
+    }
+
     private var version: String {
         let info = Bundle.main.infoDictionary
         let short = info?["CFBundleShortVersionString"] as? String ?? "development build"
@@ -1250,7 +1265,7 @@ struct UpdatesSettings: View {
                         Text("A scratchpad for quick, disposable notes.").foregroundStyle(.secondary)
                     }
                 }
-                Caption("Super Notes doesn't check for updates on its own.")
+                Caption(updateStatus)
             }
             Section("License") {
                 Text("Super Notes is open source under the MIT License. Notes are plain text stored on this Mac.")

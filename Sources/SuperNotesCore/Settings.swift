@@ -65,6 +65,9 @@ public enum ExportDestination: String, Codable, CaseIterable, Sendable {
     }
 }
 
+/// How the next launch shows the main window after UpdateKit relaunched Super Notes into an update while it sat idle.
+public enum UpdateRelaunch: String, Codable, Sendable { case hidden, visible }
+
 /// How long a locked note has to stay on screen before Touch ID is asked for on its own (Settings → Notes).
 public enum AutoUnlock {
     /// Choices in seconds; `never` waits for the Unlock button.
@@ -226,6 +229,8 @@ public extension Defaults.Keys {
     static let syncNotes = Key<Bool>("syncNotes", default: false)
     static let syncPreferences = Key<Bool>("syncPreferences", default: false)
     static let syncExtensions = Key<Bool>("syncExtensions", default: false)
+    /// Checks GitHub Releases in the background and installs newer versions (UpdateKit).
+    static let installUpdates = Key<Bool>("installUpdates", default: true)
 
     // Extensions
     static let extensionsEnabled = Key<Bool>("extensionsEnabled", default: true)
@@ -239,4 +244,10 @@ public extension Defaults.Keys {
     /// Alert IDs the user ticked "Don't ask again" for (reset in Settings → Advanced).
     static let suppressedWarnings = Key<Set<String>>("suppressedWarnings", default: [])
     static let onboardingCompleted = Key<Bool>("onboardingCompleted", default: false)
+    /// The last tutorial note, until the user reaches it (then the "tutorial is over" pill shows once).
+    static let tutorialFinaleNote = Key<String>("tutorialFinaleNote", default: "")
+    /// When UpdateKit last reached GitHub Releases, in seconds since 1970 (0 = never); shown in Settings → Updates.
+    static let lastUpdateCheck = Key<Double>("lastUpdateCheck", default: 0)
+    /// Set by UpdateKit just before it relaunches into an update; the next launch reads and clears it.
+    static let updateRelaunch = Key<UpdateRelaunch?>("updateRelaunch", default: nil)
 }

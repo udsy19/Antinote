@@ -11,6 +11,7 @@ let modules = [
     "ShellKit",       // main window & presence, swipe deck, slots, global hotkey, menus, settings, themes, locking,
                       // onboarding & tutorial notes
     "ToolsKit",       // timers & pomodoro, export, URL scheme, command palette, The Void, search
+    "UpdateKit",      // background updates from GitHub Releases: check, verify, stage, swap on quit or when idle
 ]
 
 let package = Package(

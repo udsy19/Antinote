@@ -55,6 +55,8 @@ public protocol TimerServicing: AnyObject {
     func status(noteID: UUID) -> String?
     /// Plays the alert sound at the volume set in Settings → Timer (its Test button).
     func playAlertSound()
+    /// Whether any timer is counting right now (paused and finished ones don't count).
+    var hasRunningTimer: Bool { get }
 }
 
 @MainActor
@@ -78,6 +80,11 @@ public protocol WindowServicing: AnyObject {
     /// Shows `view` over the whole note area of the main window (Search replaces the note in place);
     /// nil removes it and refocuses the note.
     func present(inWindow view: NSView?)
+    /// Whether the main window is on screen, and whether it has keyboard focus (UpdateKit waits for an idle moment).
+    var isMainWindowVisible: Bool { get }
+    var isMainWindowKey: Bool { get }
+    /// Whether an editor holds typing that hasn't been written to the store yet.
+    var hasUnsavedEdits: Bool { get }
 }
 
 /// One command of the ⌘K palette. The editor's inline "/" list offers the same commands.
@@ -177,6 +184,8 @@ public protocol NoteEditing: AnyObject {
     func insert(_ text: String)
     /// Writes pending edits to the store now (saving is otherwise debounced); called before hiding or quitting.
     func flush()
+    /// Whether there are edits `flush()` would write.
+    var hasUnsavedChanges: Bool { get }
     /// Called after every content change with the latest analysis (window chrome shows mode/summary/timer).
     var onAnalysis: ((NoteAnalysis) -> Void)? { get set }
 }

@@ -1,12 +1,15 @@
 # Security Policy
 
 Super Notes runs entirely on your Mac. It has no accounts, no analytics and no servers. Network access is limited to the
-features listed in **Settings → Privacy**, each behind its own switch: daily currency rates, extension updates from
-GitHub, extension API calls to endpoints the extension declares, and end-to-end encrypted sync through your own
-iCloud Drive. API keys and the sync encryption key live in the macOS Keychain.
+features listed in **Settings → Privacy**, each behind its own switch: daily currency rates, automatic updates from
+GitHub Releases, extension updates from GitHub, extension API calls to endpoints the extension declares, and
+end-to-end encrypted sync through your own iCloud Drive. API keys and the sync encryption key live in the macOS
+Keychain. An update is installed only if its SHA-256 matches the release notes and its code signature matches the
+running copy's designated requirement.
 
 Areas where a report is especially valuable: the extension sandbox (JavaScriptCore contexts, endpoint and API-key
-checks, data scopes), sync encryption and key handling, locked notes, and the `supernotes://` URL scheme.
+checks, data scopes), sync encryption and key handling, locked notes, the update verification and swap, and the
+`supernotes://` URL scheme.
 
 ## Reporting a vulnerability
 

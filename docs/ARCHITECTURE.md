@@ -16,6 +16,8 @@ Sources/
                   OCR drop, AutoPaste, Vim mode, find & replace
   ShellKit/       main window & presence, swipe deck, slots, hotkey, menus, settings, themes, locking, onboarding
   ToolsKit/       timers & pomodoro, export, URL scheme, command palette, The Void, search
+  UpdateKit/      background updates from GitHub Releases: version check, SHA-256 and code-signature
+                  verification, staging next to the app, swap on quit or while idle (see RELEASING.md)
   SuperNotes/     app target: wires modules together
   SuperNotesSelfTest/ headless logic tests (`swift run SuperNotesSelfTest`)
 ```

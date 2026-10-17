@@ -51,16 +51,26 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
     func launch() {
         guard !launched else { return }
         launched = true
+        // A silent relaunch into an update puts everything back the way it was, without taking focus.
+        let relaunch = Defaults[.updateRelaunch]
+        if relaunch != nil { Defaults[.updateRelaunch] = nil }
         buildWindow()
         Onboarding.runIfNeeded()
-        restoreCurrentNote()
+        restoreCurrentNote(startFresh: relaunch == nil && Defaults[.startWithNewNote])
         observe()
         Presence.shared.start()
         AppIcons.apply()
         NSAppleEventManager.shared().setEventHandler(self, andSelector: #selector(handleReopen(_:reply:)),
                                                      forEventClass: AEEventClass(kCoreEventClass),
                                                      andEventID: AEEventID(kAEReopenApplication))
-        if !Presence.shared.isDropdown { showMain() }
+        switch relaunch {
+        case .visible?:
+            Presence.shared.positionDropdown(window)
+            window.orderFrontRegardless()
+            window.alignTrafficLights()
+        case .hidden?: break
+        case nil: if !Presence.shared.isDropdown { showMain() }
+        }
     }
 
     @objc private func handleReopen(_ event: NSAppleEventDescriptor, reply: NSAppleEventDescriptor) { showMain() }
@@ -206,11 +216,11 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         })
     }
 
-    /// The note Super Notes opens on: a fresh one with "Start with a new note", else the last note shown; the first
-    /// slotted note with "Use slotted notes as your main notes".
-    private func restoreCurrentNote() {
+    /// The note Super Notes opens on: a fresh one with "Start with a new note" (`startFresh`), else the last note
+    /// shown; the first slotted note with "Use slotted notes as your main notes".
+    private func restoreCurrentNote(startFresh: Bool = Defaults[.startWithNewNote]) {
         let deck = ephemeralDeck()
-        if Defaults[.startWithNewNote] {
+        if startFresh {
             if let front = deck.first, DeckNavigator.isBlank(front.content) { showEphemeral(front.id) } else { createNote() }
         } else if let id = UUID(uuidString: Defaults[.shellKitCurrentNote]), deck.contains(where: { $0.id == id }) {
             showEphemeral(id)
@@ -219,13 +229,16 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         } else {
             createNote()
         }
-        if Defaults[.slottedAsMain], !Defaults[.startWithNewNote], let first = board().occupants.keys.min() { openSlot(first) }
+        if Defaults[.slottedAsMain], !startFresh, let first = board().occupants.keys.min() { openSlot(first) }
     }
 
     // MARK: - WindowServicing
 
     /// Nil until the window is built.
     var currentNoteID: UUID? { ephemeralPane == nil ? nil : pane(activeRole).noteID }
+    var isMainWindowVisible: Bool { window.isVisible }
+    var isMainWindowKey: Bool { window.isKeyWindow && NSApp.isActive }
+    var hasUnsavedEdits: Bool { ephemeralPane != nil && (ephemeralPane.editor.hasUnsavedChanges || slotPane.editor.hasUnsavedChanges) }
 
     func showMain() {
         if !window.isVisible { startFreshIfInactive() }
@@ -317,6 +330,7 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         guard let note = store.note(id) else { return }
         ephemeralPane.show(note, locked: isLockedOut(note))
         Defaults[.shellKitCurrentNote] = id.uuidString
+        Onboarding.noteShown(id)
         if !isSplit, openSlot != nil {
             openSlot = nil
             layoutPanes()

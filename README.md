@@ -43,8 +43,9 @@ curl -fsSL https://udsy19.github.io/super-notes/install.sh | bash
 Applications and open it. Super Notes isn't notarized by Apple, so the first launch of a browser-downloaded copy needs
 **System Settings → Privacy & Security → Open Anyway** (only once). The one-line installer doesn't need this step.
 
-Requires macOS 14 Sonoma or later, Apple silicon or Intel. Run the same command to update; add
-`-s -- --uninstall` after `bash` to remove it.
+Requires macOS 14 Sonoma or later, Apple silicon or Intel. Super Notes then keeps itself up to date in the background
+(switch it off in **Settings → Privacy**). Run the same command to update by hand; add `-s -- --uninstall` after
+`bash` to remove it.
 
 Formerly Jotter.
 Your notes, settings and keys move over to Super Notes automatically the first time it opens.
@@ -271,6 +272,7 @@ never leave your Mac unless you turn on a feature that needs the network. Each o
 | Switch | Default | What it does |
 |---|---|---|
 | Currency rates | On | Downloads daily exchange rates for currency math. Sends nothing of yours. |
+| Install updates automatically | On | One anonymous HTTPS request to GitHub Releases every six hours while Super Notes runs; a newer version is downloaded, verified and installed in the background |
 | Extension updates | Off | Checks GitHub for updates to extensions you installed from there |
 | Extension APIs | Off | Lets extensions call the endpoints they declare, with keys you grant |
 | Sync notes / preferences | Off | Writes end-to-end encrypted copies to your own iCloud Drive |

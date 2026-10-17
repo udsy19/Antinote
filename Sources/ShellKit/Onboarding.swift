@@ -19,6 +19,7 @@ enum Onboarding {
     /// Front (newest) note first; going to the previous note walks down the list.
     static var tutorialNotes: [String] {
         let previous = key("Show Previous Note", "⌘[")
+        let hotkey = Defaults[.globalHotkey]?.displayString ?? "⌥A"
         return [
             """
             Welcome to Super Notes!
@@ -26,6 +27,10 @@ enum Onboarding {
             This is a scratchpad, not a filing cabinet. Don't title your notes, don't sort them, don't tidy them up. Just write.
 
             Typos and half-thoughts are welcome here.
+
+            Press \(hotkey) from anywhere to show or hide Super Notes.
+
+            Everything you write stays on this Mac. Nothing is uploaded unless you turn on sync yourself.
 
             [←] Swipe right with two fingers (or press \(previous)) to see the previous note.
             """,
@@ -203,7 +208,17 @@ enum Onboarding {
         for (slot, text) in slottedNotes.enumerated() where !store.deck.contains(where: { $0.slot == slot }) {
             store.setSlot(slot, for: store.create(content: text).id)
         }
-        // `create` puts each note at the front, so add them oldest first.
-        for text in tutorialNotes.reversed() { store.create(content: text) }
+        // `create` puts each note at the front, so add them oldest first. The oldest is the tutorial's last note.
+        for (i, text) in tutorialNotes.reversed().enumerated() {
+            let note = store.create(content: text)
+            if i == 0 { Defaults[.tutorialFinaleNote] = note.id.uuidString }
+        }
+    }
+
+    /// Shows the "tutorial is over" pill the first time the last tutorial note comes up.
+    static func noteShown(_ id: UUID) {
+        guard !Defaults[.tutorialFinaleNote].isEmpty, Defaults[.tutorialFinaleNote] == id.uuidString else { return }
+        Defaults[.tutorialFinaleNote] = ""
+        HUD.show("The tutorial is over. You can start using the app now.", kind: .success)
     }
 }

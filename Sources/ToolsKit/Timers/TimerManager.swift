@@ -75,6 +75,8 @@ public final class TimerManager: NSObject, TimerServicing {
         changed(noteID)
     }
 
+    public var hasRunningTimer: Bool { runs.keys.contains { isRunning(noteID: $0) } }
+
     public func isRunning(noteID: UUID) -> Bool {
         guard let run = runs[noteID] else { return false }
         return !run.isPaused && !run.isFinished(at: clock())
