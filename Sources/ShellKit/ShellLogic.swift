@@ -12,6 +12,10 @@ public enum SwipeDirection: Equatable, Sendable {
 }
 
 /// Turns phased trackpad scroll events into at most one deck step per gesture.
+///
+/// Like Antinote, a swipe is decided at the very start of the gesture: as soon as the first movement is mostly
+/// horizontal and exceeds the threshold, the note switches; the rest of that gesture (and its momentum) is swallowed.
+/// Gestures that start vertical, or don't clear the threshold within the first few events, scroll normally.
 public struct SwipeAccumulator: Sendable {
     public enum Phase: Sendable { case began, changed, ended, momentum }
     public enum Outcome: Equatable, Sendable {
@@ -25,43 +29,47 @@ public struct SwipeAccumulator: Sendable {
     /// 0…1 — higher values require more deliberate swipes.
     public var sensitivity: Double
     private var dx = 0.0, dy = 0.0
-    private var horizontal: Bool?
-    private var fired = false
+    private var moves = 0
+    private var state = State.deciding
+    private enum State { case deciding, swiping, scrolling }
 
     public init(sensitivity: Double) { self.sensitivity = sensitivity }
 
-    public static let axisLockDistance = 6.0
-    /// Finger travel (points) before a swipe switches notes: 20 at the lightest setting, 70 by default, 120 at the firmest.
-    public var threshold: Double { 20 + 100 * min(max(sensitivity, 0), 1) }
+    /// Moving events inspected before a gesture that hasn't cleared the threshold is left to scroll.
+    public static let decisionWindow = 3
+    /// Horizontal travel (points) needed within the decision window: any horizontal start at the lightest setting
+    /// (Antinote's default), 30 pt at the firmest.
+    public var threshold: Double { 30 * min(max(sensitivity, 0), 1) }
 
     /// `fingerDX` is positive when the fingers move right (independent of natural scrolling).
     public mutating func feed(phase: Phase, fingerDX: Double, fingerDY: Double) -> Outcome {
         switch phase {
         case .began:
-            dx = fingerDX; dy = fingerDY; horizontal = nil; fired = false
-            return decide()
+            dx = 0; dy = 0; moves = 0; state = .deciding
+            return decide(fingerDX, fingerDY)
         case .changed:
-            dx += fingerDX; dy += fingerDY
-            return decide()
-        case .ended:
-            // State is kept until the next gesture: a quick flick finishes its travel in the momentum phase.
-            return horizontal == true ? .consume : .pass
-        case .momentum:
-            guard horizontal == true else { return .pass }
-            dx += fingerDX
-            return decide()
+            return decide(fingerDX, fingerDY)
+        case .ended, .momentum:
+            if state == .deciding { state = .scrolling }
+            return state == .swiping ? .consume : .pass
         }
     }
 
-    private mutating func decide() -> Outcome {
-        if horizontal == nil {
-            guard abs(dx) + abs(dy) >= Self.axisLockDistance else { return .pass }
-            horizontal = abs(dx) > abs(dy) * 1.5
+    private mutating func decide(_ fdx: Double, _ fdy: Double) -> Outcome {
+        switch state {
+        case .swiping: return .consume
+        case .scrolling: return .pass
+        case .deciding:
+            guard fdx != 0 || fdy != 0 else { return .pass }
+            dx += fdx; dy += fdy; moves += 1
+            if abs(dy) >= abs(dx) { state = .scrolling; return .pass }
+            if abs(dx) > threshold {
+                state = .swiping
+                return .navigate(dx > 0 ? .previous : .next)
+            }
+            if moves >= Self.decisionWindow { state = .scrolling; return .pass }
+            return .consume
         }
-        guard horizontal == true else { return .pass }
-        guard !fired, abs(dx) >= threshold else { return .consume }
-        fired = true
-        return .navigate(dx > 0 ? .previous : .next)
     }
 }
 

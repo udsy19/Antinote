@@ -76,7 +76,7 @@ public extension Defaults.Keys {
     /// Minutes of inactivity after which showing Jotter starts a fresh note (0 = never).
     static let newNoteAfterMinutes = Key<Int>("newNoteAfterMinutes", default: 0)
     static let swipeNavigation = Key<Bool>("swipeNavigation", default: true)
-    static let swipeSensitivity = Key<Double>("swipeSensitivity", default: 0.5)
+    static let swipeSensitivity = Key<Double>("swipeSensitivity", default: 0)
     static let showLatestNoteIndicator = Key<Bool>("showLatestNoteIndicator", default: true)
     static let showNoteDates = Key<Bool>("showNoteDates", default: false)
     static let alwaysShowSlotsBar = Key<Bool>("alwaysShowSlotsBar", default: false)
