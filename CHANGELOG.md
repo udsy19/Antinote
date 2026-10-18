@@ -3,7 +3,7 @@
 All notable changes to Super Notes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org).
 
-## [Unreleased]
+## [1.3.5] — 2026-10-18
 
 ### Added
 - AI commands work out of the box: `::ask`, `::summarize`, `::rewrite` and `::translate` are answered on your Mac
