@@ -96,9 +96,9 @@ final class CommandPalette {
             (Services.export as? ExportManager)?.print(note)
         })
         if note.slot == nil && note.position != 0 {
-            items.append(PaletteCommand(title: "Promote to Front", symbol: "arrow.up.to.line", keywords: "move top first") {
+            items.append(PaletteCommand(title: "Move to Front", symbol: "arrow.up.to.line", keywords: "promote top first") {
                 Services.store.promoteToFront(note.id)
-                HUD.show("Promoted note to front", kind: .success)
+                HUD.show("Moved to the front", kind: .success)
             })
         }
         items.append(PaletteCommand(title: "Delete Note", detail: "Moves it to The Void", symbol: "trash", keywords: "void trash remove") {

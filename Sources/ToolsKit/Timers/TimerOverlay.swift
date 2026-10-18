@@ -36,9 +36,11 @@ final class TimerOverlay {
         breakNoteID = model.noteID
     }
 
+    /// A finished timer announces itself over everything without taking the keyboard away from whatever is being
+    /// typed; a click on it (or its button) is what dismisses it.
     func showAlert(title: String, subtitle: String, message: String) {
         present(OverlayView(mode: .alert(title: title, subtitle: subtitle, message: message),
-                            close: { [weak self] in self?.close() }))
+                            close: { [weak self] in self?.close() }), takesFocus: false)
     }
 
     func showBreathing() {
@@ -58,8 +60,9 @@ final class TimerOverlay {
         }
     }
 
-    /// `onEscape` runs before the overlay closes on Esc (the break screen counts Esc as a peek).
-    private func present(_ view: OverlayView, onEscape: (() -> Void)? = nil) {
+    /// `onEscape` runs before the overlay closes on Esc (the break screen counts Esc as a peek). Surfaces the user
+    /// asked for take the keyboard (`takesFocus`); an alert only comes forward.
+    private func present(_ view: OverlayView, takesFocus: Bool = true, onEscape: (() -> Void)? = nil) {
         panel?.orderOut(nil)
         breakNoteID = nil
         let screen = NSScreen.active
@@ -73,8 +76,12 @@ final class TimerOverlay {
         p.contentView = Self.hosting(view)
         p.setFrame(screen.frame, display: true)
         p.alphaValue = 0
-        NSApp.activate(ignoringOtherApps: true)
-        p.makeKeyAndOrderFront(nil)
+        if takesFocus {
+            NSApp.activate(ignoringOtherApps: true)
+            p.makeKeyAndOrderFront(nil)
+        } else {
+            p.orderFrontRegardless()
+        }
         NSAnimationContext.runAnimationGroup { $0.duration = 0.3; p.animator().alphaValue = 1 }
         panel = p
     }

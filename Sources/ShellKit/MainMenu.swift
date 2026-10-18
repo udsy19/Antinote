@@ -7,7 +7,7 @@ extension Defaults.Keys {
     static let shellKitSlotNumberShortcuts = Key<Bool>("shellKitSlotNumberShortcuts", default: false)
 }
 
-/// Builds the menu bar: the app menu, File, Edit, Appearance, Navigate, Support, Window and Help. Every item with a
+/// Builds the menu bar: the app menu, File, Edit, Appearance, Navigate, Window and Help. Every item with a
 /// key equivalent shows up in `shortcuts`, which Settings → Shortcuts lists and rebinds — the menu is the single
 /// source of truth for keyboard shortcuts, and rebinding changes the menu items themselves
 /// (`Defaults[.menuShortcuts]`).
@@ -203,12 +203,6 @@ enum MainMenu {
         state.jumpToFront = jump
         state.slotItems = slotItems
 
-        func supportItems() -> [NSMenuItem] {
-            [item("Show Tutorial Notes", #selector(Shell.showTutorial(_:))),
-             item("Keyboard Shortcuts", #selector(Shell.openShortcutsSettings(_:)))]
-        }
-        add("Support", supportItems())
-
         let pin = item(MenuState.Toggle.pin.titles.off, #selector(Shell.togglePin(_:)), "p")
         let window = add("Window", [
             pin,
@@ -221,7 +215,8 @@ enum MainMenu {
         window.delegate = state
         NSApp.windowsMenu = window
 
-        NSApp.helpMenu = add("Help", supportItems())
+        NSApp.helpMenu = add("Help", [item("Show Tutorial Notes", #selector(Shell.showTutorial(_:))),
+                                      item("Keyboard Shortcuts", #selector(Shell.openShortcutsSettings(_:)))])
         built = main
         state.observeBindings()
         return main

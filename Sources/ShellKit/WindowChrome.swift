@@ -263,8 +263,22 @@ class HoverBar: NSView {
 
     private func pointerMoved(_ event: NSEvent) {
         if !isRevealed, revealExcluded?(event.locationInWindow) == true { return }
+        if let rest = restingSince, hypot(event.locationInWindow.x - rest.x, event.locationInWindow.y - rest.y) < 4 { return }
+        restingSince = nil
         hideWork?.cancel()
         if !isRevealed { setRevealed(true, animated: true) }
+    }
+
+    /// Where the pointer rested when typing hid the bar; it stays down until the pointer really moves.
+    private var restingSince: NSPoint?
+
+    /// Typing in the note takes the bar down at once (it was covering the text), even with the pointer still over
+    /// it; moving the pointer brings it back.
+    func typingStarted(pointerAt point: NSPoint) {
+        guard isRevealed, !pinnedVisible else { return }
+        hideWork?.cancel()
+        restingSince = point
+        setRevealed(false, animated: true)
     }
 
     /// Keeps a revealed bar up while the pointer is on chrome that belongs to it (the slot bar above the bottom

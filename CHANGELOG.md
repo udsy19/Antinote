@@ -13,6 +13,12 @@ All notable changes to Super Notes are documented here. The format follows
   it, Vim's `u` and ⌃R use the same history, and ⌘Z right after deleting a note brings it back from The Void.
   (Before, the text view's own undo lost track as soon as the editor rewrote a list marker or shortened a link
   inside a keystroke, and then stopped working.)
+- Nothing in the way while writing: the hover bars drop as soon as you type, a message pill moves to the top when
+  the caret is low, and a finished timer's alert no longer takes the keyboard away from whatever you were typing.
+- One word for one thing: deleting is "Delete" in the menu, the palette, the pills and the confirmation; moving a
+  note to the front is "Move to Front"; The Void labels its Restore buttons and says "Deleted 3 hours ago". Pills
+  say what to do next ("Click the link to expand it before editing"). The duplicate Support menu is gone (Help has
+  its items), and two Appearance toggles say what they do.
 
 ## [1.3.2] — 2026-10-18
 

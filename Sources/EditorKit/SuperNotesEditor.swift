@@ -67,6 +67,9 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
     private var linksExpandedForFind = false
     private var scrollBottom: NSLayoutConstraint!
     private var shelfHeight: NSLayoutConstraint!
+    /// The message pill sits low; it moves to the top while the caret's line is down there.
+    private lazy var pillAtBottom = pill.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -PillView.bottomInset)
+    private lazy var pillAtTop = pill.topAnchor.constraint(equalTo: view.topAnchor, constant: PillView.topInset)
     let vim = VimEngine()
 
     private(set) var links: [TrackedLink] = []
@@ -169,7 +172,7 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
             modeLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 10),
             modeLabel.centerYAnchor.constraint(equalTo: view.bottomAnchor, constant: -15),
             pill.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            pill.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -PillView.bottomInset),
+            pillAtBottom,
             pill.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor, multiplier: 0.8),
             dropOverlay.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             dropOverlay.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -516,7 +519,7 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
         let text = EditorLogic.Find.replacement(for: sel, in: textView.string, term: findShelf.term,
                                                 with: findShelf.replacement, options: findShelf.options)
         guard EditorLogic.Links.check(sel, against: links) == .allowed else {
-            return toast("Cannot partially edit shortened links. Expand before editing.")
+            return toast("Click the link to expand it before editing")
         }
         replace(sel, with: text, selection: NSRange(location: sel.location + (text as NSString).length, length: 0), action: "Replace")
         findIndex = nil
@@ -590,8 +593,8 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
         }
         guard programmaticEdits == 0 else { return true }
         switch EditorLogic.Links.check(range, against: links) {
-        case .inside: toast("Cannot edit within shortened links. Expand before editing."); return false
-        case .partial: toast("Cannot partially edit shortened links. Expand before editing."); return false
+        case .inside: toast("Click the link to expand it before editing"); return false
+        case .partial: toast("Click the link to expand it before editing"); return false
         case .allowed: break
         }
         if range.length == 0, string == " " || string == "\n" || string == "\t" { shrinkTypedURL(endingAt: range.location) }
@@ -1137,7 +1140,7 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
             guard textView.isEditable else { vim.reset(); return }
             let change = EditorLogic.minimalChange(from: textView.string, to: text)
             if EditorLogic.Links.check(change.range, against: links) != .allowed {
-                toast("Cannot edit within shortened links. Expand before editing.")
+                toast("Click the link to expand it before editing")
                 vim.reset()
                 return
             }
@@ -1220,7 +1223,7 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
         if let hit = textView.annotationHits.first(where: { $0.rect.contains(p) }) {
             if event.modifierFlags.contains(.option) {
                 if Defaults[.preventEditingAnswers] || !textView.isEditable {
-                    toast("Calculated results can't be edited.")
+                    toast("“Prevent editing answers” is on in Settings → Keywords")
                 } else {
                     replace(NSRange(location: NSMaxRange(hit.line), length: 0), with: " " + hit.annotation.text, action: "Insert Result")
                 }
@@ -1382,7 +1385,7 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
         }
         guard sel.length > 0 else { return }
         if cut, EditorLogic.Links.check(sel, against: links) != .allowed {
-            return toast("Cannot partially edit shortened links. Expand before editing.")
+            return toast("Click the link to expand it before editing")
         }
         let raw = EditorLogic.Links.expanded(textView.string, range: sel, links: links)
         var options = EditorLogic.Copy.Options.current
@@ -1405,7 +1408,7 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
         guard let string else { return }
         let sel = textView.selectedRange()
         guard EditorLogic.Links.check(sel, against: links) == .allowed else {
-            return toast("Cannot partially edit shortened links. Expand before editing.")
+            return toast("Click the link to expand it before editing")
         }
         var text = string.replacingOccurrences(of: "\r\n", with: "\n")
         var newLinks: [TrackedLink] = []
@@ -1414,7 +1417,7 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
         } else {
             if Defaults[.cleanPaste], let analyzer = Services.analyzer {
                 let cleaned = analyzer.cleanPaste(text)
-                if cleaned != text { text = cleaned; toast("Pasted content optimized.") }
+                if cleaned != text { text = cleaned; toast("Pasted text cleaned up") }
             }
             if Defaults[.shortenLinks], let analyzer = Services.analyzer {
                 let shrunk = EditorLogic.Links.shrink(text) { analyzer.shorten(url: $0) }
@@ -1430,13 +1433,13 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
     // MARK: - OCR
 
     func recognizeImage(from pb: NSPasteboard) {
-        guard let image = OCR.image(from: pb) else { return toast("Unable to load image. Try copy/pasting.") }
+        guard let image = OCR.image(from: pb) else { return toast("Couldn't read that image. Try copying and pasting it", kind: .error) }
         toast("Capturing text…")
         OCR.recognize(image) { [weak self] text in
             guard let self else { return }
-            guard let text, !text.isEmpty else { return self.toast("No text found in the image.") }
+            guard let text, !text.isEmpty else { return self.toast("No text found in the image") }
             self.insert(text)
-            self.toast("Extracted text.", kind: .success)
+            self.toast("Text captured", kind: .success)
         }
     }
 
@@ -1446,7 +1449,7 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
 
     private func startAutoPaste() {
         autoPaste.start()
-        toast("AutoPasting clipboard...", kind: .success)
+        toast("AutoPaste on · Esc stops", kind: .success)
         refresh()
     }
 
@@ -1554,8 +1557,14 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
 
     // MARK: - Toast
 
-    /// Shows a message pill at the bottom of the note.
-    func toast(_ message: String, kind: PillKind = .info) {
+    /// Shows a message pill at the bottom of the note, or at the top when the caret's line would be under it.
+    public func toast(_ message: String, kind: PillKind = .info) {
+        let caret = textView.convert(textView.rect(for: textView.selectedRange()), to: view)
+        let low = caret.minY < PillView.bottomInset + pill.fittingSize.height + 8
+        if pillAtBottom.isActive == low {
+            pillAtBottom.isActive = !low
+            pillAtTop.isActive = low
+        }
         pill.show(message, kind: kind, theme: theme)
     }
 

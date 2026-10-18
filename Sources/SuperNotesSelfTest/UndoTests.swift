@@ -256,6 +256,23 @@ func registerUndoTests() {
         }
     }))
 
+    SelfTest.cases.append(("EditorKit.pillAvoidsCaret", {
+        MainActor.assumeIsolated {
+            let b = Bench()
+            defer { b.cleanup() }
+            guard let pill = b.editor.view.subviews.compactMap({ $0 as? PillView }).first else { return check(false, "pill view") }
+            _ = b.load("short")
+            b.editor.toast("Hello")
+            b.editor.view.layoutSubtreeIfNeeded()
+            check(pill.frame.minY < 40, "with the caret high the pill sits at the bottom: \(pill.frame)")
+            _ = b.load(Array(repeating: "line", count: 60).joined(separator: "\n"))
+            b.tv.scrollRangeToVisible(b.selection)
+            b.editor.toast("Hello")
+            b.editor.view.layoutSubtreeIfNeeded()
+            check(pill.frame.minY > b.editor.view.bounds.midY, "with the caret on the last line the pill moves to the top: \(pill.frame)")
+        }
+    }))
+
     SelfTest.cases.append(("ShellKit.undoDeleteNote", {
         MainActor.assumeIsolated {
             let b = Bench()

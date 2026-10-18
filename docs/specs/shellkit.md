@@ -20,7 +20,7 @@ themeAppearanceObserver), `WindowTopBar` (buttonVisibilityState, isHovered), `Cu
   Pin on the right — line-art glyphs drawn in code (`ChromeIcon`), `typeHyperLight` hover, `typeLight` pressed,
   `accent3Main` when pinned. The strip drags the window even while hidden.
 - Bottom bar (30 pt, hover; gone with "Show bottom bar" off): Move to The Void on the left; the note's date
-  ("Show note modified/created time" adds the time, "Show the note creation date" shows when it was created instead of
+  ("Show the time of day next to the date" adds the time, "Date the note by when it was created, not last changed" shows when it was created instead of
   last changed) and position "14 of 18" ("Show note count") in the middle; Previous, Next, Latest and Export (a menu
   of the export destinations, Quick Export and Print) on the right. Nothing is ever clipped (`BottomBarLayout`): as
   the window narrows the text is cut short in the middle, then dropped, then Export and First give way. The find
@@ -136,7 +136,7 @@ Screen ⌃⌘F.
 Navigate: Jump to Front ⌘1, Show Previous Note ⌘[, Show Next Note ⌘], Go to Slot 1…9 ⌘1…⌘9 and Ephemeral Notes
 ⌘0 (only while `shellKitSlotNumberShortcuts` is on; ⌘1 then leaves Jump to Front), Assign to Slot ▸ (⌃⌘1…9,
 Remove from Slot).
-Support / Help: Show Tutorial Notes, Keyboard Shortcuts. Window: Pin Super Notes to Top/Unpin from Top ⌘P, Hide/Show
+Help: Show Tutorial Notes, Keyboard Shortcuts (no separate Support menu: it would repeat Help). Window: Pin Super Notes to Top/Unpin from Top ⌘P, Hide/Show
 Super Notes ⌘O, Minimize ⌘M, Zoom, Bring All to Front.
 Toggle items change their titles with state instead of showing checkmarks.
 

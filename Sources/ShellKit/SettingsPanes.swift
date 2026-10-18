@@ -232,8 +232,8 @@ struct AppearanceSettings: View {
                 Toggle("Show bottom bar", isOn: $bottomBar)
                 Group {
                     Captioned("e.g. “14 of 18”.") { Toggle("Show note count", isOn: $noteCount) }
-                    Toggle("Show note modified/created time", isOn: $dates)
-                    Toggle("Show the note creation date", isOn: $creationDate)
+                    Toggle("Show the time of day next to the date", isOn: $dates)
+                    Toggle("Date the note by when it was created, not last changed", isOn: $creationDate)
                 }
                 .disabled(!bottomBar)
                 Captioned("Marks the most recent note on the bottom right.") {

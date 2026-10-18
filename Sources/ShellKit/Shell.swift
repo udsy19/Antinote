@@ -248,6 +248,18 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
             let swallow = MainActor.assumeIsolated { self?.swallowsScroll(event) ?? false }
             return swallow ? nil : event
         }
+        // Typing into the note (a plain keystroke, not a shortcut) takes the hover bars down so they never sit
+        // over the text being written.
+        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            MainActor.assumeIsolated {
+                guard let self, event.window === self.window, !event.modifierFlags.contains(.command),
+                      self.window.firstResponder is NSTextView else { return }
+                let point = self.window.mouseLocationOutsideOfEventStream
+                self.titleBar.typingStarted(pointerAt: point)
+                self.bottomBar.typingStarted(pointerAt: point)
+            }
+            return event
+        }
         timers.append(Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         })
@@ -885,7 +897,7 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
     @objc func goToFirstNote(_ sender: Any?) {
         if !isSplit && openSlot != nil { showDeck() }
         guard let front = ephemeralDeck().first else { return }
-        if front.id == ephemeralPane.noteID { HUD.show("Note is already first") }
+        if front.id == ephemeralPane.noteID { HUD.show("Already at the front") }
         showEphemeral(front.id)
     }
 
@@ -954,10 +966,10 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
 
     @objc func promoteToFront(_ sender: Any?) {
         guard let id = currentNoteID, let note = store.note(id) else { return }
-        if note.slot != nil { HUD.show("Slotted notes don't have a front position", kind: .warning); return }
-        if ephemeralDeck().first?.id == id { HUD.show("Note is already first"); return }
+        if note.slot != nil { HUD.show("Slotted notes stay in their slot", kind: .warning); return }
+        if ephemeralDeck().first?.id == id { HUD.show("Already at the front"); return }
         store.promoteToFront(id)
-        HUD.show("Promoted note to front")
+        HUD.show("Moved to the front")
     }
 
     @objc func toggleLock(_ sender: Any?) {
@@ -998,7 +1010,7 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
 
     @objc func togglePin(_ sender: Any?) {
         Defaults[.pinOnTop].toggle()
-        HUD.show(Defaults[.pinOnTop] ? "Pinned on top" : "Unpinned from top")
+        HUD.show(Defaults[.pinOnTop] ? "Pinned on top" : "Unpinned")
     }
 
     @objc func toggleSlotsBar(_ sender: Any?) { Defaults[.alwaysShowSlotsBar].toggle() }

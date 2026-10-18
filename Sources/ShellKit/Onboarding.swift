@@ -181,7 +181,7 @@ enum Onboarding {
 
             \(key("Search All Notes", "⌘F"))  Search every note
             \(key("Pin Super Notes to Top", "⌘P"))  Keep Super Notes above other windows
-            \(key("Delete Note", "⌘D"))  Send a note to The Void
+            \(key("Delete Note", "⌘D"))  Delete a note (it waits in The Void)
             \(key("Jump to Front", "⌘1"))  Jump to the latest note
             \(key("Move Note to Front", "⇧⌘1"))  Bring a note to the front
 

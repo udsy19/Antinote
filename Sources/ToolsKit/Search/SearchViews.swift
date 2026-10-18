@@ -36,7 +36,7 @@ final class SearchResultView: NSView {
         self.colors = colors
         self.sizes = sizes
         self.query = query
-        promote = SquareIconButton(symbol: "arrow.up.to.line", toolTip: "Promote to front", iconSize: sizes.icon)
+        promote = SquareIconButton(symbol: "arrow.up.to.line", toolTip: "Move to the front", iconSize: sizes.icon)
         delete = SquareIconButton(symbol: "trash", toolTip: "Delete note", iconSize: sizes.icon)
         super.init(frame: .zero)
         configure()

@@ -104,7 +104,7 @@ final class URLSchemeHandler: NSObject {
             if store.note(id) != nil { windows.show(noteID: id) } else { windows.showMain() }
         case let .promote(id):
             guard let note = store.note(id) else { windows.showMain(); return }
-            if note.slot != nil { HUD.show("Slotted notes cannot be promoted", kind: .warning) }
+            if note.slot != nil { HUD.show("Slotted notes stay in their slot", kind: .warning) }
             else { store.promoteToFront(id) }
             windows.show(noteID: id)
         case .togglePin:

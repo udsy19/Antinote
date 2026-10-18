@@ -83,6 +83,8 @@ public enum PillKind: Sendable {
 @MainActor
 public final class PillView: NSView {
     public static let bottomInset: CGFloat = 20
+    /// Below the top bar when the pill has to move up.
+    public static let topInset: CGFloat = 44
     private let label = NSTextField(labelWithString: "")
     private var hideWork: DispatchWorkItem?
 

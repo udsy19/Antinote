@@ -4,7 +4,7 @@ import SuperNotesCore
 import SwiftUI
 
 /// The Void: deleted notes waiting to be recovered or erased. A black, always-dark window: "THE VOID" and a count
-/// of lost souls on top, the notes in monospace with outlined restore / destroy buttons, "Empty The Void" and "Return"
+/// of deleted notes on top, the notes in monospace with outlined Restore / delete buttons, "Empty The Void" and "Done"
 /// along the bottom.
 @MainActor
 final class VoidWindowController {
@@ -35,7 +35,7 @@ final class VoidWindowController {
 @MainActor
 final class VoidModel: ObservableObject {
     @Published var notes: [Note] = []
-    /// "Now" for the "Lost 3 days ago" lines (fixed in renders).
+    /// "Now" for the "Deleted 3 days ago" lines (fixed in renders).
     let now: () -> Date
     private var cancellable: AnyCancellable?
 
@@ -51,12 +51,12 @@ final class VoidModel: ObservableObject {
         self.now = { now }
     }
 
-    /// "Lost 3 days ago".
+    /// "Deleted 3 days ago".
     func lostText(_ note: Note) -> String? {
         guard let deleted = note.deletedAt else { return nil }
         let format = RelativeDateTimeFormatter()
         format.unitsStyle = .full
-        return "Lost " + format.localizedString(for: deleted, relativeTo: now())
+        return "Deleted " + format.localizedString(for: deleted, relativeTo: now())
     }
 
     func reload() { notes = Services.store?.void ?? [] }
@@ -72,7 +72,7 @@ final class VoidModel: ObservableObject {
     }
 
     func delete(_ note: Note) {
-        guard Alerts.confirm("Delete from The Void?", info: "There is no recovery beyond The Void.",
+        guard Alerts.confirm("Delete this note forever?", info: "This can't be undone.",
                              confirmTitle: "Delete", destructive: true) else { return }
         Services.store.deletePermanently(note.id)
         HUD.show("Note permanently deleted")
@@ -82,7 +82,7 @@ final class VoidModel: ObservableObject {
         guard !notes.isEmpty else { HUD.show("Nothing to delete"); return }
         let count = notes.count
         guard Alerts.confirm("Empty The Void?",
-                             info: "This will permanently delete \(count) note\(count == 1 ? "" : "s"). There is no recovery beyond The Void.",
+                             info: "\(count) note\(count == 1 ? "" : "s") will be deleted forever. This can't be undone.",
                              confirmTitle: "Empty The Void", destructive: true) else { return }
         for note in notes { Services.store.deletePermanently(note.id) }
         HUD.show("Emptied \(count) note\(count == 1 ? "" : "s") from The Void")
@@ -111,7 +111,7 @@ struct VoidView: View {
             VStack(spacing: 0) {
                 VStack(spacing: 4) {
                     Text("THE VOID").font(VoidStyle.title).tracking(4).foregroundStyle(VoidStyle.text)
-                    Text("\(model.notes.count) lost souls").font(VoidStyle.caption).foregroundStyle(VoidStyle.faint)
+                    Text(model.notes.count == 1 ? "1 deleted note" : "\(model.notes.count) deleted notes").font(VoidStyle.caption).foregroundStyle(VoidStyle.faint)
                 }
                 .padding()
                 .padding(.top, 12)
@@ -120,7 +120,7 @@ struct VoidView: View {
                     VStack(spacing: 16) {
                         Image(systemName: "sparkles").font(.system(size: 48)).foregroundStyle(VoidStyle.faint)
                         Text("The Void is empty").font(VoidStyle.body).foregroundStyle(VoidStyle.text)
-                        Text("Deleted notes will drift here").font(VoidStyle.caption).foregroundStyle(VoidStyle.faint)
+                        Text("Notes you delete wait here until The Void is emptied").font(VoidStyle.caption).foregroundStyle(VoidStyle.faint)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
@@ -137,7 +137,7 @@ struct VoidView: View {
                     Button("Empty The Void") { model.emptyVoid() }
                         .buttonStyle(VoidButtonStyle(tint: VoidStyle.destroy))
                         .opacity(model.notes.isEmpty ? 0.5 : 1)
-                    Button("Return", action: close)
+                    Button("Done", action: close)
                         .buttonStyle(VoidButtonStyle(tint: .white))
                         .keyboardShortcut(.defaultAction)
                 }
@@ -166,12 +166,12 @@ private struct VoidRow: View {
             }
             Spacer(minLength: 8)
             HStack(spacing: 8) {
-                Button { model.recover(note) } label: { Image(systemName: "arrow.uturn.backward") }
+                Button("Restore") { model.recover(note) }
                     .buttonStyle(VoidButtonStyle(tint: .white))
-                    .help("Restore from The Void")
+                    .help("Put the note back at the front of the deck")
                 Button { model.delete(note) } label: { Image(systemName: "xmark") }
                     .buttonStyle(VoidButtonStyle(tint: VoidStyle.destroy))
-                    .help("Destroy forever")
+                    .help("Delete forever")
             }
         }
         .padding(.horizontal)
@@ -182,14 +182,14 @@ private struct VoidRow: View {
             Button("Restore") { model.recover(note) }
             Button("Restore and Open") { model.open(note) }
             Divider()
-            Button("Destroy Forever…", role: .destructive) { model.delete(note) }
+            Button("Delete Forever…", role: .destructive) { model.delete(note) }
         }
     }
 
     private var preview: String {
         let lines = note.content.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
-        return lines.isEmpty ? "(Empty vessel)" : lines.prefix(2).joined(separator: " ")
+        return lines.isEmpty ? "(Empty note)" : lines.prefix(2).joined(separator: " ")
     }
 }
 

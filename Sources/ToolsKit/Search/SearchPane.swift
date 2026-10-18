@@ -152,7 +152,7 @@ final class SearchPane: NSView, NSTextFieldDelegate {
         scopeButton.action = { [weak self] in self?.toggleScope() }
         scopeButton.toolTip = "Show slotted notes instead"
         promoteSelected.action = { [weak self] in self?.promotePicked() }
-        promoteSelected.toolTip = "Promote selected to front"
+        promoteSelected.toolTip = "Move selected notes to the front"
         deleteSelected.action = { [weak self] in self?.deletePicked() }
         deleteSelected.toolTip = "Delete selected"
         listButton.action = { [weak self] in self?.setLayout(.list) }
@@ -350,7 +350,7 @@ final class SearchPane: NSView, NSTextFieldDelegate {
     private func promote(_ ids: [UUID]) {
         guard Services.store != nil, !ids.isEmpty else { return }
         for id in ids.reversed() { Services.store.promoteToFront(id) }
-        HUD.show(ids.count == 1 ? "Promoted note to front" : "Promoted \(ids.count) notes to front", kind: .success)
+        HUD.show(ids.count == 1 ? "Moved to the front" : "Moved \(ids.count) notes to the front", kind: .success)
         reload()
     }
 
