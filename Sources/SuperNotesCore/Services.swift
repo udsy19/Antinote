@@ -191,6 +191,9 @@ public protocol NoteEditing: AnyObject {
     /// Height of chrome resting over the bottom of the note (the always-shown slot bar); the end of a long note
     /// scrolls clear of it.
     var bottomOverlay: CGFloat { get set }
+    /// While this returns a manager, Edit › Undo / Redo act on it instead of the note's own history (the shell's
+    /// "Undo Delete Note" right after a note was deleted).
+    var externalUndo: (() -> UndoManager?)? { get set }
 }
 
 @MainActor

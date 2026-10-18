@@ -42,6 +42,8 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
     private var autoUnlockWork: DispatchWorkItem?
     /// The theme the chrome was last painted with (slotted notes can have their own).
     private var appliedThemeID = ""
+    /// Holds "Undo Delete Note" until the next edit or navigation; the editors route ⌘Z here while it does.
+    private let noteUndo = UndoManager()
 
     private var store: NoteStoring { Services.store }
     private var isSplit: Bool { Defaults[.shellKitSplit] }
@@ -176,8 +178,28 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         editor.onAnalysis = { [weak self] analysis in
             self?.analyses[role] = analysis
             self?.refreshChrome()
+            self?.forgetUndoDelete()   // typing moves on; the deleted note stays in The Void
+        }
+        editor.externalUndo = { [weak self] in
+            guard let self, self.noteUndo.canUndo else { return nil }
+            return self.noteUndo
         }
         return pane
+    }
+
+    /// Delete Note, undone: the note comes back from The Void and is shown again.
+    private func offerUndoDelete(_ id: UUID) {
+        noteUndo.removeAllActions()
+        noteUndo.groupsByEvent = false
+        noteUndo.beginUndoGrouping()
+        defer { noteUndo.endUndoGrouping() }
+        noteUndo.registerUndo(withTarget: self) { shell in
+            guard shell.store.note(id)?.isInVoid == true else { return }
+            shell.store.restoreFromVoid(id)
+            shell.showEphemeral(id)   // restored notes rejoin the deck at the front
+            HUD.show("Note restored", kind: .success)
+        }
+        noteUndo.setActionName("Delete Note")
     }
 
     private func flushEditors() {
@@ -557,7 +579,13 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         refreshChrome()
     }
 
+    /// Editing or moving on leaves the deleted note in The Void (never while that undo is running).
+    private func forgetUndoDelete() {
+        if !noteUndo.isUndoing { noteUndo.removeAllActions() }
+    }
+
     private func afterNavigation() {
+        forgetUndoDelete()
         if presented != nil { present(inWindow: nil) }
         relock.setFocused(isFocusedOnUnlockedLockedNote, at: Date())
         applyThemeIfNeeded()
@@ -876,10 +904,13 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
             pane(activeRole).clear()
             store.deletePermanently(id)
         } else {
-            guard Alerts.confirm("Delete Note?", info: "Impermanence will set you free.", confirmTitle: "Send to The Void",
-                                 suppressionID: "shellKit.moveToVoid") else { return }
+            guard Alerts.confirm("Delete this note?", info: "It moves to The Void, where it can be restored. ⌘Z undoes right away.",
+                                 confirmTitle: "Delete", suppressionID: "shellKit.moveToVoid") else { return }
             store.moveToVoid(id)
-            HUD.show("Note banished to void")
+            validateVisibleNotes()
+            offerUndoDelete(id)
+            HUD.show("Note deleted · ⌘Z to undo")
+            return
         }
         validateVisibleNotes()
     }

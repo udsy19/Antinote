@@ -402,6 +402,14 @@ final class EditorTextView: NSTextView {
 
     // MARK: Events
 
+    /// Undo belongs to the editor (`NoteHistory`), not the text view: with no manager of its own, NSTextView
+    /// registers nothing, and Edit › Undo / Redo (nil-targeted, so they land on the first responder) run the
+    /// note's history or the shell's note-level step.
+    override var undoManager: UndoManager? { nil }
+
+    @objc func undo(_ sender: Any?) { editor?.activeUndoManager.undo() }
+    @objc func redo(_ sender: Any?) { editor?.activeUndoManager.redo() }
+
     override func mouseDown(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
         if editor?.handleClick(at: p, event: event) == true { return }
@@ -454,10 +462,17 @@ final class EditorTextView: NSTextView {
     override func pasteAsPlainText(_ sender: Any?) { editor?.paste(from: .general) }
     override func pasteAsRichText(_ sender: Any?) { editor?.paste(from: .general) }
 
-    /// Copy/cut work without a selection (whole note / current line).
+    /// Copy/cut work without a selection (whole note / current line); Undo and Redo show what they would do
+    /// ("Undo Typing", "Redo Paste").
     override func validateUserInterfaceItem(_ item: NSValidatedUserInterfaceItem) -> Bool {
         if item.action == #selector(copy(_:)) { return true }
         if item.action == #selector(cut(_:)) { return isEditable }
+        if item.action == #selector(undo(_:)) || item.action == #selector(redo(_:)) {
+            guard let manager = editor?.activeUndoManager else { return false }
+            let undoing = item.action == #selector(undo(_:))
+            (item as? NSMenuItem)?.title = undoing ? manager.undoMenuItemTitle : manager.redoMenuItemTitle
+            return undoing ? manager.canUndo : manager.canRedo
+        }
         return super.validateUserInterfaceItem(item)
     }
 

@@ -151,9 +151,13 @@ enum MainMenu {
         state.toggles = [(readOnly, .readOnly), (archive, .archive), (lock, .lock)]
         file.delegate = state
 
+        // Redo answers to ⌘Y as well as ⇧⌘Z: a hidden twin of the item carries the second shortcut.
+        let redoY = NSMenuItem(title: "Redo", action: Selector(("redo:")), keyEquivalent: "y")
+        redoY.isHidden = true
+        redoY.allowsKeyEquivalentWhenHidden = true
         add("Edit", [
             item("Undo", Selector(("undo:")), "z", target: nil),
-            item("Redo", Selector(("redo:")), "z", [.command, .shift], target: nil), sep(),
+            item("Redo", Selector(("redo:")), "z", [.command, .shift], target: nil), redoY, sep(),
             item("Cut", #selector(NSText.cut(_:)), "x", target: nil),
             item("Copy", #selector(NSText.copy(_:)), "c", target: nil),
             item("Paste", #selector(NSText.paste(_:)), "v", target: nil),

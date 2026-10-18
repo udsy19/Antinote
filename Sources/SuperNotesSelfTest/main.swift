@@ -10,6 +10,8 @@ enum SelfTest { nonisolated(unsafe) static var cases: [(String, () -> Void)] = [
 
 // Custom themes, the rates cache and user extensions resolve inside a throwaway folder, never the real one.
 SuperNotesPaths.base = FileManager.default.temporaryDirectory.appendingPathComponent("supernotes-selftest-\(UUID().uuidString)")
+// Window-driven cases (the editor, the shell) need an application object, but nothing may come on screen.
+NSApplication.shared.setActivationPolicy(.prohibited)
 
 SelfTest.cases.append(("Core.modeDetection", {
     check(NoteMode.detect(firstLine: "Math").mode == .math, "case-insensitive keyword")

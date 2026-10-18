@@ -13,6 +13,15 @@ public enum WindowPreview {
         Shell.shared.prepareForPreview(revealed: revealed, slot: slot, size: size, hoveredSlot: hoveredSlot)
     }
 
+    /// The offscreen window itself (its first responder is the shown note's text view) and the note it shows,
+    /// for self-tests that drive the shell's menu actions.
+    @MainActor public static var window: NSWindow { Shell.shared.window }
+    @MainActor public static var currentNoteID: UUID? { Shell.shared.currentNoteID }
+    /// The menu bar as built for the preview window.
+    @MainActor public static var mainMenu: NSMenu? { MainMenu.buildForPreview(); return MainMenu.built }
+    /// File › Delete Note on the shown note (the confirmation is skipped when its warning is suppressed).
+    @MainActor public static func deleteCurrentNote() { Shell.shared.moveToVoid(nil) }
+
     /// The slot bar alone on a strip of the note's background `width` wide: `titles[slot]` for the slots holding
     /// notes, `open` the slot shown, the pointer on `hovered` (its tip above the bar).
     @MainActor public static func slotsBar(titles: [Int: String], open: Int?, hovered: Int?, width: CGFloat) -> NSView {

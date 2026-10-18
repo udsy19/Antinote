@@ -165,6 +165,23 @@ content — "Strikethrough Text"), find / findAndReplace / findNext / findPrevio
 increase/decrease/resetTextSize, copyAll ("Copied all to clipboard"), selectLine, expandAllLinks,
 showExtensionAutocomplete. Each programmatic edit is one undo step.
 
+## Undo (`NoteHistory`, `TypingCoalescing`)
+
+The editor owns undo; the text view's `allowsUndo` is off and its `undoManager` is nil, so NSTextView registers
+nothing (its range-based typing coalescer broke as soon as the editor rewrote list markers or shortened a link
+inside a keystroke). Every step keeps the whole state before and after — text, selection, tracked links — so undo
+and redo put back exactly what was there. `recordChange()` runs first thing in `textDidChange`: typing extends the
+open step while `TypingCoalescing.extends` allows (one character in at the caret or out next to it, a space never
+joins a word, a line break or a 2 s pause ends the group, moving the caret ends it); a list-marker rewrite in the
+same keystroke folds into the step that caused it; every `replace(…, action:)` is a step named for the Edit menu
+("Undo Check Off Item", "Move Line", "Paste", "Cut", "Insert", "New Item", "Link Shortening", "Command", "Insert
+Keyword", "Replace All", "Vim Edit", …). Expanding or collapsing a link is display only (`action: nil`) and never a
+step. Each note has its own `UndoManager` (200 levels) kept for the session: switching notes keeps both stacks; a
+note whose text changed elsewhere starts afresh. Saving never touches the text view, so undo survives the
+debounced save. ⌘Z / ⇧⌘Z / ⌘Y are nil-targeted menu actions that land on the text view's `undo(_:)` / `redo(_:)`,
+which run `activeUndoManager`: the shell's note-level manager while it holds "Undo Delete Note", else the note's;
+the same manager serves Vim's `u` and `⌃R`. Self-tests drive all of it offscreen (`UndoTests.swift`).
+
 ## Find and replace (`FindShelf`, `EditorLogic.Find`)
 
 - ⇧⌘F docks a shelf under the note on `backgroundFade` with a hairline: a chevron that shows the Replace row, the

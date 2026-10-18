@@ -357,7 +357,7 @@ final class SearchPane: NSView, NSTextFieldDelegate {
     private func delete(_ ids: [UUID]) {
         guard Services.store != nil, !ids.isEmpty else { return }
         for id in ids { Services.store.moveToVoid(id) }
-        HUD.show(ids.count == 1 ? "Note banished to void" : "\(ids.count) notes banished to void")
+        HUD.show(ids.count == 1 ? "Note deleted" : "\(ids.count) notes deleted")
         reload()
     }
 

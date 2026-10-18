@@ -3,6 +3,17 @@
 All notable changes to Super Notes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Fixed
+- Undo and redo work: ⌘Z undoes, ⇧⌘Z and ⌘Y redo, in the note and in every text field. Typing undoes a word at a
+  time; checking off an item, moving or duplicating a line, indenting, pasting, cutting, shortening a link,
+  running a `::` command or a "/" command each undo as one step that puts the text and the selection back, and
+  the Edit menu names them ("Undo Paste"). Each note keeps its own history for the session, saving never clears
+  it, Vim's `u` and ⌃R use the same history, and ⌘Z right after deleting a note brings it back from The Void.
+  (Before, the text view's own undo lost track as soon as the editor rewrote a list marker or shortened a link
+  inside a keystroke, and then stopped working.)
+
 ## [1.3.2] — 2026-10-18
 
 ### Fixed

@@ -101,9 +101,9 @@ final class CommandPalette {
                 HUD.show("Promoted note to front", kind: .success)
             })
         }
-        items.append(PaletteCommand(title: "Send to The Void", symbol: "trash", keywords: "delete remove") {
+        items.append(PaletteCommand(title: "Delete Note", detail: "Moves it to The Void", symbol: "trash", keywords: "void trash remove") {
             Services.store.moveToVoid(note.id)
-            HUD.show("Note sent to The Void")
+            HUD.show("Note deleted")
         })
         return items
     }

@@ -26,7 +26,22 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
     let textView: EditorTextView
     private let storage = NSTextStorage()
     private let scrollView = NSScrollView()
-    private let undo = UndoManager()
+    /// The shown note's undo history; `histories` keeps one per note visited this session (most recent last).
+    private var history = NoteHistory(.init(text: "", selection: NSRange(location: 0, length: 0), links: [], allLinksExpanded: false))
+    private var histories: [UUID: NoteHistory] = [:]
+    private var historyOrder: [UUID] = []
+    private static let keptHistories = 24
+    /// Where the selection was when the change in progress started (the step's "before" selection).
+    private var selectionBeforeEdit: NSRange?
+    /// The name the edit in progress registers under (nil: typing).
+    private var pendingActionName: String?
+    /// The edit in progress only updates the committed state (link expansion and collapse: display, not content).
+    private var transientEdit = false
+    /// Undo or redo is putting a snapshot back.
+    private var applyingHistory = false
+    /// The edit in progress created, extended or folded into `history.last`.
+    private var lastStepTouched = false
+    public var externalUndo: (() -> UndoManager?)?
     /// The Vim mode ("NORMAL", "VISUAL LINE") in grey at the bottom left, centred in a 30 pt strip.
     private let modeLabel = NSTextField(labelWithString: "")
     private let pill = PillView()
@@ -102,7 +117,9 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
         storage.delegate = self
         textView.isRichText = false
         textView.importsGraphics = false
-        textView.allowsUndo = true
+        // Undo is the editor's own (`NoteHistory`): the text view's would coalesce typing by range and break once
+        // the editor rewrites list markers or shortens links inside a keystroke.
+        textView.allowsUndo = false
         textView.isAutomaticQuoteSubstitutionEnabled = false
         textView.isAutomaticDashSubstitutionEnabled = false
         textView.isAutomaticLinkDetectionEnabled = false
@@ -210,6 +227,7 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
         stopAutoPaste(announce: false)
         completion.hide()
         hideSlash()
+        if let leaving = self.note?.id, leaving != note.id { histories[leaving] = history }
         isLoading = true
         self.note = note
         links = []
@@ -226,7 +244,6 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
         }
         textView.string = content
         links = EditorLogic.Links.locate(note.links, in: content)
-        undo.removeAllActions()
         textView.isEditable = !note.isReadOnly
         isLoading = false
         refresh()
@@ -236,7 +253,110 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
         vim.selectionChanged(end, text: textView.string)
         updateModeLabel()
         subscribeToStore()
+        restoreHistory(for: note.id)
         if content != note.content { scheduleSave() }
+    }
+
+    /// The note's history from earlier in the session carries on when the text is what it left; a note whose
+    /// text changed elsewhere (sync, another window) starts afresh.
+    private func restoreHistory(for id: UUID) {
+        let now = snapshot()
+        if let kept = histories[id], kept.committed.text == now.text {
+            history = kept
+            history.committed = now
+            history.last = nil
+        } else {
+            history = NoteHistory(now)
+        }
+        histories[id] = history
+        historyOrder.removeAll { $0 == id }
+        historyOrder.append(id)
+        while historyOrder.count > Self.keptHistories { histories[historyOrder.removeFirst()] = nil }
+    }
+
+    // MARK: - Undo
+
+    /// What ⌘Z and ⇧⌘Z act on: the shell's manager while it has a note-level step (Undo Delete Note), else the
+    /// note's history.
+    public var activeUndoManager: UndoManager { externalUndo?() ?? history.manager }
+
+    private func snapshot() -> NoteHistory.Snapshot {
+        .init(text: textView.string, selection: textView.selectedRange(), links: links, allLinksExpanded: allLinksExpanded)
+    }
+
+    /// Records the change that just landed (called from `textDidChange`, before anything else edits the text):
+    /// typing extends the open step per `TypingCoalescing`, a list-marker rewrite folds into the step that caused
+    /// it, and every other edit becomes a step of its own, named for the Edit menu.
+    private func recordChange() {
+        guard !isLoading, !applyingHistory else { return }
+        var after = snapshot()
+        var before = history.committed
+        before.selection = selectionBeforeEdit ?? before.selection
+        selectionBeforeEdit = nil
+        let typing = pendingActionName == nil && programmaticEdits == 0
+        if typing {
+            // The text view may settle its caret after this point: typing leaves it right after what it put in.
+            after.selection = NSRange(location: TypingCoalescing.caretAfter(before: before.selection, old: before.text, new: after.text,
+                                                                            live: after.selection.location), length: 0)
+        }
+        history.committed = after
+        lastStepTouched = !transientEdit
+        if transientEdit { return }
+        if isNormalizing, let last = history.last { last.after = after; return }
+        let now = Date()
+        if typing, let last = history.last, last.typing {
+            let typed = EditorLogic.minimalChange(from: last.before.text, to: last.after.text).replacement
+            if TypingCoalescing.extends(typed: typed, caret: last.after.selection.location, old: last.after.text, new: after.text,
+                                        elapsed: now.timeIntervalSince(last.typedAt)) {
+                last.after = after
+                last.typedAt = now
+                return
+            }
+        }
+        let step = NoteHistory.Step(before: before, after: after, name: pendingActionName ?? "Typing", typing: typing, at: now)
+        history.last = step
+        register(step, undoing: true)
+    }
+
+    /// Each step is its own group (the manager doesn't group by event, so headless runs behave like typed ones).
+    private func register(_ step: NoteHistory.Step, undoing: Bool) {
+        let manager = history.manager
+        let opens = manager.groupingLevel == 0
+        if opens { manager.beginUndoGrouping() }
+        manager.registerUndo(withTarget: self) { editor in editor.perform(step, undoing: undoing) }
+        manager.setActionName(step.name)
+        if opens { manager.endUndoGrouping() }
+    }
+
+    /// Puts a step's before (undo) or after (redo) state back: text as its minimal replacement, then links and
+    /// selection; the opposite direction is registered for redo/undo.
+    private func perform(_ step: NoteHistory.Step, undoing: Bool) {
+        let target = undoing ? step.before : step.after
+        completion.hide()
+        hideSlash()
+        applyingHistory = true
+        programmaticEdits += 1
+        let change = EditorLogic.minimalChange(from: textView.string, to: target.text)
+        if change.range.length > 0 || !change.replacement.isEmpty {
+            _ = textView.shouldChangeText(in: change.range, replacementString: change.replacement)
+            storage.replaceCharacters(in: change.range, with: change.replacement)
+            links = target.links
+            allLinksExpanded = target.allLinksExpanded
+            textView.didChangeText()
+        }
+        links = target.links
+        allLinksExpanded = target.allLinksExpanded
+        programmaticEdits -= 1
+        applyingHistory = false
+        let length = (textView.string as NSString).length
+        let location = min(target.selection.location, length)
+        textView.setSelectedRange(NSRange(location: location, length: min(target.selection.length, length - location)))
+        textView.scrollRangeToVisible(textView.selectedRange())
+        if Defaults[.vimMode] { vim.selectionChanged(textView.selectedRange(), text: textView.string) }
+        restyle()
+        history.committed = snapshot()
+        history.last = nil
+        register(step, undoing: !undoing)
     }
 
     public func focus() { textView.window?.makeFirstResponder(textView) }
@@ -244,7 +364,7 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
     public func insert(_ text: String) {
         guard textView.isEditable, !text.isEmpty else { return }
         let sel = textView.selectedRange()
-        replace(sel, with: text, selection: NSRange(location: sel.location + (text as NSString).length, length: 0))
+        replace(sel, with: text, selection: NSRange(location: sel.location + (text as NSString).length, length: 0), action: "Insert")
         textView.scrollRangeToVisible(textView.selectedRange())
     }
 
@@ -255,9 +375,9 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
             guard editable else { return }
             let st = state, lines = EditorLogic.Lines.covered(st.ns, st.selection)
             if lines.count == 1, case .checkbox? = ListLine.parse(st.ns.substring(with: EditorLogic.Lines.range(st.ns, at: st.selection.location)))?.kind {
-                apply(EditorLogic.Lists.check(st, line: lines.lowerBound, behavior: Defaults[.checkedItemBehavior]), action: "Toggle Checklist Item")
+                apply(EditorLogic.Lists.check(st, line: lines.lowerBound, behavior: Defaults[.checkedItemBehavior]), action: "Check Off Item")
             } else {
-                apply(EditorLogic.Lists.toggle(st), action: "Toggle Checklist Item")
+                apply(EditorLogic.Lists.toggle(st), action: "Toggle Checkbox")
             }
         case .cycleListStyle:
             if editable { apply(EditorLogic.Lists.cycle(state, start: Defaults[.defaultListStyle]), action: "Change List Style") }
@@ -419,18 +539,20 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
 
     private var state: TextState { TextState(textView.string, textView.selectedRange()) }
 
-    /// Replaces `range` as one undoable edit made by the editor. `newLinks` use absolute ranges in the new text.
+    /// Replaces `range` as one undoable edit made by the editor, named `action` in the Edit menu ("Undo Paste");
+    /// without a name the edit is `transient` — display only, never a step of its own. `newLinks` use absolute
+    /// ranges in the new text.
     private func replace(_ range: NSRange, with string: String, links newLinks: [TrackedLink] = [],
-                         selection: NSRange? = nil, action: String? = nil, breakCoalescing: Bool = true) {
+                         selection: NSRange? = nil, action: String?) {
         let old = textView.selectedRange()
         programmaticEdits += 1
-        defer { programmaticEdits -= 1 }
-        if breakCoalescing { textView.breakUndoCoalescing() }
+        pendingActionName = action
+        transientEdit = action == nil
+        defer { programmaticEdits -= 1; pendingActionName = nil; transientEdit = false }
         pendingInsertedLinks = newLinks
         guard textView.shouldChangeText(in: range, replacementString: string) else { pendingInsertedLinks = nil; return }
         storage.replaceCharacters(in: range, with: string)
         textView.didChangeText()
-        if let action { undo.setActionName(action) }
         let length = (textView.string as NSString).length
         var sel = selection ?? {
             let delta = (string as NSString).length - range.length
@@ -441,24 +563,32 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
         sel.location = min(sel.location, length)
         sel.length = min(sel.length, length - sel.location)
         textView.setSelectedRange(sel)
+        // The step ends where the edit leaves the caret (the text view settled the selection before the record).
+        history.committed.selection = sel
+        if lastStepTouched { history.last?.after.selection = sel }
+        lastStepTouched = false
     }
 
     /// Applies a whole-text transform as its minimal replacement.
-    private func apply(_ st: TextState, action: String?, breakCoalescing: Bool = true) {
+    private func apply(_ st: TextState, action: String?) {
         let change = EditorLogic.minimalChange(from: textView.string, to: st.text)
         if change.range.length == 0 && change.replacement.isEmpty {
             textView.setSelectedRange(st.selection)
             return
         }
-        replace(change.range, with: change.replacement, selection: st.selection, action: action, breakCoalescing: breakCoalescing)
+        replace(change.range, with: change.replacement, selection: st.selection, action: action)
     }
 
     // MARK: - Delegates
 
-    public func undoManager(for view: NSTextView) -> UndoManager? { undo }
-
     public func textView(_ textView: NSTextView, shouldChangeTextIn range: NSRange, replacementString string: String?) -> Bool {
-        guard let string, programmaticEdits == 0, !isLoading, !undo.isUndoing, !undo.isRedoing else { return true }
+        guard let string, !isLoading, !applyingHistory else { return true }
+        if selectionBeforeEdit == nil {
+            selectionBeforeEdit = textView.selectedRange()
+            // Text the history doesn't know about (nothing should get here) starts it afresh rather than corrupt it.
+            if storage.string != history.committed.text { history.reset(to: snapshot()) }
+        }
+        guard programmaticEdits == 0 else { return true }
         switch EditorLogic.Links.check(range, against: links) {
         case .inside: toast("Cannot edit within shortened links. Expand before editing."); return false
         case .partial: toast("Cannot partially edit shortened links. Expand before editing."); return false
@@ -483,6 +613,7 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
 
     public func textDidChange(_ notification: Notification) {
         guard !isLoading else { return }
+        recordChange()
         if !isNormalizing {
             // A typed check trigger ("milk /x") checks the item off; list notes keep every line an item.
             let listNote = NoteMode.detect(firstLine: firstLine).mode == .list
@@ -495,7 +626,7 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
             if listNote { next = EditorLogic.Lists.normalizedListNote(next, style: Defaults[.defaultListStyle]) }
             if next.text != textView.string {
                 isNormalizing = true
-                apply(next, action: nil, breakCoalescing: false)
+                apply(next, action: pendingActionName ?? "Typing")   // folds into the step that caused it
                 isNormalizing = false
                 return   // the nested change already refreshed
             }
@@ -526,6 +657,12 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
         if Defaults[.vimMode], !applyingVim { vim.selectionChanged(textView.selectedRange(), text: textView.string) }
         updateModeLabel()
         guard programmaticEdits == 0, !isLoading else { return }
+        // Moving the caret (clicks, arrows) closes the typing step; the next keystroke starts another. The text
+        // view settling its caret after a keystroke lands where the step predicted and changes nothing.
+        if selectionBeforeEdit == nil, !applyingHistory, textView.selectedRange() != history.committed.selection {
+            history.last = nil
+            history.committed.selection = textView.selectedRange()
+        }
         collapseLinksAwayFromCaret()
         if completion.isVisible, completionToken() == nil { completion.hide() }
         if slash.isVisible, slashToken() == nil { hideSlash() }
@@ -990,7 +1127,7 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
         applyingVim = true
         defer { applyingVim = false; updateModeLabel() }
         if out.undo || out.redo {
-            if out.undo { undo.undo() } else { undo.redo() }
+            if out.undo { activeUndoManager.undo() } else { activeUndoManager.redo() }
             let sel = textView.selectedRange()
             textView.setSelectedRange(NSRange(location: sel.location, length: 0))
             vim.selectionChanged(textView.selectedRange(), text: textView.string)
@@ -1004,7 +1141,7 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
                 vim.reset()
                 return
             }
-            replace(change.range, with: change.replacement, selection: out.selection, action: "Edit")
+            replace(change.range, with: change.replacement, selection: out.selection, action: "Vim Edit")
         } else {
             let length = (textView.string as NSString).length
             textView.setSelectedRange(NSRange(location: min(out.selection.location, length),
@@ -1029,7 +1166,7 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
             startAutoPaste()
         }
         if mode != .code, Defaults[.listContinuity], let next = EditorLogic.Lists.continued(st, options: listOptions) {
-            apply(next, action: "Typing")
+            apply(next, action: "New Item")
             return true
         }
         if Defaults[.keepIndentOnReturn] {
@@ -1095,7 +1232,7 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
         }
         if textView.isEditable, let i = textView.checkbox(at: p) {
             let line = textView.model.markers[i].line
-            apply(EditorLogic.Lists.check(state, line: line, behavior: Defaults[.checkedItemBehavior]), action: "Toggle Checklist Item")
+            apply(EditorLogic.Lists.check(state, line: line, behavior: Defaults[.checkedItemBehavior]), action: "Check Off Item")
             return true
         }
         guard let index = characterIndex(at: p) else { return false }
@@ -1174,7 +1311,8 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
         let display = link.displayed
         link.range = NSRange(location: range.location, length: (display as NSString).length)
         links.remove(at: i)
-        replace(range, with: display, links: [link], action: expanded ? "Expand Link" : "Shorten Link")
+        // Showing or hiding an address changes the display, not the note: no undo step.
+        replace(range, with: display, links: [link], action: nil)
     }
 
     private func collapseLinksAwayFromCaret() {
@@ -1193,10 +1331,8 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
 
     private func toggleAllLinks() {
         allLinksExpanded.toggle()
-        undo.beginUndoGrouping()
         for l in links.reversed() where l.expanded != allLinksExpanded { setLink(at: l.range, expanded: allLinksExpanded) }
-        undo.endUndoGrouping()
-        undo.setActionName(allLinksExpanded ? "Expand Links" : "Shorten Links")
+        history.committed.allLinksExpanded = allLinksExpanded
     }
 
     /// A URL typed and followed by space/Return becomes a short link (after the keystroke lands).
@@ -1212,7 +1348,7 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
             let short = analyzer.shorten(url: url)
             guard !short.isEmpty, short != url else { return }
             let link = TrackedLink(link: ShortLink(url: url, short: short), range: NSRange(location: r.location, length: (short as NSString).length))
-            self.replace(r, with: short, links: [link], action: "Shorten Link")
+            self.replace(r, with: short, links: [link], action: "Link Shortening")
         }
     }
 
@@ -1399,18 +1535,18 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
         switch edit {
         case .insert(let text):
             if editable, let r = found {
-                replace(r, with: text, selection: NSRange(location: r.location + (text as NSString).length, length: 0), action: "Run Command")
+                replace(r, with: text, selection: NSRange(location: r.location + (text as NSString).length, length: 0), action: "Command")
             }
         case .replaceLine(let text):
             if editable {
                 let line = EditorLogic.Lines.range(s, at: found?.location ?? min(location, s.length))
-                replace(line, with: text, selection: NSRange(location: line.location + (text as NSString).length, length: 0), action: "Run Command")
+                replace(line, with: text, selection: NSRange(location: line.location + (text as NSString).length, length: 0), action: "Command")
             }
         case .replaceAll(let text):
-            if editable { replace(NSRange(location: 0, length: s.length), with: text, action: "Run Command") }
+            if editable { replace(NSRange(location: 0, length: s.length), with: text, action: "Command") }
         case .openURL(let url):
             NSWorkspace.shared.open(url)
-            if editable, let r = found { replace(r, with: "", action: "Run Command") }
+            if editable, let r = found { replace(r, with: "", action: "Command") }
         case .message(let message): toast(message, kind: .success)
         case .failure(let message): toast(message, kind: .error)
         }
@@ -1480,7 +1616,7 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
             if caret >= NSMaxRange(change.range) { caret += (change.replacement as NSString).length - change.range.length }
             apply(TextState(text, caret: caret), action: "Insert Keyword")
         } else {
-            replace(token.range, with: "", selection: NSRange(location: token.range.location, length: 0), action: "Run Command")
+            replace(token.range, with: "", selection: NSRange(location: token.range.location, length: 0), action: "Command")
             save()   // the command may read the note from the store
             command.action()
         }

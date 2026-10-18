@@ -128,7 +128,7 @@ File: Create New Note ⌘N, Move Note to Front ⇧⌘1, Search All Notes ⌘F, C
 Toggle Split Screen ⇧⌘T, Swap Ephemeral vs. Slotted ⌘T, Make Read-Only/Allow Editing ⇧⌘R, Archive/Unarchive ⇧⌘A,
 Lock/Unlock ⇧⌘L, Relock Notes, Delete Note ⌘D, Recover Notes from The Void..., Empty The Void, Print... ⇧⌘P,
 Export Note ▸ (Quick Export ⌘S when a destination is chosen, then files, then "Send to …" apps), Close Window ⌘W.
-Edit: Undo/Redo, Cut/Copy/Paste, Select All, Copy All ⌥⌘C, Select Line ⌘L, Find Next ⌘G, Find Previous ⇧⌘G,
+Edit: Undo ⌘Z, Redo ⇧⌘Z and ⌘Y (a hidden twin item), Cut/Copy/Paste, Select All, Copy All ⌥⌘C, Select Line ⌘L, Find Next ⌘G, Find Previous ⇧⌘G,
 Check Off Current Line ⇧⌘K, Cycle List Type ⇧⌘M, Indent ⌥⌘], Outdent ⌥⌘[, Move Line Up/Down ⌥↑/⌥↓, Duplicate
 Line Up/Down ⌥⇧↑/⌥⇧↓, Markdown: Strikethrough ⇧⌘X, Expand All Links ⌥⌘L, Extension Autocomplete ⌃Space.
 Appearance: Increase/Decrease/Reset Text Size ⌘= ⌘- ⌥⌘0, Always Show Slots Bar, Split Horizontally, Enter Full

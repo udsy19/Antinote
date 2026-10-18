@@ -14,4 +14,5 @@ func registerModuleTests() {
     registerSettingsBehaviourTests()
     registerFindShelfTests()
     registerUpdateKitTests()
+    registerUndoTests()
 }
