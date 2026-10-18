@@ -3,7 +3,7 @@
 All notable changes to Super Notes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org).
 
-## [Unreleased]
+## [1.3.3] — 2026-10-18
 
 ### Fixed
 - Undo and redo work: ⌘Z undoes, ⇧⌘Z and ⌘Y redo, in the note and in every text field. Typing undoes a word at a
