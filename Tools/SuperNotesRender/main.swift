@@ -186,7 +186,6 @@ MainActor.assumeIsolated {
     Services.ai = AIService(downloader: models, tools: [])
 }
 
-
 // MARK: - Run
 
 MainActor.assumeIsolated {
