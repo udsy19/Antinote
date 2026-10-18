@@ -33,5 +33,6 @@ func registerEditorParityTests() {
               && EditorLogic.actionBadge("insert").role == \Theme.accent3Main
               && EditorLogic.actionBadge("mystery").role == \Theme.typeLight, "action badges")
         check(PillView.duration(for: "Stopwatch started") == 1 + 0.05 * 17, "pills stay 1 s + 50 ms per character")
+        check(PillView.duration(for: String(repeating: "x", count: 500)) == 6, "long pills cap at 6 s")
     }))
 }

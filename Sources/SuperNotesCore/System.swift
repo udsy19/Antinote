@@ -138,7 +138,8 @@ public final class PillView: NSView {
     }
 
     /// How long a message stays up: one second plus 50 ms per character.
-    public nonisolated static func duration(for message: String) -> TimeInterval { 1 + 0.05 * Double(message.count) }
+    /// One second plus reading time, capped at 6 s (the full text stays in the tooltip).
+    public nonisolated static func duration(for message: String) -> TimeInterval { min(6, 1 + 0.05 * Double(message.count)) }
 
     /// Sets the text and colours without animating (used directly by offscreen renders).
     public func configure(_ text: String, kind: PillKind, theme: Theme) {
