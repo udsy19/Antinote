@@ -66,4 +66,9 @@ else
   codesign -f -s - --entitlements "$ENT" "$APP"
 fi
 codesign --verify --deep --strict "$APP"
+# Embedded frameworks are signed without an Apple Team ID, so hardened runtime refuses to load them unless library
+# validation is off. Without this the app aborts at launch — fail the build instead.
+if [ ${#FRAMEWORKS[@]} -gt 0 ] && ! codesign -d --entitlements :- "$APP" 2>/dev/null | grep -q disable-library-validation; then
+  echo "error: $APP embeds frameworks but lacks com.apple.security.cs.disable-library-validation" >&2; exit 1
+fi
 echo "Built $APP"

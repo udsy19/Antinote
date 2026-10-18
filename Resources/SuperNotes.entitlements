@@ -3,5 +3,8 @@
 <plist version="1.0">
 <dict>
 	<key>com.apple.security.automation.apple-events</key><true/>
+	<!-- The bundled llama.framework is signed with the project's own identity, which has no Apple Team ID;
+	     hardened runtime's library validation would refuse to load it without this. -->
+	<key>com.apple.security.cs.disable-library-validation</key><true/>
 </dict>
 </plist>

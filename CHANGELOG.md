@@ -3,6 +3,13 @@
 All notable changes to Super Notes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org).
 
+## [1.3.6] — 2026-10-18
+
+### Fixed
+- 1.3.5 couldn't start: macOS refused to load the bundled on-device AI engine. This release includes everything
+  from 1.3.5 (on-device AI commands, typing options, tidier corner buttons) and starts normally. If you have 1.3.5,
+  reinstall from the website or the DMG once.
+
 ## [1.3.5] — 2026-10-18
 
 ### Added
