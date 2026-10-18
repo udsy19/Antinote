@@ -5,6 +5,16 @@ All notable changes to Super Notes are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- `::` commands say what goes in the parentheses: while the caret is inside `::today(…)`, a small hint above it
+  shows `::today(days = 0, format)` with the argument being typed in bold and one line about it ("days — how many
+  days from today, e.g. 3 or -1 (default 0)"). Commands that take nothing say "Press Return to run"; when every
+  argument is optional, "Press Return to use the defaults, or type to change them". It follows the caret, never
+  takes the keyboard or the mouse, and Esc closes it. Every bundled command documents its arguments.
+- Picking a command from the `::` list puts the caret between its parentheses, and Return there runs it (a missing
+  closing parenthesis is filled in); typing `)` before the closing one steps over it. Extensions can give each
+  parameter an `example`.
+
 ### Fixed
 - The planets bar stays out of the way while writing: it is hidden by default and comes up only once the pointer
   has rested along the bottom of the window for a moment, for two seconds after a slot is used, or with "Always

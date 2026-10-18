@@ -9,16 +9,17 @@
   }
   function ok(text) { return new ReturnObject({ status: "success", message: "Calculated", payload: text }); }
   function fail(message) { return new ReturnObject({ status: "error", message: message }); }
-  function num(type, name, help, def) {
-    return new Parameter(def === undefined ? { type: type, name: name, helpText: help }
-                                           : { type: type, name: name, helpText: help, default: def, required: false });
+  function num(type, name, help, example, def) {
+    return new Parameter(def === undefined ? { type: type, name: name, helpText: help, example: example }
+                                           : { type: type, name: name, helpText: help, example: example, default: def, required: false });
   }
 
   new Command({
     name: "loan", type: "insert", aliases: ["mortgage"], extension: ext,
     helpText: "Monthly payment for a fixed-rate loan.",
-    parameters: [num("expression", "principal", "Amount borrowed"), num("float", "rate", "Annual interest rate in percent"),
-                 num("float", "years", "Term in years")],
+    parameters: [num("expression", "principal", "the amount borrowed", "300000"),
+                 num("float", "rate", "yearly interest rate in percent", "6.5"),
+                 num("float", "years", "how long the loan runs, in years", "30")],
     tutorials: [new TutorialCommand({ command: "loan(300000, 6.5, 30)", description: "30-year mortgage at 6.5%" })],
     execute: function (payload) {
       var p = this.getParsedParams(payload), principal = p[0], months = Math.round(p[2] * 12), r = p[1] / 100 / 12;
@@ -32,8 +33,8 @@
   new Command({
     name: "tip", type: "insert", extension: ext,
     helpText: "Tip and total for a bill, optionally split between people.",
-    parameters: [num("expression", "amount", "Bill amount"), num("float", "percent", "Tip percentage", 18),
-                 num("int", "people", "Number of people splitting", 1)],
+    parameters: [num("expression", "amount", "the bill", "84.50"), num("float", "percent", "tip in percent", "20", 18),
+                 num("int", "people", "people splitting the bill", "4", 1)],
     tutorials: [new TutorialCommand({ command: "tip(84.50)", description: "18% tip" }),
                 new TutorialCommand({ command: "tip(120, 20, 4)", description: "20% split four ways" })],
     execute: function (payload) {
@@ -49,7 +50,7 @@
   new Command({
     name: "percent_change", type: "insert", aliases: ["pct_change"], extension: ext,
     helpText: "Percentage change from one value to another.",
-    parameters: [num("expression", "from", "Starting value"), num("expression", "to", "Ending value")],
+    parameters: [num("expression", "from", "the starting value", "80"), num("expression", "to", "the new value", "100")],
     tutorials: [new TutorialCommand({ command: "percent_change(80, 100)", description: "+25.00%" })],
     execute: function (payload) {
       var p = this.getParsedParams(payload);
@@ -62,8 +63,10 @@
   new Command({
     name: "compound", type: "insert", aliases: ["compound_interest"], extension: ext,
     helpText: "Future value of a deposit with compound interest.",
-    parameters: [num("expression", "principal", "Starting amount"), num("float", "rate", "Annual interest rate in percent"),
-                 num("float", "years", "Years"), num("int", "periods", "Compounding periods per year", 12)],
+    parameters: [num("expression", "principal", "the amount you start with", "10000"),
+                 num("float", "rate", "yearly interest rate in percent", "5"),
+                 num("float", "years", "how many years it grows", "10"),
+                 num("int", "periods", "compoundings a year", "365", 12)],
     tutorials: [new TutorialCommand({ command: "compound(10000, 5, 10)", description: "Monthly compounding for 10 years" }),
                 new TutorialCommand({ command: "compound(10000, 5, 10, 1)", description: "Yearly compounding" })],
     execute: function (payload) {

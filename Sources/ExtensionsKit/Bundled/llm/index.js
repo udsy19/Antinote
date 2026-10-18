@@ -120,14 +120,16 @@
 
   command({
     name: "ask", type: "insert", aliases: ["ai", "llm"], help: "Insert an answer to your question.",
-    parameters: [new Parameter({ type: "paragraph", name: "prompt", helpText: "Your question or instruction" })],
+    parameters: [new Parameter({ type: "paragraph", name: "prompt", helpText: "what to ask",
+                                 example: "Three names for a grey cat" })],
     tutorials: [new TutorialCommand({ command: "ask(Three names for a grey cat)", description: "Inserts the answer" })],
     prompt: function (p) { return p[0]; }
   });
 
   command({
     name: "summarize", type: "insert", aliases: ["tldr"], help: "Insert a short summary of the note.",
-    parameters: [new Parameter({ type: "int", name: "sentences", helpText: "Length of the summary", default: 3, required: false })],
+    parameters: [new Parameter({ type: "int", name: "sentences", helpText: "how many at most", default: 3, required: false,
+                                 example: "1 or 5" })],
     tutorials: [new TutorialCommand({ command: "summarize", description: "Three-sentence summary" })],
     prompt: function (p, payload) {
       if (!(payload.fullText || "").trim()) throw new Error("There is nothing to summarize");
@@ -137,7 +139,8 @@
 
   command({
     name: "rewrite", type: "replaceLine", help: "Rewrite the line in a given style.",
-    parameters: [new Parameter({ type: "string", name: "style", helpText: "e.g. clearer, friendlier, formal, shorter", default: "clearer", required: false })],
+    parameters: [new Parameter({ type: "string", name: "style", helpText: "how it should read", default: "clearer", required: false,
+                                 example: "shorter" })],
     tutorials: [new TutorialCommand({ command: "rewrite(friendlier)", description: "Rewrites the current line" })],
     prompt: function (p, payload) {
       if (!(payload.line || "").trim()) throw new Error("Write the text to rewrite on the same line");
@@ -147,7 +150,8 @@
 
   command({
     name: "translate", type: "replaceLine", help: "Translate the line into another language.",
-    parameters: [new Parameter({ type: "string", name: "language", helpText: "Target language, e.g. French" })],
+    parameters: [new Parameter({ type: "string", name: "language", helpText: "the language to translate into",
+                                 example: "French" })],
     tutorials: [new TutorialCommand({ command: "translate(Spanish)", description: "Translates the current line" })],
     prompt: function (p, payload) {
       if (!(payload.line || "").trim()) throw new Error("Write the text to translate on the same line");

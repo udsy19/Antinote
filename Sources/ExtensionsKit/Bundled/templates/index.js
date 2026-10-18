@@ -9,7 +9,8 @@
   new Command({
     name: "meeting", type: "insert", aliases: ["meeting_notes"], extension: ext,
     helpText: "Meeting notes: attendees, agenda, notes and action items.",
-    parameters: [new Parameter({ type: "paragraph", name: "title", helpText: "Meeting title", default: "", required: false })],
+    parameters: [new Parameter({ type: "paragraph", name: "title", helpText: "what the meeting is about", default: "", required: false,
+                                 example: "Design review" })],
     tutorials: [new TutorialCommand({ command: "meeting(Design review)", description: "Titled meeting notes" })],
     execute: function (payload) {
       var title = this.getParsedParams(payload)[0];

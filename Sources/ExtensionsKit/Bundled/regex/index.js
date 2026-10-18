@@ -6,9 +6,12 @@
     name: "replace_regex", type: "replaceAll", aliases: ["regex", "sub"], extension: ext,
     helpText: "Replace every match of a regular expression in the note. Use $1, $2 … for groups.",
     parameters: [
-      new Parameter({ type: "string", name: "pattern", helpText: "JavaScript regular expression (quote it if it has commas)" }),
-      new Parameter({ type: "string", name: "replacement", helpText: "Replacement text", default: "", required: false }),
-      new Parameter({ type: "string", name: "flags", helpText: "Flags such as g, i, m (default g)", default: "g", required: false })
+      new Parameter({ type: "string", name: "pattern", helpText: "a regex; quote it if it has commas",
+                      example: "\\d+" }),
+      new Parameter({ type: "string", name: "replacement", helpText: "the new text, $1 for a group",
+                      default: "", required: false, example: "#" }),
+      new Parameter({ type: "string", name: "flags", helpText: "g all matches, i ignore case", default: "g",
+                      required: false, example: "gi" })
     ],
     tutorials: [
       new TutorialCommand({ command: "replace_regex(\\d+, #)", description: "Replace every number with #" }),

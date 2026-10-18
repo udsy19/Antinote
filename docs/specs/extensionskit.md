@@ -58,7 +58,7 @@ union of the extension's and its dependencies' manifests.
 - One `JSContext` per extension, created and used only on that extension's serial `DispatchQueue`. Results are
   delivered on the main queue.
 - Our own base library (`BaseLibrary.swift`) defines the same globals as the original: `Extension`, `Command`
-  (with `getParsedParams`), `Parameter`, `Preference`, `TutorialCommand`, `ReturnObject`, `MathEvaluator`
+  (with `getParsedParams`), `Parameter` (see below), `Preference`, `TutorialCommand`, `ReturnObject`, `MathEvaluator`
   (`eval`, `evalSafe`, `isMathExpression`, `parseNumeric`), `global`, `commandRegistry`, `extensionRegistry`.
   Every constructor accepts both the config-object form (`new Command({name: …})`) and the older positional form
   (`new Command("gpt", [params], "insert", "help", tutorials, ext)`).
@@ -88,10 +88,30 @@ the JS heap.
 | `line` | invocation line, command text removed | same as `line` |
 | `full` | invocation line, command text removed | whole note, command text removed (an emptied line is dropped) |
 
+### Parameters
+
+`new Parameter({ type, name, helpText, default, required, example })` (positional:
+`new Parameter(type, name, helpText, default, required, example)`). `type` is `string`, `paragraph`, `int`,
+`float`, `bool` or `expression` (`mathExpression`); `required` defaults to true. The editor's parameter hint shows
+them as written:
+
+| Field | In the hint |
+|---|---|
+| `name` | the signature (`::today(days = 0, format)`) and the start of the line |
+| `helpText` | what to write, short and plain, lower-case: "how many days from today" |
+| `example` | `e.g. 3 or -1` (new; optional, older extensions simply have none) |
+| `default` (optional parameters) | `= 0` in the signature and `(default 0)` in the line; a blank default isn't shown |
+
+Commands reach the editor as `ExtensionCommandInfo` with `parameters: [ExtensionParameter]` (name, summary,
+isOptional, defaultValue, example, isText). Callers that only have a signature string get the names from it
+(`ExtensionParameter.parse(signature:)`: `name?`, `[name]` and `name = value` are optional); the hint then uses the
+command's help text. Every bundled command documents every parameter with a summary and an example.
+
 ## Invocation
 
 `::name`, `::name()`, `::name(arg1, "arg, 2", 3)`. Arguments split on top-level commas; quotes (`"` or `'`, with
-`\` escapes) and nested parentheses are respected. When more arguments than parameters are given and the last
+`\` escapes) and nested parentheses are respected (`InvocationArguments` in Core, which the editor's parameter hint
+uses to count arguments the same way). When more arguments than parameters are given and the last
 parameter is `string`/`paragraph`, the surplus raw text joins it (`::ask(What is 2, 3?)`). Names match
 case-insensitively against command names and aliases of enabled extensions.
 

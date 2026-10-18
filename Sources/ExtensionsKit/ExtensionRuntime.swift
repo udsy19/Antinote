@@ -131,7 +131,7 @@ final class ExtensionRuntime: @unchecked Sendable {
                 parameters: (c["parameters"] as? [[String: Any]] ?? []).map { p in
                     ParameterSpec(name: p["name"] as? String ?? "value", type: ParameterType(js: p["type"] as? String ?? "string"),
                                   helpText: p["helpText"] as? String ?? "", defaultValue: JSONValue(any: p["defaultValue"]),
-                                  required: p["required"] as? Bool ?? true)
+                                  required: p["required"] as? Bool ?? true, example: p["example"] as? String ?? "")
                 },
                 tutorials: (c["tutorials"] as? [[String: Any]] ?? []).map {
                     TutorialSpec(command: $0["command"] as? String ?? "", description: $0["description"] as? String ?? "")

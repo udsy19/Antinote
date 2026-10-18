@@ -56,6 +56,11 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
     /// Where a "/" list closed with Esc (or a click elsewhere) started; it stays closed while that "/" is being
     /// typed after.
     private var slashDismissed: Int?
+    /// The parameter hint over the caret while it is inside a `::name(…)`; `hint` is what it shows.
+    private let parameterHint = ParameterHintPanel()
+    private var hint: EditorLogic.ParameterHint.Hint?
+    /// Where Esc closed the hint (the invocation's "::"): it stays closed while the caret is in that invocation.
+    private var hintDismissed: Int?
     private let autoPaste = AutoPasteMonitor()
     /// Find and replace (⇧⌘F): the shelf under the note, its matches and the one shown.
     private let findShelf = FindShelf()
@@ -204,6 +209,10 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
         NotificationCenter.default.publisher(for: NSView.frameDidChangeNotification, object: scrollView.contentView)
             .sink { [weak self] _ in MainActor.assumeIsolated { self?.visibleAreaChanged() } }
             .store(in: &cancellables)
+        // The hint follows its line when the note scrolls.
+        NotificationCenter.default.publisher(for: NSView.boundsDidChangeNotification, object: scrollView.contentView)
+            .sink { [weak self] _ in MainActor.assumeIsolated { if self?.parameterHint.isVisible == true { self?.updateHint() } } }
+            .store(in: &cancellables)
         completion.onAccept = { [weak self] index in self?.acceptCompletion(index) }
         findShelf.onSearch = { [weak self] in self?.refreshFind(selectFrom: self?.findAnchor) }
         findShelf.onNext = { [weak self] backwards in self?.findStep(backwards: backwards) }
@@ -220,6 +229,7 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
     private func visibleAreaChanged() {
         textView.setFrameSize(textView.frame.size)
         if abs((textView.textContainer?.size.width ?? 0) - placedWidth) > 0.5 { restyle() }
+        if parameterHint.isVisible { updateHint() }
     }
 
     // MARK: - NoteEditing
@@ -230,6 +240,8 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
         stopAutoPaste(announce: false)
         completion.hide()
         hideSlash()
+        hideHint()
+        hintDismissed = nil
         if let leaving = self.note?.id, leaving != note.id { histories[leaving] = history }
         isLoading = true
         self.note = note
@@ -570,6 +582,7 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
         history.committed.selection = sel
         if lastStepTouched { history.last?.after.selection = sel }
         lastStepTouched = false
+        updateHint()
     }
 
     /// Applies a whole-text transform as its minimal replacement.
@@ -638,6 +651,7 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
         scheduleSave()
         updateCompletion()
         updateSlash()
+        updateHint()
         refreshFind(selectFrom: nil)
     }
 
@@ -669,6 +683,7 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
         collapseLinksAwayFromCaret()
         if completion.isVisible, completionToken() == nil { completion.hide() }
         if slash.isVisible, slashToken() == nil { hideSlash() }
+        updateHint()
         scheduleAutoCopy()
     }
 
@@ -1082,6 +1097,20 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
                     acceptSlash(row)
                     return true
                 }
+            }
+        }
+        if let hint {
+            if event.keyCode == 53, parameterHint.isVisible {
+                hintDismissed = hint.location
+                hideHint()
+                return true
+            }
+            // ")" typed just before the invocation's own ")" steps over it.
+            let caret = textView.selectedRange().location
+            if mods.isEmpty, event.characters == ")", !(Defaults[.vimMode] && vim.mode != .insert),
+               let close = hint.context.close, hint.location - hint.context.start + close == caret {
+                textView.setSelectedRange(NSRange(location: caret + 1, length: 0))
+                return true
             }
         }
         if event.keyCode == 53, autoPaste.isRunning { stopAutoPaste(announce: true); return true }
@@ -1501,27 +1530,40 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
         let item = completionItems.indices.contains(i) ? completionItems[i] : nil
         completion.hide()
         guard let item, let token = completionToken() else { return }
-        let takesArguments = item.signature.contains("(") && !item.signature.contains("()")
+        // The caret goes between the parentheses, so the parameter hint says what to write (or to press Return).
         let insertion = "::" + item.name + "()"
-        let caret = token.range.location + (insertion as NSString).length - (takesArguments ? 1 : 0)
+        let caret = token.range.location + (insertion as NSString).length - 1
         replace(token.range, with: insertion, selection: NSRange(location: caret, length: 0), action: "Insert Command")
     }
 
-    /// Return on a line with `::name(args)` (caret after it) runs the command.
+    /// Return runs a command: the one whose parentheses hold the caret (where the parameter hint shows; a missing
+    /// ")" is filled in), else the last `::name(args)` before the caret on its line.
     private func runExtensionCommandOnCurrentLine() -> Bool {
         guard Defaults[.extensionsEnabled], let ext = Services.extensions else { return false }
         let st = state
         let line = EditorLogic.Lines.range(st.ns, at: st.selection.location)
         let lineText = st.ns.substring(with: line)
         let caret = st.selection.location - line.location
+        if st.selection.length == 0, let context = EditorLogic.ParameterHint.context(line: lineText, caret: caret),
+           EditorLogic.ParameterHint.command(named: context.name, in: ext.commands) != nil {
+            let (range, invocation) = EditorLogic.ParameterHint.invocation(in: lineText, context)
+            let closedLine = (lineText as NSString).replacingCharacters(in: range, with: invocation)
+            run(ext, invocation, line: closedLine, note: st.ns.replacingCharacters(in: line, with: closedLine),
+                written: (lineText as NSString).substring(with: range), at: line.location + range.location)
+            return true
+        }
         guard let m = Self.invocationRegex.matches(in: lineText, range: NSRange(location: 0, length: line.length))
             .last(where: { NSMaxRange($0.range) <= caret }) else { return false }
         let invocation = (lineText as NSString).substring(with: m.range)
-        let location = line.location + m.range.location
-        ext.run(invocation: invocation, line: lineText, note: textView.string) { [weak self] edit in
-            Task { @MainActor in self?.applyExtensionEdit(edit, invocation: invocation, near: location) }
-        }
+        run(ext, invocation, line: lineText, note: textView.string, written: invocation, at: line.location + m.range.location)
         return true
+    }
+
+    /// Runs `invocation`; its result replaces the `written` text nearest `location`.
+    private func run(_ ext: ExtensionsServicing, _ invocation: String, line: String, note: String, written: String, at location: Int) {
+        ext.run(invocation: invocation, line: line, note: note) { [weak self] edit in
+            Task { @MainActor in self?.applyExtensionEdit(edit, invocation: written, near: location) }
+        }
     }
 
     private func applyExtensionEdit(_ edit: ExtensionEdit, invocation: String, near location: Int) {
@@ -1602,6 +1644,33 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
     private func hideSlash() {
         slash.hide()
         slashItems = []
+    }
+
+    // MARK: - Parameter hint
+
+    /// Shows, moves or hides the parameter hint for the caret (`EditorLogic.ParameterHint.hint`).
+    private func updateHint() {
+        guard !isLoading, textView.isEditable, Defaults[.extensionsEnabled], let ext = Services.extensions else { return hideHint() }
+        hint = EditorLogic.ParameterHint.hint(state, commands: ext.commands, listOpen: completion.isVisible || slash.isVisible,
+                                              dismissed: &hintDismissed)
+        guard let hint, textView.window != nil else { return parameterHint.hide() }
+        let caret = textView.firstRect(forCharacterRange: textView.selectedRange(), actualRange: nil)
+        let start = textView.firstRect(forCharacterRange: NSRange(location: hint.location, length: 0), actualRange: nil)
+        // An invocation wrapped onto several lines: the hint starts at the text's left edge.
+        let startX = abs(start.midY - caret.midY) < 1 ? start.minX : textView.window.map {
+            $0.convertToScreen(textView.convert(NSRect(origin: textView.textContainerOrigin, size: .zero), to: nil)).minX
+        } ?? caret.minX
+        let font = (textView.typingAttributes[.font] as? NSFont) ?? Typography.font()
+        parameterHint.show(EditorLogic.ParameterHint.signature(hint.command, argument: hint.context.argument),
+                           detail: EditorLogic.ParameterHint.detail(hint.command, argument: hint.context.argument,
+                                                                    isEmpty: hint.context.isEmpty),
+                           theme: theme, caret: EditorLogic.ParameterHint.caretBox(line: caret, capHeight: font.capHeight, leading: font.leading),
+                           startX: startX, parent: textView.window)
+    }
+
+    private func hideHint() {
+        parameterHint.hide()
+        hint = nil
     }
 
     /// Esc or a click elsewhere: the list closes and stays closed while this "/" is being typed after.

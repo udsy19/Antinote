@@ -19,7 +19,8 @@
   new Command({
     name: "format", type: "replaceAll", aliases: ["json_format", "pretty"], extension: ext,
     helpText: "Pretty-print the note's JSON.",
-    parameters: [new Parameter({ type: "int", name: "indent", helpText: "Spaces per level (0–8)", default: 2, required: false })],
+    parameters: [new Parameter({ type: "int", name: "indent", helpText: "spaces per level, 0 to 8", default: 2, required: false,
+                                 example: "4" })],
     tutorials: [new TutorialCommand({ command: "format", description: "Two-space indentation" }),
                 new TutorialCommand({ command: "format(4)", description: "Four-space indentation" })],
     execute: function (payload) {

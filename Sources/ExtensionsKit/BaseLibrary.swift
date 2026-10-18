@@ -68,12 +68,13 @@ function Preference() {
 }
 
 function Parameter() {
-  var c = __pick(arguments, ["type", "name", "helpText", "default", "required"]);
+  var c = __pick(arguments, ["type", "name", "helpText", "default", "required", "example"]);
   this.parameterType = c.type || "string";
   this.name = c.name;
   this.helpText = c.helpText || "";
   this.defaultValue = (c["default"] !== undefined) ? c["default"] : null;
   this.required = (c.required !== undefined) ? !!c.required : true;
+  this.example = (c.example === undefined || c.example === null) ? "" : String(c.example);
 }
 
 function TutorialCommand() {
@@ -184,7 +185,8 @@ function __superNotesDescribe() {
         return {
           name: c.name, type: c.type, helpText: c.helpText, aliases: c.aliases || [],
           parameters: c.parameters.map(function (p) {
-            return { name: p.name, type: p.parameterType, helpText: p.helpText, defaultValue: p.defaultValue, required: p.required };
+            return { name: p.name, type: p.parameterType, helpText: p.helpText, defaultValue: p.defaultValue, required: p.required,
+                     example: p.example || "" };
           }),
           tutorials: c.tutorials.map(function (t) { return { command: t.command, description: t.description }; })
         };

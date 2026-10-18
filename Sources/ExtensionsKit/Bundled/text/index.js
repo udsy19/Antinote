@@ -27,11 +27,14 @@
     }]
   ];
 
-  var input = new Parameter({ type: "paragraph", name: "text", helpText: "Text to convert instead of the line", default: "", required: false });
+  function input(help) {
+    return new Parameter({ type: "paragraph", name: "text", helpText: help, default: "", required: false, example: "hello" });
+  }
 
   transforms.forEach(function (t) {
     new Command({
-      name: t[0], helpText: t[1], aliases: t[2], type: "replaceLine", parameters: [input], extension: ext,
+      name: t[0], helpText: t[1], aliases: t[2], type: "replaceLine", parameters: [input("what to convert, or blank for the line")],
+      extension: ext,
       tutorials: [
         new TutorialCommand({ command: t[0], description: t[1] }),
         new TutorialCommand({ command: t[0] + "(some text)", description: "Convert the given text" })
@@ -47,7 +50,7 @@
 
   new Command({
     name: "count_chars", helpText: "Count characters and words on the line.", aliases: ["count"], type: "insert",
-    parameters: [input], extension: ext,
+    parameters: [input("what to count, or blank for the line")], extension: ext,
     tutorials: [new TutorialCommand({ command: "count_chars", description: "Shows the counts without changing the note" })],
     execute: function (payload) {
       var s = this.getParsedParams(payload)[0] || payload.line || "";

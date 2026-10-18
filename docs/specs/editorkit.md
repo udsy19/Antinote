@@ -129,7 +129,8 @@ its UI strings (quoted below).
 ## Extensions ("Extension Autocomplete - Up/Down Arrow, Tab, Enter, Escape")
 
 - Typing `::` shows a completion panel from `Services.extensions.complete(prefix)`; ↑↓ move, Tab/Return accept
-  (inserts `::name()` with the caret inside the parentheses when the signature takes arguments), Esc closes.
+  (inserts `::name()` with the caret inside the parentheses, so the parameter hint below comes up at once), Esc
+  closes.
   The panel (~60% of the window, `background` with a `typeSuperlight` border) lists 28 pt rows: `›` on the
   selected row (a rounded `typeHyperLight` fill), the command name, its extension in `typeSuperlight`, and an action
   badge ("⇆ replaceLine" accent 1, "↓ insert" accent 3), with a key-hint footer; "No commands found" when empty.
@@ -137,8 +138,39 @@ its UI strings (quoted below).
   list would leave the screen. They take the mouse without taking focus (a borderless panel that never becomes
   key; the first click counts): the row under the pointer is selected (↑↓ carry on from it), a click runs it, the
   wheel scrolls (8 `::` / 9 "/" rows at once), and a click outside or leaving the app closes the list.
-- Return on a line containing `::name(args)` runs it; the `ExtensionEdit` is applied (insert replaces the
-  invocation, replaceLine, replaceAll, openURL opens and removes the invocation, message/failure → inline toast).
+- Return runs a command: the one whose parentheses hold the caret (a missing `)`, and an open quote or inner
+  parenthesis, is filled in: `::today(3|` runs `::today(3)`), else the last `::name(args)` before the caret on its
+  line. The `ExtensionEdit` is applied (insert replaces the invocation as written, replaceLine, replaceAll, openURL
+  opens and removes the invocation, message/failure → inline toast). Inside the parentheses of an unknown name
+  Return is a plain new line.
+
+### Parameter hint (`EditorLogic.ParameterHint`, `ParameterHintPanel`)
+
+- While the caret (no selection) is inside the parentheses of a known command's `::name(…)` on its line, a small
+  hint floats just above the caret: the signature in the editor's mono font at 12 pt (the system mono font when the
+  editor font isn't monospaced), e.g. `::today(days = 0, format)`, and one line of 11 pt system text about the
+  argument being typed: `days — how many days from today, e.g. 3 or -1 (default 0)` (name in `typeMain`, the rest
+  in `typeLight`). The parameter being typed is bold on a rounded `typeHyperLight` fill; optional parameters and
+  their `= default` are in `typeLight`; required ones in `typeMain`. Same `background`, 1 px `typeSuperlight` border,
+  8 pt corners and shadow as the lists (`Popover`), 10 × 7 pt padding.
+- The current argument is the count of top-level commas before the caret, read exactly as the runner reads
+  arguments (`InvocationArguments`, shared with `ExtensionInvocation`): commas inside quotes (with `\` escapes) or
+  nested parentheses don't count, and an apostrophe inside a word opens no quote. Surplus arguments stay on a last
+  text parameter (`::pick(a, b, c)`); past the last parameter of another kind nothing is bold and the line says
+  "::loan takes 3 arguments; remove the extra one".
+- Other lines: a command with no parameters says "Press Return to run"; when every parameter is optional and the
+  parentheses are still empty, "Press Return to use the defaults, or type to change them". A parameter without a
+  summary (an extension that only gives a signature) uses the command's help text.
+- Placement: the signature's text starts over the `::` (6 pt inside the note window when it fits, else on screen),
+  4 pt above the caret's box (`caretBox`, as the caret is drawn); below the caret when it would rise past the top
+  of the note window. At most the window's width less 12 pt (300 pt minimum); a longer signature or line wraps once
+  at spaces (`e.g. 3`, `(default 0)` and `name = value` stay together) and is then cut short with "…".
+- It updates as the caret moves or text changes and follows the note when it scrolls. It hides when the caret
+  leaves the parentheses (typing the closing `)`, moving off the line), when the note window or the app loses
+  focus, and while a `::` or "/" list is open. Esc closes it for that invocation until the caret leaves it.
+- It never takes focus or the mouse: the same never-key panel as the lists, ignoring mouse events.
+- Typing `)` right before the invocation's own `)` steps over it (not inside a nested parenthesis, not in Vim
+  Normal mode).
 
 ## Copy & cut ("Copy entire note when nothing is selected", "Removed keyword from copied text.",
 "Copied list items as unchecked.", "Removed hidden list markers from copied text.", "Cut current line when nothing is selected")

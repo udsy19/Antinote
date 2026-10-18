@@ -21,6 +21,43 @@ private func vim(_ keys: [String], _ text: String, caret: Int = 0) -> (text: Str
 
 private func keys(_ s: String) -> [String] { s.map(String.init) }
 
+/// `::` commands for the parameter-hint cases: what the editor runs is recorded, and every run inserts "RAN".
+@MainActor
+private final class RecordingExtensions: ExtensionsServicing {
+    let commands: [ExtensionCommandInfo]
+    var runs: [(invocation: String, line: String)] = []
+    init(_ commands: [ExtensionCommandInfo]) { self.commands = commands }
+    func complete(_ prefix: String) -> [ExtensionCommandInfo] { commands.filter { $0.name.hasPrefix(prefix) } }
+    func run(invocation: String, line: String, note: String, completion: @escaping (ExtensionEdit) -> Void) {
+        runs.append((invocation, line))
+        completion(.insert("RAN"))
+    }
+    func reload() {}
+    func makeSettingsView() -> NSView { NSView() }
+}
+
+private func hintCommand(_ name: String, aliases: [String] = [], _ parameters: [ExtensionParameter], help: String = "") -> ExtensionCommandInfo {
+    ExtensionCommandInfo(name: name, aliases: aliases, extensionName: "test", helpText: help, signature: "", action: "insert",
+                         parameters: parameters)
+}
+
+private let hintCommands = [
+    hintCommand("today", aliases: ["date"], [ExtensionParameter(name: "days", summary: "how many days from today", isOptional: true,
+                                                                 defaultValue: "0", example: "3 or -1"),
+                                              ExtensionParameter(name: "format", summary: "iso, us or a pattern", isOptional: true)]),
+    hintCommand("loan", [ExtensionParameter(name: "principal", summary: "the amount borrowed"),
+                         ExtensionParameter(name: "rate", summary: "yearly interest rate in percent", example: "6.5"),
+                         ExtensionParameter(name: "years", summary: "how long it runs")]),
+    hintCommand("pick", [ExtensionParameter(name: "items", summary: "choices", isText: true)]),
+    hintCommand("coin", []),
+]
+
+/// `text` with "|" marking the caret.
+private func caretState(_ text: String) -> TextState {
+    let caret = (text as NSString).range(of: "|").location
+    return TextState(text.replacingOccurrences(of: "|", with: ""), caret: caret)
+}
+
 /// Append cases with `SelfTest.cases.append(("name", { check(..., "msg") }))`.
 func registerEditorKitTests() {
     SelfTest.cases.append(("EditorKit.commandListSelection", {
@@ -83,6 +120,181 @@ func registerEditorKitTests() {
         check(squeezed.minY >= tallScreen.minY && squeezed.maxY <= tallScreen.maxY, "never off the screen")
         let edge = L.frame(size: size, anchor: CGRect(x: 1430, y: 640, width: 1, height: 18), window: window, screen: screen)
         check(edge.maxX <= screen.maxX - 4, "kept inside the screen's right edge")
+    }))
+
+    SelfTest.cases.append(("EditorKit.parameterHintContext", {
+        typealias H = EditorLogic.ParameterHint
+        func context(_ marked: String) -> H.Context? {
+            let st = caretState(marked)
+            return H.context(line: st.text, caret: st.selection.location)
+        }
+        func argument(_ marked: String) -> Int? { context(marked)?.argument }
+        check(argument("::today(|)") == 0 && argument("::today(3|)") == 0, "first argument")
+        check(argument("::loan(300000, |)") == 1 && argument("::loan(1, 2,| 3)") == 2, "commas before the caret count")
+        check(argument(#"::f("a, b", |)"#) == 1 && argument(#"::f("a, |b")"#) == 0, "commas inside quotes don't")
+        check(argument(#"::f("a \", b", |)"#) == 1, "an escaped quote doesn't close the quote")
+        check(argument("::f((1, 2), |)") == 1 && argument("::f((1,| 2))") == 0, "commas inside nested parentheses don't")
+        check(argument("::f(don't, |)") == 1, "an apostrophe in a word opens no quote")
+        check(argument(#"::f(a\, |)"#) == 1, "a backslash outside quotes doesn't hide a comma, as the runner reads it")
+        check(context("::today|()") == nil && context("::to|day()") == nil, "not before the (")
+        check(context("::today()|") == nil && context("::today(3)| more") == nil, "not after the )")
+        check(context("::today(3|)")?.close == 9 && context("::today(3|")?.close == nil, "the ) when it is there")
+        check(argument("note ::today(3, |") == 1, "no ) yet: the rest of the line")
+        check(argument("::a(1) and ::b(x, |)") == 1 && context("::a(1) and ::b(x, |)")?.name == "b", "the second invocation on a line")
+        check(context("::a(1|) and ::b(x)")?.name == "a", "the first one")
+        check(context("std::max(a, |b)") == nil && context("x ::max(a, |b)")?.name == "max", "code like std::max( is not a command")
+        check(context("::today (|)")?.name == "today", "a space before ( is allowed, as the runner allows")
+        check(context("::today(|)")?.isEmpty == true && context("::today( | )")?.isEmpty == true && context("::today(3|)")?.isEmpty == false,
+              "empty parentheses")
+        check(context("::f(\"(\", |)")?.argument == 1, "a quoted ( opens nothing")
+        // What Return runs.
+        func invocation(_ marked: String) -> String? {
+            let st = caretState(marked)
+            return context(marked).map { H.invocation(in: st.text, $0).text }
+        }
+        check(invocation("x ::today(3|) y") == "::today(3)", "a closed invocation as written")
+        check(invocation("x ::today(3|  ") == "::today(3)", "a missing ) is filled in (trailing spaces dropped)")
+        check(invocation("::coin(|") == "::coin()", "empty and unclosed")
+        check(invocation(#"::ask("hi, |"#) == #"::ask("hi, ")"# && invocation("::f((1+2|") == "::f((1+2))", "open quote and parentheses closed")
+        check(invocation("::ask('it|") == "::ask('it')", "the quote that opened")
+        let unclosed = caretState("a ::today(3| ")
+        check(context("a ::today(3| ").map { H.invocation(in: unclosed.text, $0).range } == NSRange(location: 2, length: 9), "range written")
+    }))
+
+    SelfTest.cases.append(("EditorKit.parameterHintVisibility", {
+        typealias H = EditorLogic.ParameterHint
+        var dismissed: Int?
+        func hint(_ marked: String, list: Bool = false) -> H.Hint? { H.hint(caretState(marked), commands: hintCommands, listOpen: list, dismissed: &dismissed) }
+        check(hint("Due ::today(|)")?.command.name == "today" && hint("Due ::today(|)")?.location == 4, "inside a known command")
+        check(hint("Due ::date(|)")?.command.name == "today", "aliases")
+        check(hint("::TODAY(|)")?.command.name == "today", "any case")
+        check(hint("::nope(|)") == nil, "unknown commands get no hint")
+        check(hint("::today(|)", list: true) == nil, "never with a list open")
+        var selected = caretState("::today(3|)"); selected.selection.length = 1
+        check(H.hint(selected, commands: hintCommands, listOpen: false, dismissed: &dismissed) == nil, "only with a bare caret")
+        check(hint("x\n::today(|)\ny")?.location == 2, "on the caret's line")
+        check(hint("::today(3)\n|") == nil, "another line: hidden")
+        // Esc closes it for that invocation until the caret leaves it.
+        dismissed = 4
+        check(hint("Due ::today(3|)") == nil && dismissed == 4, "dismissed: stays closed while typing in it")
+        check(hint("Due ::today(3)|") == nil && dismissed == nil, "leaving the parentheses forgets the dismissal")
+        check(hint("Due ::today(3|)") != nil, "and it shows again")
+        dismissed = 4
+        check(hint("Due ::loan(1|)") == nil && dismissed == 4, "same place, same invocation start: still closed")
+        check(hint("Du ::loan(1|)") != nil && dismissed == nil, "another invocation shows it")
+    }))
+
+    SelfTest.cases.append(("EditorKit.parameterHintText", {
+        typealias H = EditorLogic.ParameterHint
+        let today = hintCommands[0], loan = hintCommands[1], pick = hintCommands[2], coin = hintCommands[3]
+        func line(_ c: ExtensionCommandInfo, _ argument: Int, empty: Bool = false) -> String { H.detail(c, argument: argument, isEmpty: empty).line }
+        check(line(today, 0) == "days — how many days from today, e.g. 3 or -1 (default 0)", "summary, example and default")
+        check(line(today, 1) == "format — iso, us or a pattern", "no example, no default")
+        check(line(loan, 1) == "rate — yearly interest rate in percent, e.g. 6.5", "a required parameter shows no default")
+        check(line(coin, 0, empty: true) == "Press Return to run", "no parameters")
+        check(line(today, 0, empty: true) == "Press Return to use the defaults, or type to change them", "all optional, nothing typed")
+        check(line(loan, 0, empty: true) == "principal — the amount borrowed", "required parameters: the first one's line")
+        check(line(pick, 3) == "items — choices", "surplus arguments join a last text parameter")
+        check(line(loan, 3) == "::loan takes 3 arguments; remove the extra one", "too many arguments")
+        check(H.detail(today, argument: 0, isEmpty: false).name == "days" && H.detail(coin, argument: 0, isEmpty: true).name == nil,
+              "the parameter's name is drawn apart")
+        let pieces = H.signature(today, argument: 0)
+        check(pieces.map(\.text).joined() == "::today(days = 0, format)", "signature with defaults")
+        check(pieces == [H.Piece("::today(", .name), H.Piece("days", .optional, current: true), H.Piece(" = 0", .defaultValue),
+                         H.Piece(", ", .name), H.Piece("format", .optional), H.Piece(")", .name)], "optional parameters and the current one")
+        check(H.signature(loan, argument: 2).filter(\.current).map(\.text) == ["years"] && H.signature(loan, argument: 5).allSatisfy { !$0.current },
+              "the current parameter; none past the last")
+        check(H.signature(pick, argument: 4).filter(\.current).map(\.text) == ["items"], "a last text parameter stays current")
+        check(H.signature(coin, argument: 0).map(\.text).joined() == "::coin()", "no parameters")
+    }))
+
+    SelfTest.cases.append(("EditorKit.parameterHintPlacement", {
+        typealias H = EditorLogic.ParameterHint
+        let screen = CGRect(x: 0, y: 0, width: 1440, height: 900)
+        let window = CGRect(x: 400, y: 300, width: 350, height: 400)
+        let size = CGSize(width: 260, height: 44)
+        let caret = CGRect(x: 520, y: 500, width: 1, height: 18)
+        let above = H.frame(size: size, caret: caret, startX: 470, inset: 10, window: window, screen: screen)
+        check(above.minY == caret.maxY + H.caretGap && above.minX == 460, "just above the caret, its text over the ::")
+        let nearTop = CGRect(x: 520, y: 670, width: 1, height: 18)
+        let below = H.frame(size: size, caret: nearTop, startX: 470, inset: 10, window: window, screen: screen)
+        check(below.maxY == nearTop.minY - H.caretGap, "near the top of the window: below the caret")
+        let right = H.frame(size: size, caret: caret, startX: 700, inset: 10, window: window, screen: screen)
+        check(right.maxX == window.maxX - 6, "kept inside the note window when it fits")
+        let wide = H.frame(size: CGSize(width: 500, height: 44), caret: caret, startX: 1300, inset: 10, window: window, screen: screen)
+        check(wide.maxX <= screen.maxX - 4, "wider than the window: kept on the screen")
+        let box = H.caretBox(line: CGRect(x: 10, y: 100, width: 1, height: 24), capHeight: 10, leading: 0)
+        check(box.minY == 100 && box.height == 17.8 && box.minX == 10, "the caret's box sits on the line's foot")
+    }))
+
+    SelfTest.cases.append(("EditorKit.parameterHintEditing", {
+        MainActor.assumeIsolated {
+            let saved = Services.extensions
+            defer { Services.extensions = saved }
+            let fake = RecordingExtensions(hintCommands)
+            Services.extensions = fake
+            let editor = SuperNotesEditorFactory().makeEditor()
+            editor.view.frame = NSRect(x: 0, y: 0, width: 480, height: 320)
+            guard let tv = editor.view.subviews.compactMap({ $0 as? NSScrollView }).first?.documentView as? NSTextView else {
+                return check(false, "text view")
+            }
+            @MainActor func settle() {
+                let deadline = Date().addingTimeInterval(1)
+                while Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.01)); if fake.runs.count > 0 { break } }
+                RunLoop.main.run(until: Date().addingTimeInterval(0.02))
+            }
+            @MainActor func load(_ marked: String) {
+                let st = caretState(marked)
+                editor.load(Note(content: st.text))
+                tv.setSelectedRange(st.selection)
+                fake.runs = []
+            }
+            load("Who\n::coin(|)")
+            tv.insertNewline(nil)
+            settle()
+            check(fake.runs.map(\.invocation) == ["::coin()"] && tv.string == "Who\nRAN", "Return inside ::coin(|) runs it: \(tv.string)")
+            load("Due ::today(|)")
+            tv.insertNewline(nil)
+            settle()
+            check(fake.runs.map(\.invocation) == ["::today()"] && tv.string == "Due RAN", "Return in empty parentheses runs with the defaults")
+            load("x ::today(3|")
+            tv.insertNewline(nil)
+            settle()
+            check(fake.runs.first?.invocation == "::today(3)" && fake.runs.first?.line == "x ::today(3)" && tv.string == "x RAN",
+                  "a missing ) is filled in: \(fake.runs.map(\.invocation)) \(tv.string)")
+            load("::loan(1, 2|, 3) and on")
+            tv.insertNewline(nil)
+            settle()
+            check(fake.runs.map(\.invocation) == ["::loan(1, 2, 3)"] && tv.string == "RAN and on", "the invocation holding the caret")
+            load("::nope(|)")
+            tv.insertNewline(nil)
+            check(fake.runs.isEmpty && tv.string == "::nope(\n)", "unknown names: Return is a new line")
+            load("::loan(1, 2)|")
+            tv.insertNewline(nil)
+            settle()
+            check(fake.runs.map(\.invocation) == ["::loan(1, 2)"], "after the ) Return still runs it")
+            // ")" typed before the invocation's own ")" steps over it; inside nested parentheses it is typed.
+            // The key goes to the editor first; what it leaves alone is typed (headless text views don't type keys).
+            @MainActor func type(_ c: String) {
+                let before = (tv.string, tv.selectedRange())
+                if let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil,
+                                                characters: c, charactersIgnoringModifiers: c, isARepeat: false, keyCode: 29) {
+                    tv.keyDown(with: event)
+                }
+                if (tv.string, tv.selectedRange()) == before { tv.insertText(c, replacementRange: tv.selectedRange()) }
+            }
+            load("::loan(1, 2|)")
+            type(")")
+            check(tv.string == "::loan(1, 2)" && tv.selectedRange().location == 12, "steps over the closing ): \(tv.string)")
+            load("::loan((1+2|)")
+            type(")")
+            check(tv.string == "::loan((1+2))" && tv.selectedRange().location == 12, "closes a nested ( first: \(tv.string)")
+            type(")")
+            check(tv.string == "::loan((1+2))" && tv.selectedRange().location == 13, "then steps over")
+            load("::nope(1|)")
+            type(")")
+            check(tv.string == "::nope(1))", "unknown names: typed as is")
+        }
     }))
 
     SelfTest.cases.append(("EditorKit.listMarkers", {

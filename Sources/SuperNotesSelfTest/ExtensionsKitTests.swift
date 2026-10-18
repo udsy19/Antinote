@@ -1,6 +1,7 @@
 import Foundation
 import SuperNotesCore
 import ExtensionsKit
+import EditorKit
 
 /// Append cases with `SelfTest.cases.append(("name", { check(..., "msg") }))`.
 func registerExtensionsKitTests() {
@@ -17,6 +18,41 @@ func registerExtensionsKitTests() {
         check((try? ExtensionInvocation.parse("::f(a")) == nil, "unclosed parenthesis")
         check((try? ExtensionInvocation.parse("::f(a) more")) == nil, "text after closing parenthesis")
         check((try? ExtensionInvocation.parse("::")) == nil, "missing name")
+    }))
+
+    SelfTest.cases.append(("ExtensionsKit.argumentScanning", {
+        func scan(_ s: String) -> InvocationArguments { InvocationArguments.scan(Substring(s)) }
+        let closed = scan(#"a, "b, \"c", (1, 2)) tail"#)
+        check(closed.raw == ["a", #" "b, \"c""#, " (1, 2)"], "quotes (escaped quote inside) and parentheses keep their commas")
+        check(closed.close.map { String(#"a, "b, \"c", (1, 2)) tail"#[$0...]) } == ") tail", "the first top-level ) ends the list")
+        let open = scan(#"x, "half"#)
+        check(open.close == nil && open.inQuote && open.raw.count == 2, "ran out inside a quote")
+        check(scan("(1+2").depth == 1 && scan("(1+2").close == nil, "ran out inside parentheses")
+        check(scan("don't, x").raw == ["don't", " x"], "an apostrophe inside a word opens no quote")
+        check(scan(#"a\, b"#).raw.count == 2, "a backslash outside quotes doesn't hide a comma (as the runner reads it)")
+        check(scan("").raw == [""], "an empty list is one empty argument")
+    }))
+
+    SelfTest.cases.append(("ExtensionsKit.signatureFallback", {
+        func names(_ s: String) -> [String] { ExtensionParameter.parse(signature: s).map(\.name) }
+        check(names("::today(days, format)") == ["days", "format"], "names in order")
+        check(names("::coin") == [] && names("::coin()") == [] && names("") == [], "no parentheses or empty ones: none")
+        let marked = ExtensionParameter.parse(signature: "::f(a, b?, [c], d = iso, e=)")
+        check(marked.map(\.isOptional) == [false, true, true, true, true], "?, [ ] and = mark optional parameters")
+        check(marked.map(\.name) == ["a", "b", "c", "d", "e"] && marked[3].defaultValue == "iso" && marked[4].defaultValue == nil,
+              "a default after = is kept (an empty one is not)")
+        let info = ExtensionCommandInfo(name: "today", aliases: [], extensionName: "x", helpText: "Insert a date.",
+                                        signature: "::today(days?, format?)", action: "insert")
+        check(info.parameters.map(\.name) == ["days", "format"] && info.parameters.allSatisfy(\.isOptional),
+              "a command given only a signature gets its parameters from it")
+        check(EditorLogic.ParameterHint.detail(info, argument: 0, isEmpty: false).line == "days — Insert a date",
+              "without a summary the hint uses the command's help")
+        let spec = ParameterSpec(name: "n", type: .paragraph, helpText: "how many", defaultValue: .number(3), required: false, example: "5")
+        check(spec.info == ExtensionParameter(name: "n", summary: "how many", isOptional: true, defaultValue: "3", example: "5", isText: true),
+              "a registered parameter becomes the hint's parameter")
+        check(ParameterSpec(name: "s", type: .string, defaultValue: .string(""), required: false).info.defaultValue == nil
+              && ParameterSpec(name: "r", type: .int, defaultValue: .number(2)).info.defaultValue == nil,
+              "blank defaults and required parameters show no default")
     }))
 
     SelfTest.cases.append(("ExtensionsKit.parameterParsing", {
@@ -323,6 +359,25 @@ private func bundledCommandTests() {
     check(m.complete("::sor").first?.name == "sort", "complete strips ::")
     check(m.complete("date").first?.name == "today", "complete matches aliases")
     check(m.complete("").count == m.commands.count && m.commands.count > 40, "empty prefix lists everything")
+
+    // parameter docs: every bundled parameter says what to write, with an example
+    for info in m.commands {
+        for p in info.parameters { check(!p.summary.isEmpty && p.example?.isEmpty == false, "::\(info.name)(\(p.name)) is documented") }
+    }
+    func info(_ name: String) -> ExtensionCommandInfo? { m.commands.first { $0.name == name } }
+    check(info("today")?.parameters.map(\.name) == ["days", "format"] && info("today")?.parameters.allSatisfy(\.isOptional) == true,
+          "today's parameters, both optional")
+    check(info("today")?.parameters.first?.defaultValue == "0" && info("today")?.parameters.last?.defaultValue == nil,
+          "defaults as written; the blank format default isn't shown")
+    check(info("loan")?.parameters.allSatisfy { !$0.isOptional } == true && info("coin")?.parameters.isEmpty == true,
+          "required parameters; none")
+    check(info("pick")?.parameters.first?.isText == true && info("tip")?.parameters.first?.isText == false, "text parameters")
+    if let today = info("today") {
+        check(EditorLogic.ParameterHint.detail(today, argument: 0, isEmpty: false).line
+              == "days — how many days from today, e.g. 3 or -1 (default 0)", "today's days hint")
+        check(EditorLogic.ParameterHint.detail(today, argument: 0, isEmpty: true).line
+              == "Press Return to use the defaults, or type to change them", "all optional, nothing typed yet")
+    }
     m.setEnabled(false, "date")
     check(run(m, "::today") == .failure("Unknown command ::today"), "disabled extension's commands are unavailable")
     check(!m.commands.contains { $0.extensionName == "date" }, "disabled extension hidden from commands")
@@ -396,6 +451,9 @@ private func loadingTests() {
     check(echo("full") == .insert("[secret  here|first\nsecret  here\nlast]"), "dataScope full gives the note")
 
     check(run(m, "::shout") == .insert("HEY!"), "positional constructors and string results")
+    check(m.commands.first { $0.name == "shout" }?.parameters
+          == [ExtensionParameter(name: "word", summary: "help", isOptional: true, defaultValue: "hey", isText: true)],
+          "older positional parameters still describe themselves to the hint")
     check(run(m, "::shout(hi)") == .insert("HI!"), "positional parameter")
     check(run(m, "::use_base") == .insert("from service"), "dependency globals available")
     check(!m.commands.contains { $0.extensionName == "base_service" }, "service registers no commands")

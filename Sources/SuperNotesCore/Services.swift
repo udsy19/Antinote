@@ -12,9 +12,100 @@ public struct ExtensionCommandInfo: Identifiable, Hashable, Sendable {
     public var signature: String
     /// What the command does with its result: "insert", "replaceLine", "replaceAll" or "openURL".
     public var action: String
-    public init(name: String, aliases: [String], extensionName: String, helpText: String, signature: String, action: String) {
+    /// What goes between the parentheses, in order (the editor's parameter hint).
+    public var parameters: [ExtensionParameter]
+    /// Without `parameters`, the names come from `signature` (see `ExtensionParameter.parse(signature:)`).
+    public init(name: String, aliases: [String], extensionName: String, helpText: String, signature: String, action: String,
+                parameters: [ExtensionParameter]? = nil) {
         self.name = name; self.aliases = aliases; self.extensionName = extensionName
         self.helpText = helpText; self.signature = signature; self.action = action
+        self.parameters = parameters ?? ExtensionParameter.parse(signature: signature)
+    }
+}
+
+/// One argument of a `::command(…)`, as the parameter hint describes it.
+public struct ExtensionParameter: Hashable, Sendable {
+    public var name: String
+    /// What to write, short and plain ("how many days from today"); empty when the extension says nothing.
+    public var summary: String
+    public var isOptional: Bool
+    /// What an optional parameter is when left out, as written in a note ("0", "iso"); nil when there is nothing
+    /// worth showing.
+    public var defaultValue: String?
+    /// A value or two to copy ("3 or -1").
+    public var example: String?
+    /// Plain text: as the last parameter it keeps any further commas ("::pick(pizza, sushi, tacos)").
+    public var isText: Bool
+
+    public init(name: String, summary: String = "", isOptional: Bool = false, defaultValue: String? = nil, example: String? = nil,
+                isText: Bool = false) {
+        self.name = name; self.summary = summary; self.isOptional = isOptional
+        self.defaultValue = defaultValue; self.example = example; self.isText = isText
+    }
+
+    /// The parameters named in a signature, for extensions (and callers) that only give one: "::today(days?, format)"
+    /// → days (optional), format. "name?", "[name]" and "name = value" mark optional parameters; no parentheses, or
+    /// empty ones, mean none.
+    public static func parse(signature: String) -> [ExtensionParameter] {
+        guard let open = signature.firstIndex(of: "(") else { return [] }
+        return InvocationArguments.scan(signature[signature.index(after: open)...]).raw.compactMap { raw in
+            var text = raw.trimmingCharacters(in: .whitespaces)
+            var optional = false, defaultValue: String?
+            if text.hasPrefix("["), text.hasSuffix("]") { text = String(text.dropFirst().dropLast()); optional = true }
+            if let eq = text.firstIndex(of: "=") {
+                let value = text[text.index(after: eq)...].trimmingCharacters(in: .whitespaces)
+                defaultValue = value.isEmpty ? nil : value
+                text = String(text[..<eq]); optional = true
+            }
+            text = text.trimmingCharacters(in: .whitespaces)
+            if text.hasSuffix("?") { text.removeLast(); optional = true }
+            text = text.trimmingCharacters(in: .whitespaces)
+            return text.isEmpty ? nil : ExtensionParameter(name: text, isOptional: optional, defaultValue: defaultValue)
+        }
+    }
+}
+
+/// The text after a `::name(`, split into arguments the one way both the extension runner and the editor's parameter
+/// hint read it: top-level commas separate arguments; quotes ("…", '…' or “…”, opened only at the start of an
+/// argument, with `\` escapes inside) and nested parentheses keep their commas; the first top-level ")" ends the list.
+public struct InvocationArguments: Equatable, Sendable {
+    /// Each argument's text as written: quotes kept, untrimmed. Always at least one (possibly empty).
+    public var raw: [String]
+    /// Where the closing ")" is in the scanned text; nil when the text ran out first.
+    public var close: String.Index?
+    /// The text ran out inside a quote.
+    public var inQuote: Bool
+    /// Open parentheses inside the current argument when the text ran out.
+    public var depth: Int
+
+    public static func scan(_ body: Substring) -> InvocationArguments {
+        var parts: [String] = [], current = ""
+        var quote: Character?, escaped = false, depth = 0
+        var index = body.startIndex
+        while index < body.endIndex {
+            let c = body[index]
+            if let q = quote {
+                current.append(c)
+                if escaped { escaped = false } else if c == "\\" { escaped = true } else if c == q { quote = nil }
+            } else {
+                switch c {
+                case "\"", "'", "“":
+                    // Quotes only open an argument; an apostrophe inside a word ("don't") is plain text.
+                    if current.trimmingCharacters(in: .whitespaces).isEmpty { quote = c == "“" ? "”" : c }
+                    current.append(c)
+                case "(": depth += 1; current.append(c)
+                case ")" where depth > 0: depth -= 1; current.append(c)
+                case ")":
+                    parts.append(current)
+                    return InvocationArguments(raw: parts, close: index, inQuote: false, depth: 0)
+                case "," where depth == 0: parts.append(current); current = ""
+                default: current.append(c)
+                }
+            }
+            index = body.index(after: index)
+        }
+        parts.append(current)
+        return InvocationArguments(raw: parts, close: nil, inQuote: quote != nil, depth: depth)
     }
 }
 

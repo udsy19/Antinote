@@ -1,4 +1,5 @@
 import Foundation
+import SuperNotesCore
 
 public enum CommandType: String, Sendable, CaseIterable {
     case insert, replaceLine, replaceAll, openURL
@@ -74,9 +75,21 @@ public struct ParameterSpec: Sendable, Equatable {
     public var helpText: String
     public var defaultValue: JSONValue
     public var required: Bool
+    /// A value or two to copy ("3 or -1"), shown in the editor's parameter hint.
+    public var example: String
 
-    public init(name: String, type: ParameterType, helpText: String = "", defaultValue: JSONValue = .null, required: Bool = true) {
+    public init(name: String, type: ParameterType, helpText: String = "", defaultValue: JSONValue = .null, required: Bool = true,
+                example: String = "") {
         self.name = name; self.type = type; self.helpText = helpText; self.defaultValue = defaultValue; self.required = required
+        self.example = example
+    }
+
+    /// The parameter as the editor's hint describes it; an optional parameter's default shows unless it is empty.
+    public var info: ExtensionParameter {
+        let shownDefault = defaultValue.text
+        return ExtensionParameter(name: name, summary: helpText, isOptional: !required,
+                                  defaultValue: required || shownDefault.isEmpty ? nil : shownDefault,
+                                  example: example.isEmpty ? nil : example, isText: type.isText)
     }
 }
 
@@ -130,39 +143,16 @@ public struct ExtensionInvocation: Equatable, Sendable {
         return ExtensionInvocation(name: String(name), arguments: args, rawArguments: raw)
     }
 
-    /// Splits the text after "(" on top-level commas up to the matching ")".
+    /// Splits the text after "(" on top-level commas up to the matching ")" (`InvocationArguments`, which the
+    /// editor's parameter hint shares).
     private static func split(_ body: Substring) throws -> [String] {
-        var parts: [String] = [], current = ""
-        var quote: Character?, escaped = false, depth = 0, closed = false
-        var index = body.startIndex
-        while index < body.endIndex {
-            let c = body[index]
-            index = body.index(after: index)
-            if let q = quote {
-                current.append(c)
-                if escaped { escaped = false } else if c == "\\" { escaped = true } else if c == q { quote = nil }
-                continue
-            }
-            switch c {
-            case "\"", "'", "“":
-                // Quotes only open an argument; an apostrophe inside a word ("don't") is plain text.
-                if current.trimmingCharacters(in: .whitespaces).isEmpty { quote = c == "“" ? "”" : c }
-                current.append(c)
-            case "(": depth += 1; current.append(c)
-            case ")" where depth > 0: depth -= 1; current.append(c)
-            case ")": closed = true
-            case "," where depth == 0: parts.append(current); current = ""
-            default: current.append(c)
-            }
-            if closed { break }
-        }
-        if quote != nil { throw ExtensionError.script("Missing closing quote") }
-        guard closed else { throw ExtensionError.script("Missing closing parenthesis") }
-        guard body[index...].trimmingCharacters(in: .whitespaces).isEmpty else {
+        let scanned = InvocationArguments.scan(body)
+        if scanned.inQuote { throw ExtensionError.script("Missing closing quote") }
+        guard let close = scanned.close else { throw ExtensionError.script("Missing closing parenthesis") }
+        guard body[body.index(after: close)...].trimmingCharacters(in: .whitespaces).isEmpty else {
             throw ExtensionError.script("Unexpected text after the closing parenthesis")
         }
-        parts.append(current)
-        return parts
+        return scanned.raw
     }
 
     private static func clean(_ raw: String) -> String {

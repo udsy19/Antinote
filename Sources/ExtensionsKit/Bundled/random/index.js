@@ -9,7 +9,8 @@
   new Command({
     name: "dice", type: "insert", aliases: ["roll"], extension: ext,
     helpText: "Roll dice written as NdM (2d6 = two six-sided dice).",
-    parameters: [new Parameter({ type: "string", name: "dice", helpText: "NdM, e.g. 1d20 or 3d6", default: "1d6", required: false })],
+    parameters: [new Parameter({ type: "string", name: "dice", helpText: "NdM, N dice of M sides", default: "1d6",
+                                 required: false, example: "2d6" })],
     tutorials: [
       new TutorialCommand({ command: "dice", description: "Roll one six-sided die" }),
       new TutorialCommand({ command: "dice(2d20)", description: "Roll two twenty-sided dice" })
@@ -55,8 +56,10 @@
     name: "password", type: "insert", extension: ext,
     helpText: "Insert a random password.",
     parameters: [
-      new Parameter({ type: "int", name: "length", helpText: "Number of characters (8–128)", default: 20, required: false }),
-      new Parameter({ type: "bool", name: "symbols", helpText: "Include symbols", default: true, required: false })
+      new Parameter({ type: "int", name: "length", helpText: "8 to 128 characters", default: 20, required: false,
+                      example: "32" }),
+      new Parameter({ type: "bool", name: "symbols", helpText: "include symbols", default: true,
+                      required: false, example: "false" })
     ],
     tutorials: [
       new TutorialCommand({ command: "password", description: "20 characters with symbols" }),
@@ -78,7 +81,8 @@
   new Command({
     name: "pick", type: "insert", extension: ext, aliases: ["choose"],
     helpText: "Pick one item at random from a comma-separated list.",
-    parameters: [new Parameter({ type: "paragraph", name: "items", helpText: "Comma-separated choices" })],
+    parameters: [new Parameter({ type: "paragraph", name: "items", helpText: "choices separated by commas",
+                                 example: "tea, coffee" })],
     tutorials: [new TutorialCommand({ command: "pick(pizza, sushi, tacos)", description: "Let chance decide dinner" })],
     execute: function (payload) {
       var items = this.getParsedParams(payload)[0].split(",").map(function (s) { return s.trim(); })

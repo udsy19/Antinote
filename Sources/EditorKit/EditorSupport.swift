@@ -288,6 +288,192 @@ final class CompletionPanel {
     }
 }
 
+/// The parameter hint's panel: the lists' window, but the mouse goes straight through it to the note. It closes when
+/// the note window or the app loses focus; the editor shows it again as the caret moves.
+@MainActor
+final class ParameterHintPanel {
+    private let panel = CompletionWindow()
+    private let hint = ParameterHintView()
+    private var observers: [NSObjectProtocol] = []
+    var isVisible: Bool { panel.isVisible }
+
+    init() {
+        panel.ignoresMouseEvents = true
+        panel.contentView = hint
+    }
+
+    /// Shows `pieces` and `detail` just above the caret (`caret`, its box in screen coordinates), the signature
+    /// starting over the "::" at `startX`; below the caret near the top of the note window.
+    func show(_ pieces: [EditorLogic.ParameterHint.Piece], detail: EditorLogic.ParameterHint.Detail, theme: Theme,
+              caret: NSRect, startX: CGFloat, parent: NSWindow?) {
+        hint.theme = theme
+        hint.set(pieces, detail: detail, maxWidth: ParameterHintView.maxWidth(forWindow: parent?.frame.width ?? 400))
+        let screen = (parent?.screen ?? NSScreen.main)?.visibleFrame ?? CGRect(x: -1e5, y: -1e5, width: 2e5, height: 2e5)
+        panel.setFrame(EditorLogic.ParameterHint.frame(size: hint.frame.size, caret: caret, startX: startX, inset: ParameterHintView.padding.width,
+                                                       window: parent?.frame ?? .zero, screen: screen), display: true)
+        panel.invalidateShadow()
+        guard !panel.isVisible else { return }
+        parent?.addChildWindow(panel, ordered: .above)
+        panel.orderFront(nil)
+        let center = NotificationCenter.default
+        let hide: @Sendable (Notification) -> Void = { [weak self] _ in MainActor.assumeIsolated { self?.hide() } }
+        observers = [center.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main, using: hide)]
+        if let parent {
+            observers.append(center.addObserver(forName: NSWindow.didResignKeyNotification, object: parent, queue: .main, using: hide))
+        }
+    }
+
+    func hide() {
+        observers.forEach(NotificationCenter.default.removeObserver)
+        observers = []
+        guard panel.isVisible else { return }
+        panel.parent?.removeChildWindow(panel)
+        panel.orderOut(nil)
+    }
+}
+
+/// The parameter hint (the lists' `background`, border and corners): the signature in the editor's mono font at
+/// 12 pt, in `typeMain` with optional parameters and defaults in `typeLight` and the parameter being typed bold on a
+/// `typeHyperLight` fill; under it one line of 11 pt system text, the parameter's name in `typeMain` and what to
+/// write in `typeLight`. In a narrow window either may wrap once (at spaces) before being cut short with "…".
+final class ParameterHintView: NSView {
+    static let padding = NSSize(width: 10, height: 7)
+    static let lineGap: CGFloat = 3
+    /// Never wider than the note window less 6 pt each side (at least 300 pt).
+    static func maxWidth(forWindow width: CGFloat) -> CGFloat { max(300, width - 12) }
+
+    private let signature = TextBlock()
+    private let detail = TextBlock()
+    /// The current parameter's span in the signature, for its fill.
+    private var current: NSRange?
+    var theme: Theme = .defaultLight {
+        didSet { Popover.apply(theme, to: self) }
+    }
+    override var isFlipped: Bool { true }
+
+    init() {
+        super.init(frame: .zero)
+        Popover.setUp(self)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    /// The editor's font when it is monospaced (Menlo by default), else the system mono font.
+    static func monoFont(bold: Bool) -> NSFont {
+        let editor = Typography.font(size: 12)
+        let regular = editor.isFixedPitch ? editor : .monospacedSystemFont(ofSize: 12, weight: .regular)
+        guard bold else { return regular }
+        let converted = NSFontManager.shared.convert(regular, toHaveTrait: .boldFontMask)
+        return converted.fontDescriptor.symbolicTraits.contains(.bold) ? converted : .monospacedSystemFont(ofSize: 12, weight: .bold)
+    }
+
+    /// New content; the view sizes itself to it.
+    func set(_ pieces: [EditorLogic.ParameterHint.Piece], detail: EditorLogic.ParameterHint.Detail, maxWidth: CGFloat) {
+        let main = NSColor(hex: theme.typeMain), light = NSColor(hex: theme.typeLight)
+        let text = NSMutableAttributedString()
+        current = nil
+        for piece in pieces {
+            let dim = piece.role == .optional || piece.role == .defaultValue
+            if piece.current { current = NSRange(location: text.length, length: (piece.text as NSString).length) }
+            // A wrapped signature keeps "periods = 12" together.
+            let unbroken = piece.role == .defaultValue ? piece.text.replacingOccurrences(of: " ", with: "\u{00A0}") : piece.text
+            text.append(NSAttributedString(string: unbroken, attributes: [
+                .font: Self.monoFont(bold: piece.current), .foregroundColor: dim && !piece.current ? light : main,
+            ]))
+        }
+        let line = NSMutableAttributedString()
+        if let name = detail.name {
+            line.append(NSAttributedString(string: name, attributes: [.font: NSFont.systemFont(ofSize: 11, weight: .medium), .foregroundColor: main]))
+            line.append(NSAttributedString(string: " — ", attributes: [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: light]))
+        }
+        // A wrapped line keeps "e.g. 3" and "(default 0)" together.
+        let unbroken = detail.text.replacingOccurrences(of: "e.g. ", with: "e.g.\u{00A0}")
+            .replacingOccurrences(of: "(default ", with: "(default\u{00A0}")
+        line.append(NSAttributedString(string: unbroken, attributes: [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: light]))
+        let p = Self.padding
+        // The current parameter's fill reaches 3 pt past its text.
+        let natural = ceil(max(text.size().width + 6, line.size().width)) + 2 * p.width
+        let textWidth = min(maxWidth, natural) - 2 * p.width
+        signature.set(text, width: textWidth)
+        self.detail.set(line, width: textWidth)
+        // Wrapped text rarely fills the width it was given: the hint hugs what it shows.
+        let width = ceil(max(signature.usedWidth + 6, self.detail.usedWidth)) + 2 * p.width
+        setFrameSize(NSSize(width: width, height: signature.height + Self.lineGap + self.detail.height + 2 * p.height))
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let p = Self.padding
+        let origin = NSPoint(x: p.width, y: p.height)
+        if let current {
+            NSColor(hex: theme.typeHyperLight).setFill()
+            for rect in signature.rects(for: current) {
+                NSBezierPath(roundedRect: rect.offsetBy(dx: origin.x, dy: origin.y).insetBy(dx: -3, dy: -1), xRadius: 3, yRadius: 3).fill()
+            }
+        }
+        signature.draw(at: origin)
+        detail.draw(at: NSPoint(x: p.width, y: p.height + signature.height + Self.lineGap))
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    /// Text laid out in a fixed width: at most two lines, wrapping at spaces, the second cut short with "…".
+    private final class TextBlock {
+        private let storage = NSTextStorage()
+        private let layout = NSLayoutManager()
+        private let container = NSTextContainer()
+        private(set) var height: CGFloat = 0
+        private(set) var usedWidth: CGFloat = 0
+
+        init() {
+            storage.addLayoutManager(layout)
+            layout.addTextContainer(container)
+            container.lineFragmentPadding = 0
+            container.maximumNumberOfLines = 2
+            container.lineBreakMode = .byTruncatingTail
+        }
+
+        func set(_ text: NSAttributedString, width: CGFloat) {
+            storage.setAttributedString(text)
+            container.size = NSSize(width: width, height: .greatestFiniteMagnitude)
+            layout.ensureLayout(for: container)
+            let used = layout.usedRect(for: container)
+            height = ceil(used.height)
+            usedWidth = min(ceil(used.width), width)
+        }
+
+        /// The boxes `range` takes (one per line it spans).
+        func rects(for range: NSRange) -> [NSRect] {
+            let glyphs = layout.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            var rects: [NSRect] = []
+            layout.enumerateEnclosingRects(forGlyphRange: glyphs, withinSelectedGlyphRange: NSRange(location: NSNotFound, length: 0),
+                                           in: container) { rect, _ in rects.append(rect) }
+            return rects
+        }
+
+        func draw(at point: NSPoint) {
+            layout.drawGlyphs(forGlyphRange: layout.glyphRange(for: container), at: point)
+        }
+    }
+}
+
+/// The look the popovers share: `background`, a 1 px `typeSuperlight` border and 8 pt corners (their panel adds the
+/// shadow).
+@MainActor
+enum Popover {
+    static func setUp(_ view: NSView) {
+        view.wantsLayer = true
+        view.layer?.cornerRadius = 8
+        view.layer?.borderWidth = 1
+        view.layer?.masksToBounds = true
+    }
+
+    static func apply(_ theme: Theme, to view: NSView) {
+        view.layer?.backgroundColor = NSColor(hex: theme.background).cgColor
+        view.layer?.borderColor = NSColor(hex: theme.typeSuperlight).cgColor
+        view.needsDisplay = true
+    }
+}
+
 /// A borderless panel that never becomes key or main, so the note's text view keeps the keyboard and the caret
 /// while the list under it is clicked, hovered and scrolled.
 private final class CompletionWindow: NSPanel {
@@ -335,11 +521,7 @@ final class CompletionListView: NSView {
     var model: EditorLogic.CommandList
     var footer: String
     var theme: Theme = .defaultLight {
-        didSet {
-            layer?.backgroundColor = NSColor(hex: theme.background).cgColor
-            layer?.borderColor = NSColor(hex: theme.typeSuperlight).cgColor
-            needsDisplay = true
-        }
+        didSet { Popover.apply(theme, to: self) }
     }
     var onAccept: ((Int) -> Void)?
     /// The row the mouse went down on: releasing over the same row runs it.
@@ -353,10 +535,7 @@ final class CompletionListView: NSView {
         self.footer = footer
         model = EditorLogic.CommandList(visible: visibleRows)
         super.init(frame: .zero)
-        wantsLayer = true
-        layer?.cornerRadius = 8
-        layer?.borderWidth = 1
-        layer?.masksToBounds = true
+        Popover.setUp(self)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
@@ -590,22 +769,9 @@ public enum EditorPreview {
     /// standing in for the screen. With `pointerOn`, an arrow pointer rests on that row (the hover state).
     @MainActor public static func note(_ text: String, size: NSSize, showing list: NSView, anchor: Int? = nil,
                                        pointerOn row: Int? = nil) -> NSView {
-        let editor = SuperNotesEditor()
-        editor.load(Note(content: text))
+        let editor = laidOut(text, size: size)
         let view = editor.view
-        view.frame = NSRect(origin: .zero, size: size)
-        view.layoutSubtreeIfNeeded()
-        let tv = editor.textView
-        guard let lm = tv.layoutManager, let tc = tv.textContainer else { return view }
-        lm.ensureLayout(for: tc)
-        let length = (tv.string as NSString).length, index = min(anchor ?? length, length)
-        let glyph = lm.glyphIndexForCharacter(at: max(0, min(index, length - 1)))
-        let box = lm.boundingRect(forGlyphRange: NSRange(location: glyph, length: 1), in: tc)
-        var line = lm.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
-        line.origin.x = index < length ? box.minX : box.maxX
-        line.size.width = 1
-        line = line.offsetBy(dx: tv.textContainerOrigin.x, dy: tv.textContainerOrigin.y)
-        let anchor = view.convert(tv.convert(line, to: nil), from: nil)
+        guard let anchor = caretLine(editor, at: anchor ?? .max) else { return view }   // nil: the end
         list.frame = EditorLogic.CommandList.frame(size: list.frame.size, anchor: anchor, window: view.bounds, screen: view.bounds)
         view.addSubview(list)
         if let row, let list = list as? CompletionListView, let arrow = NSCursor.arrow.image.copy() as? NSImage {
@@ -617,6 +783,53 @@ public enum EditorPreview {
             view.addSubview(pointer)
         }
         return view
+    }
+
+    /// A note editor of `size` showing `text` with the caret at `caret` and, if it is inside a `::name(…)` of one of
+    /// `commands`, the parameter hint placed as the app places it (the canvas standing in for the window and screen).
+    @MainActor public static func parameterHint(_ text: String, caret: Int, commands: [ExtensionCommandInfo], size: NSSize) -> NSView {
+        let editor = laidOut(text, size: size)
+        let view = editor.view
+        editor.textView.setSelectedRange(NSRange(location: caret, length: 0))
+        var dismissed: Int?
+        guard let hint = EditorLogic.ParameterHint.hint(TextState(text, caret: caret), commands: commands, listOpen: false,
+                                                        dismissed: &dismissed),
+              let line = caretLine(editor, at: caret), let start = caretLine(editor, at: hint.location) else { return view }
+        let font = (editor.textView.typingAttributes[.font] as? NSFont) ?? Typography.font()
+        let hintView = ParameterHintView()
+        hintView.theme = Theme.current
+        hintView.set(EditorLogic.ParameterHint.signature(hint.command, argument: hint.context.argument),
+                     detail: EditorLogic.ParameterHint.detail(hint.command, argument: hint.context.argument, isEmpty: hint.context.isEmpty),
+                     maxWidth: ParameterHintView.maxWidth(forWindow: size.width))
+        hintView.frame = EditorLogic.ParameterHint.frame(size: hintView.frame.size,
+                                                         caret: EditorLogic.ParameterHint.caretBox(line: line, capHeight: font.capHeight, leading: font.leading),
+                                                         startX: start.minX,
+                                                         inset: ParameterHintView.padding.width, window: view.bounds, screen: view.bounds)
+        view.addSubview(hintView)
+        return view
+    }
+
+    @MainActor private static func laidOut(_ text: String, size: NSSize) -> SuperNotesEditor {
+        let editor = SuperNotesEditor()
+        editor.load(Note(content: text))
+        editor.view.frame = NSRect(origin: .zero, size: size)
+        editor.view.layoutSubtreeIfNeeded()
+        return editor
+    }
+
+    /// The caret's line at character `index` (1 pt wide, at the caret's x) in the editor's view coordinates.
+    @MainActor private static func caretLine(_ editor: SuperNotesEditor, at index: Int) -> NSRect? {
+        let tv = editor.textView
+        guard let lm = tv.layoutManager, let tc = tv.textContainer else { return nil }
+        lm.ensureLayout(for: tc)
+        let length = (tv.string as NSString).length, index = min(index, length)
+        let glyph = lm.glyphIndexForCharacter(at: max(0, min(index, length - 1)))
+        let box = lm.boundingRect(forGlyphRange: NSRange(location: glyph, length: 1), in: tc)
+        var line = lm.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
+        line.origin.x = index < length ? box.minX : box.maxX
+        line.size.width = 1
+        line = line.offsetBy(dx: tv.textContainerOrigin.x, dy: tv.textContainerOrigin.y)
+        return editor.view.convert(tv.convert(line, to: nil), from: nil)
     }
 
     @MainActor private static func list(_ rows: [CompletionRow], footer: String, visibleRows: Int, selected: Int,

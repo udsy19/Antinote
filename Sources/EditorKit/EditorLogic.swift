@@ -675,6 +675,203 @@ extension EditorLogic {
     }
 }
 
+// MARK: - Parameter hint
+
+extension EditorLogic {
+    /// While the caret is inside the parentheses of a `::name(…)` on its line, a small popover shows the command's
+    /// signature with the argument being typed in bold, and one line about that argument.
+    public enum ParameterHint {
+        /// A `::name(` whose parentheses hold the caret. Offsets are UTF-16, within the line.
+        public struct Context: Equatable, Sendable {
+            public var name: String
+            /// Where "::" starts, where "(" is, and the closing ")" (nil until it's typed).
+            public var start: Int
+            public var open: Int
+            public var close: Int?
+            /// The argument the caret is in (0 = the first): the top-level commas before it.
+            public var argument: Int
+            /// Nothing but spaces between the parentheses.
+            public var isEmpty: Bool
+            /// What an argument list without its ")" still needs closed on Return: its quote, its parentheses.
+            var openQuote: String
+            var openDepth: Int
+        }
+
+        /// The invocation on `line` whose parentheses hold `caret` (a UTF-16 offset in the line): after its "(" and
+        /// at or before its ")", or anywhere after the "(" while the ")" isn't typed. Arguments are read as the
+        /// extension runner reads them (`InvocationArguments`). "::" right after a letter or digit ("std::max(")
+        /// is code, not a command.
+        public static func context(line: String, caret: Int) -> Context? {
+            let ns = line as NSString
+            guard caret >= 0, caret <= ns.length else { return nil }
+            let caretIndex = String.Index(utf16Offset: caret, in: line)
+            func offset(_ i: String.Index) -> Int { i.utf16Offset(in: line) }
+            var from = line.startIndex
+            while let colons = line.range(of: "::", range: from..<line.endIndex) {
+                from = colons.upperBound
+                if colons.lowerBound > line.startIndex {
+                    let before = line[line.index(before: colons.lowerBound)]
+                    if before.isLetter || before.isNumber || before == "_" || before == ":" { continue }
+                }
+                let name = line[colons.upperBound...].prefix { $0.isLetter || $0.isNumber || $0 == "_" || $0 == "-" }
+                guard !name.isEmpty else { continue }
+                guard let open = line[name.endIndex...].firstIndex(where: { $0 != " " }), line[open] == "(" else {
+                    from = name.endIndex
+                    continue
+                }
+                let body = line.index(after: open)
+                guard caretIndex >= body else { return nil }   // the caret is before this one's "("
+                let scanned = InvocationArguments.scan(line[body...])
+                if let close = scanned.close, caretIndex > close {
+                    from = line.index(after: close)
+                    continue
+                }
+                let before = InvocationArguments.scan(line[body..<caretIndex])
+                let inside = line[body..<(scanned.close ?? line.endIndex)]
+                var quote = ""
+                if scanned.inQuote, let q = scanned.raw.last?.first(where: { $0 != " " && $0 != "\t" }) {
+                    quote = q == "“" ? "”" : String(q)
+                }
+                return Context(name: String(name), start: offset(colons.lowerBound), open: offset(open),
+                               close: scanned.close.map(offset), argument: before.raw.count - 1,
+                               isEmpty: inside.allSatisfy { $0 == " " || $0 == "\t" }, openQuote: quote, openDepth: scanned.depth)
+            }
+            return nil
+        }
+
+        /// What Return runs for `context` on `line`: the invocation's range in the line and its text. An argument
+        /// list without its ")" runs to the end of the line (less trailing spaces outside a quote) and gets the
+        /// closing quote and parentheses it needs.
+        public static func invocation(in line: String, _ context: Context) -> (range: NSRange, text: String) {
+            let ns = line as NSString
+            if let close = context.close {
+                let range = NSRange(location: context.start, length: close + 1 - context.start)
+                return (range, ns.substring(with: range))
+            }
+            var end = ns.length
+            while context.openQuote.isEmpty, end > context.open + 1,
+                  [" ", "\t"].contains(ns.substring(with: NSRange(location: end - 1, length: 1))) { end -= 1 }
+            let range = NSRange(location: context.start, length: end - context.start)
+            let closing = context.openQuote + String(repeating: ")", count: context.openDepth + 1)
+            return (range, ns.substring(with: range) + closing)
+        }
+
+        /// The enabled command called `name`: a command name first, then an alias (ignoring case).
+        public static func command(named name: String, in commands: [ExtensionCommandInfo]) -> ExtensionCommandInfo? {
+            let key = name.lowercased()
+            return commands.first { $0.name.lowercased() == key }
+                ?? commands.first { $0.aliases.contains { $0.lowercased() == key } }
+        }
+
+        /// What the hint shows: the command, where the caret is in its arguments, and where it starts in the note.
+        public struct Hint: Equatable {
+            public var command: ExtensionCommandInfo
+            public var context: Context
+            /// The "::" in the whole text (UTF-16).
+            public var location: Int
+        }
+
+        /// The hint for `st` (nil hides it): only with a bare caret inside a known command's parentheses, and never
+        /// while a `::` or "/" list is open. `dismissed` is where Esc closed it: it stays closed while the caret is
+        /// in that invocation, and is forgotten once the caret leaves it.
+        public static func hint(_ st: TextState, commands: [ExtensionCommandInfo], listOpen: Bool, dismissed: inout Int?) -> Hint? {
+            var found: Hint?
+            if st.selection.length == 0 {
+                let line = Lines.range(st.ns, at: st.selection.location)
+                if let context = context(line: st.ns.substring(with: line), caret: st.selection.location - line.location),
+                   let command = command(named: context.name, in: commands) {
+                    found = Hint(command: command, context: context, location: line.location + context.start)
+                }
+            }
+            if dismissed != found?.location { dismissed = nil }
+            return listOpen || dismissed != nil ? nil : found
+        }
+
+        /// One run of the signature line.
+        public struct Piece: Equatable, Sendable {
+            public enum Role: Sendable { case name, required, optional, defaultValue }
+            public var text: String
+            public var role: Role
+            /// The parameter the caret is in.
+            public var current: Bool
+            public init(_ text: String, _ role: Role, current: Bool = false) { self.text = text; self.role = role; self.current = current }
+        }
+
+        /// The parameter the caret's argument fills: surplus arguments join a last text parameter
+        /// ("::pick(a, b, c)"); nil past the last of any other kind.
+        public static func parameter(for argument: Int, of command: ExtensionCommandInfo) -> Int? {
+            let count = command.parameters.count
+            if argument < count { return argument }
+            return command.parameters.last?.isText == true ? count - 1 : nil
+        }
+
+        /// "::today(" days " = 0" ", " format ")": optional parameters with their default, the current one marked.
+        public static func signature(_ command: ExtensionCommandInfo, argument: Int) -> [Piece] {
+            let current = parameter(for: argument, of: command)
+            var pieces = [Piece("::\(command.name)(", .name)]
+            for (i, p) in command.parameters.enumerated() {
+                if i > 0 { pieces.append(Piece(", ", .name)) }
+                pieces.append(Piece(p.name, p.isOptional ? .optional : .required, current: i == current))
+                if p.isOptional, let value = p.defaultValue { pieces.append(Piece(" = \(value)", .defaultValue)) }
+            }
+            pieces.append(Piece(")", .name))
+            return pieces
+        }
+
+        /// The line under the signature: the current parameter's name (drawn stronger) and what to write.
+        public struct Detail: Equatable, Sendable {
+            public var name: String?
+            public var text: String
+            public var line: String { name.map { "\($0) — \(text)" } ?? text }
+        }
+
+        public static func detail(_ command: ExtensionCommandInfo, argument: Int, isEmpty: Bool) -> Detail {
+            let params = command.parameters
+            if params.isEmpty { return Detail(text: "Press Return to run") }
+            if isEmpty, params.allSatisfy(\.isOptional) {
+                return Detail(text: "Press Return to use the defaults, or type to change them")
+            }
+            guard let index = parameter(for: argument, of: command) else {
+                return Detail(text: "::\(command.name) takes \(params.count) argument\(params.count == 1 ? "" : "s"); remove the extra one")
+            }
+            let p = params[index]
+            // Extensions that only give a signature: the command's help says what it does.
+            var text = p.summary.isEmpty ? command.helpText : p.summary
+            while text.hasSuffix(".") { text.removeLast() }
+            var extras: [String] = []
+            if let example = p.example { extras.append("e.g. \(example)") }
+            text = ([text] + extras).filter { !$0.isEmpty }.joined(separator: ", ")
+            if p.isOptional, let value = p.defaultValue { text += text.isEmpty ? "default \(value)" : " (default \(value))" }
+            return text.isEmpty ? Detail(text: p.name) : Detail(name: p.name, text: text)
+        }
+
+        /// Gap between the caret and the hint.
+        public static let caretGap: Double = 4
+
+        /// The caret's box in the caret line `line` (y up), as the editor draws its caret (`caretRect`): what the
+        /// hint sits just above or below.
+        public static func caretBox(line: CGRect, capHeight: Double, leading: Double) -> CGRect {
+            let caret = EditorLogic.caretRect(lineRect: CGRect(origin: .zero, size: line.size), capHeight: capHeight, leading: leading)
+            return CGRect(x: line.minX, y: line.maxY - caret.maxY, width: line.width, height: caret.height)
+        }
+
+        /// The hint's frame on screen (y up): just above the caret (`caret`, its box), its text starting over the
+        /// "::" at `startX` (`inset` is the hint's own left padding); below the caret when it would rise past the top
+        /// of the note window or the screen. Sideways it stays inside the note window (6 pt in) when it fits, and
+        /// always inside `screen`.
+        public static func frame(size: CGSize, caret: CGRect, startX: Double, inset: Double, window: CGRect, screen: CGRect) -> CGRect {
+            let above = caret.maxY + caretGap
+            let top = window.isEmpty ? screen.maxY : min(window.maxY, screen.maxY)
+            var y = above + size.height <= top ? above : caret.minY - caretGap - size.height
+            y = min(max(y, screen.minY), screen.maxY - size.height)
+            var x = startX - inset
+            if !window.isEmpty, size.width <= window.width - 12 { x = min(max(x, window.minX + 6), window.maxX - size.width - 6) }
+            x = min(max(x, screen.minX + 4), screen.maxX - size.width - 4)
+            return CGRect(x: x, y: y, width: size.width, height: size.height)
+        }
+    }
+}
+
 // MARK: - Find and replace
 
 extension EditorLogic {

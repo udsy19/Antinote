@@ -44,10 +44,12 @@
 
   global.SuperNotesDate = { format: format, today: today, addDays: addDays, style: function () { return style(""); } };
 
-  var offset = new Parameter({ type: "int", name: "days", helpText: "Days to add (negative goes back)", default: 0, required: false });
-  var fmt = new Parameter({ type: "string", name: "format", helpText: "Optional format: long, weekday, iso, us, eu or a YYYY-MM-DD pattern", default: "", required: false });
+  // Blank uses the format chosen in this extension's settings.
+  var fmt = new Parameter({ type: "string", name: "format", helpText: "iso, us, eu, long, weekday or a pattern", default: "",
+                            required: false, example: "YYYY/MM/DD" });
 
-  function dayCommand(name, base, help, aliases) {
+  function dayCommand(name, base, help, aliases, days) {
+    var offset = new Parameter({ type: "int", name: "days", helpText: days.help, default: 0, required: false, example: days.example });
     new Command({
       name: name, parameters: [offset, fmt], type: "insert", helpText: help, aliases: aliases, extension: ext,
       tutorials: [
@@ -61,14 +63,18 @@
       }
     });
   }
-  dayCommand("today", 0, "Insert today's date, optionally offset by days.", ["date"]);
-  dayCommand("tomorrow", 1, "Insert tomorrow's date, optionally offset by more days.", []);
-  dayCommand("yesterday", -1, "Insert yesterday's date, optionally offset by more days.", []);
+  dayCommand("today", 0, "Insert today's date, optionally offset by days.", ["date"],
+             { help: "how many days from today", example: "3 or -1" });
+  dayCommand("tomorrow", 1, "Insert tomorrow's date, optionally offset by more days.", [],
+             { help: "more days after tomorrow", example: "1 or 6" });
+  dayCommand("yesterday", -1, "Insert yesterday's date, optionally offset by more days.", [],
+             { help: "days from yesterday", example: "-1 or -6" });
 
   new Command({
     name: "business_day", type: "insert", aliases: ["workday"], extension: ext,
     helpText: "Insert the date a number of business days (Monday to Friday) away.",
-    parameters: [new Parameter({ type: "int", name: "days", helpText: "Business days to add (negative goes back)", default: 1, required: false }), fmt],
+    parameters: [new Parameter({ type: "int", name: "days", helpText: "working days from today", default: 1,
+                                 required: false, example: "5 or -1" }), fmt],
     tutorials: [
       new TutorialCommand({ command: "business_day", description: "Next business day" }),
       new TutorialCommand({ command: "business_day(10)", description: "Two working weeks from today" }),
