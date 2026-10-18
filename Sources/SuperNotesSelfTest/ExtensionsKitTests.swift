@@ -342,7 +342,8 @@ private func bundledCommandTests() {
     check(payload(run(m, "::journal"))?.hasPrefix("Journal — Friday, October 16, 2026") == true, "journal")
 
     // llm: no network without the privacy switch, and keys must be granted
-    if case .failure(let message)? = run(m, "::ask(Hello there)") { check(message.contains("Privacy"), "llm blocked by privacy switch: \(message)") }
+    if case .failure(let message)? = run(m, "::ask(Hello there)") { check(message == "Turn on “Let extensions call their own APIs” in Settings → Privacy.",
+                                                                      "llm blocked by privacy switch, the reason as is: \(message)") }
     else { check(false, "llm fails without the APIs switch") }
     Defaults[.allowExtensionAPIs] = true
     ExtensionStore.setPreference("llm", "provider", .string("openai"))

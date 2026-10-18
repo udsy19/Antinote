@@ -16,6 +16,7 @@ enum Scenes {
             scenes.append(Scene(name: "editor-\(name)-dark", size: window, dark: true) { editor(text) })
         }
         scenes.append(Scene(name: "editor-pills", size: window) { pills() })
+        scenes.append(Scene(name: "editor-pill-long", size: window) { longPill() })
         scenes.append(Scene(name: "editor-linktip", size: window) { linkTip() })
         scenes.append(Scene(name: "editor-drop", size: window) { EditorPreview.dropOverlay(size: window) })
         scenes.append(Scene(name: "editor-autocomplete", size: window) { autocomplete() })
@@ -131,6 +132,22 @@ enum Scenes {
         ], width: window.width)
         return EditorPreview.note("did you think i was a city\nbig enough for a weekend getaway\nBUT ALWAYS PASS THROUGH ::",
                                   size: window, showing: list)
+    }
+
+    /// A long error pill as the editor shows it: wrapped at the text column, three lines at most.
+    static func longPill() -> NSView {
+        let view = editor("Ask\n::ask(Three names for a grey cat)")
+        let pill = PillView()
+        pill.maxWidth = window.width - 88
+        pill.configure("OpenAI request failed: the server answered 429 Too Many Requests because this key has run out of "
+                       + "credit for the month; add credit or switch providers in the llm extension's settings, then try "
+                       + "again. The rest of this message is only in the tooltip.", kind: .error, theme: Theme.current)
+        pill.alphaValue = 1
+        pill.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(pill)
+        NSLayoutConstraint.activate([pill.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+                                     pill.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -PillView.bottomInset)])
+        return view
     }
 
     /// The four pill kinds stacked over a plain note.

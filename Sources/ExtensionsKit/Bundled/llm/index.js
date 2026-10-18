@@ -52,6 +52,8 @@
       var err = data.error.message || data.error;
       throw new Error(p.label + " error: " + (typeof err === "object" ? JSON.stringify(err) : err));
     }
+    // Refused before any request was sent (no status): the reason says what to do on its own.
+    if (!result.success && result.status === undefined) throw new Error(result.error || "The request was refused");
     if (!result.success) throw new Error(p.label + " request failed: " + (result.error || "unknown error"));
     if (!data) throw new Error("Could not read the response from " + p.label);
     return data;

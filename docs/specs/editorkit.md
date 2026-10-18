@@ -36,6 +36,12 @@ its UI strings (quoted below).
 - Message pills (`PillView`, shared with `HUD`): bold 11 pt monospace capsule 20 pt above the bottom —
   `typeMain` (info), `accent1Main` (success: "Extracted text.", "AutoPasting clipboard...", extension messages),
   `accent4Main` (warning), `accent5Main` (error).
+- A long message wraps at the pill's `maxWidth` — in the editor the text column (at least 160 pt, at most 80% of
+  the note), in the HUD the window less 40 pt (480 pt at most) — to at most three lines, then is cut short with
+  "…"; the whole message is the pill's tooltip (only then does the pill take the pointer). The pill grows taller,
+  never wider: its text's horizontal compression resistance is below the window's own size priority
+  (`NSLayoutPriorityWindowSizeStayPut`), so no message can make the note window wider (self-test
+  `EditorKit.longPillKeepsWindowSize`). Window size changes only when the user resizes the window.
 
 ## Saving & analysis
 

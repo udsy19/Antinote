@@ -70,7 +70,10 @@ union of the extension's and its dependencies' manifests.
 ### callAPI(apiKeyName, url, method, headers, body) → { success, status, data, error }
 
 Synchronous from JavaScript's view; executed with `URLSession` (60 s timeout) while the extension's queue waits.
-Allowed only when all hold, otherwise `{success:false, error:<reason>}` without any network traffic:
+Allowed only when all hold, otherwise `{success:false, error:<reason>}` (no `status`) without any network traffic.
+The reasons say what to do: "Turn on “Let extensions call their own APIs” in Settings → Privacy."; the bundled llm
+extension shows a refusal as is, and prefixes only real request failures with the provider ("OpenAI request
+failed: HTTP 429").
 
 1. `Defaults[.allowExtensionAPIs]` is on (Settings → Privacy, "Let extensions call their own APIs");
 2. the URL's scheme, host and port match one of the declared `endpoints`;

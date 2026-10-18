@@ -230,6 +230,7 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
         textView.setFrameSize(textView.frame.size)
         if abs((textView.textContainer?.size.width ?? 0) - placedWidth) > 0.5 { restyle() }
         if parameterHint.isVisible { updateHint() }
+        pill.maxWidth = pillWidth
     }
 
     // MARK: - NoteEditing
@@ -1601,6 +1602,8 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
 
     /// Shows a message pill at the bottom of the note, or at the top when the caret's line would be under it.
     public func toast(_ message: String, kind: PillKind = .info) {
+        pill.maxWidth = pillWidth
+        pill.configure(message, kind: kind, theme: theme)
         let caret = textView.convert(textView.rect(for: textView.selectedRange()), to: view)
         let low = caret.minY < PillView.bottomInset + pill.fittingSize.height + 8
         if pillAtBottom.isActive == low {
@@ -1608,6 +1611,11 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
             pillAtTop.isActive = low
         }
         pill.show(message, kind: kind, theme: theme)
+    }
+
+    /// The pill wraps at the text column: at least 160 pt, at most 80% of the note.
+    private var pillWidth: CGFloat {
+        max(80, min(max(160, textView.textContainer?.size.width ?? 0), view.bounds.width * 0.8))
     }
 
     // MARK: - "/" commands

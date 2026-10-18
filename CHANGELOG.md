@@ -16,6 +16,10 @@ All notable changes to Super Notes are documented here. The format follows
   parameter an `example`.
 
 ### Fixed
+- A long message can no longer make the note window wider: running `::ask` without network access showed its error
+  on one line and stretched the window to fit it. Message pills now wrap at the note's text column to at most three
+  lines (the whole message is in the pill's tooltip), and only you resize the window. The message itself is shorter:
+  "Turn on “Let extensions call their own APIs” in Settings → Privacy."
 - The planets bar stays out of the way while writing: it is hidden by default and comes up only once the pointer
   has rested along the bottom of the window for a moment, for two seconds after a slot is used, or with "Always
   show the slot bar" — and a keystroke takes it down in every case, until the pointer comes back or typing has

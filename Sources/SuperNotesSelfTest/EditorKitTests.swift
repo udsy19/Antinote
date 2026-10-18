@@ -297,6 +297,45 @@ func registerEditorKitTests() {
         }
     }))
 
+    SelfTest.cases.append(("EditorKit.longPillKeepsWindowSize", {
+        MainActor.assumeIsolated {
+            // The note window as the shell builds it (never shown): the editor's view pinned to the content view.
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 350, height: 400),
+                                  styleMask: [.titled, .closable, .resizable, .fullSizeContentView], backing: .buffered, defer: true)
+            window.isReleasedWhenClosed = false
+            let editor = SuperNotesEditor()
+            let content = NSView()
+            window.contentView = content
+            editor.view.translatesAutoresizingMaskIntoConstraints = false
+            content.addSubview(editor.view)
+            NSLayoutConstraint.activate([
+                editor.view.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+                editor.view.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+                editor.view.topAnchor.constraint(equalTo: content.topAnchor),
+                editor.view.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+            ])
+            editor.load(Note(content: "Ask\n::ask(hello)"))
+            window.layoutIfNeeded()
+            let before = window.frame
+            guard let pill = editor.view.subviews.compactMap({ $0 as? PillView }).first else { return check(false, "the note's pill") }
+            editor.toast("Note saved", kind: .error)
+            window.layoutIfNeeded()
+            let oneLine = pill.frame.height
+            let long = String(repeating: "The request failed because extensions may not use the network yet. ", count: 8)
+            check(long.count > 500, "a 500-character message")
+            editor.toast(long, kind: .error)
+            window.layoutIfNeeded()
+            check(window.frame == before, "a long message never resizes the window: \(window.frame) vs \(before)")
+            check(pill.frame.height > oneLine * 1.8, "the pill grows taller instead: \(pill.frame.height) vs \(oneLine)")
+            check(pill.frame.width <= editor.view.bounds.width - 16 && pill.frame.minX >= 0, "and stays inside the note: \(pill.frame)")
+            check(pill.frame.height <= oneLine * 3.2, "three lines at most: \(pill.frame.height)")
+            check(pill.toolTip == long, "the full message is in its tooltip")
+            editor.toast("Note saved", kind: .info)
+            window.layoutIfNeeded()
+            check(pill.frame.height == oneLine && pill.toolTip == nil, "a short message is one line again, no tooltip")
+        }
+    }))
+
     SelfTest.cases.append(("EditorKit.listMarkers", {
         let box = ListLine.parse("[ ] milk")
         check(box?.kind == .checkbox(checked: false) && box?.markerLength == 4 && box?.content == "milk", "unchecked box")

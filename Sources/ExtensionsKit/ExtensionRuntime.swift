@@ -37,7 +37,7 @@ public struct NetworkPolicy: Sendable {
     /// Returns the key secret to substitute (nil when no key is needed), or a user-facing reason for refusing.
     public func authorize(keyName: String, url: String) -> Result<String?, ExtensionError> {
         guard Defaults[.allowExtensionAPIs] else {
-            return .failure(.script("Extensions may not use the network. Turn on \"Let extensions call their own APIs\" in Settings → Privacy."))
+            return .failure(.script("Turn on “Let extensions call their own APIs” in Settings → Privacy."))
         }
         guard let target = URL(string: url.replacingOccurrences(of: "{{API_KEY}}", with: "")), let host = target.host else {
             return .failure(.script("'\(url)' is not a valid URL"))
