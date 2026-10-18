@@ -946,7 +946,7 @@ struct ShortcutsSettings: View {
                         ShortcutRecorder(shortcut: $hotkey).frame(width: 160, height: 24)
                     }
                 }
-                Captioned("While on, ⌘1 opens Slot 1 and every ⌘ + digit goes to a slot instead.") {
+                Captioned("Slots open with ⌃⌘1–⌃⌘9 and Back to Notes is ⌃⌘0. While on, ⌘ + digit does it instead, and ⌘1 stops meaning Jump to Front.") {
                     Toggle("⌘1–⌘9 jump to slotted notes", isOn: $slotShortcuts)
                 }
                 LabeledContent {

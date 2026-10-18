@@ -78,15 +78,24 @@ notes bar", "Create new notes in the ephemeral pane when in slotted view", "Swap
 
 - Nine slots (`Note.slot` 0…8). Rules (`SlotBoard`): assigning a note to its own slot removes it from the slot;
   assigning to an occupied slot pushes the occupant back to the deck; a note is in at most one slot.
-- ⌘1…⌘9 open slots; ⌘0 returns to the ephemeral deck. ⌃⌘1…⌃⌘9 assign the current note.
+- ⌃⌘1…⌃⌘9 open slots; ⌃⌘[ / ⌃⌘] move to the previous / next slot in use (from the deck: the last / the first);
+  ⌃⌘0, Esc (when the note has no use for it) or Back to Notes return to the deck note exactly as it was left (the
+  deck pane keeps it, caret and scroll position included). With `shellKitSlotNumberShortcuts` the ⌃ drops:
+  ⌘1…⌘9 and ⌘0. ⌥⌘1…⌥⌘9 put the current note in a slot (Put in Slot ▸); Remove from Slot returns it to the deck.
+  Both offer Undo Move to Slot (⌘Z) until the next edit or move. Swipes and ⌘[ / ⌘] while a slot is in front
+  move through the slots in use only (`SlotNavigator`) and nudge back at the ends ("First slot" / "Last slot").
 - The slot bar is a floating capsule (32 pt, 10 pt up; shrunk evenly in windows narrower than it) of nine planets,
   Mercury → Pluto, drawn crisp above its glass or filled capsule: the open slot in `accent1Main`, slots holding a
   note filled, empty slots as faint outlines. Hovering a planet darkens it and shows a tip above it: "Slot 2 —
-  <title>", or "Slot 7 — empty / Click or press ⌘⌃7 to put this note here" (the live Assign to Slot shortcut). It
-  shows when `alwaysShowSlotsBar` (the note then scrolls clear of it), for 2 s after a slot is used, and with the
-  bottom bar when slots are in use; moving onto it keeps the bottom bar up, and while it rests low it doesn't raise
-  the bottom bar. Clicking a planet opens its slot (the open one goes back to the deck); an empty one takes the
-  current note.
+  <title> · ⌃⌘2", the open slot's "… · open / Click or press Esc to go back to your notes", or "Slot 7 — empty /
+  Click or press ⌥⌘7 to put this note here" (the live shortcuts). When it shows is `SlotBarVisibility`: hidden by
+  default; up once the pointer has rested in the bottom 28 pt (or on the revealed bottom bar) for 250 ms, for 2 s
+  after a slot is used, or always with `alwaysShowSlotsBar` (the note then scrolls clear of it) — never while
+  typing: a keystroke hides it (150 ms) until the pointer moves back into the strip, or 2 s after typing stops
+  with always-show. Opening a slot shows "Slot 2 · <title>" above its planet for 2 s. Moving onto the bar keeps
+  the bottom bar up, and while it rests low it doesn't raise the bottom bar. Clicking a planet opens its slot (the
+  open one goes back to the deck); an empty one takes the current note; a right-click offers Open / Put This Note
+  in / Remove from the slot.
 - Split view (`shellKitSplit`): ephemeral pane + slotted pane, side by side or stacked
   (`shellKitSplitHorizontal`, "Split horizontally"), order swappable (`shellKitSwapPanes`).
 - ⌘N while a slotted note is focused creates the note in the ephemeral deck when
@@ -133,9 +142,10 @@ Check Off Current Line ⇧⌘K, Cycle List Type ⇧⌘M, Indent ⌥⌘], Outdent
 Line Up/Down ⌥⇧↑/⌥⇧↓, Markdown: Strikethrough ⇧⌘X, Expand All Links ⌥⌘L, Extension Autocomplete ⌃Space.
 Appearance: Increase/Decrease/Reset Text Size ⌘= ⌘- ⌥⌘0, Always Show Slots Bar, Split Horizontally, Enter Full
 Screen ⌃⌘F.
-Navigate: Jump to Front ⌘1, Show Previous Note ⌘[, Show Next Note ⌘], Go to Slot 1…9 ⌘1…⌘9 and Ephemeral Notes
-⌘0 (only while `shellKitSlotNumberShortcuts` is on; ⌘1 then leaves Jump to Front), Assign to Slot ▸ (⌃⌘1…9,
-Remove from Slot).
+Navigate: Jump to Front ⌘1, Show Previous Note ⌘[, Show Next Note ⌘], Go to Slot 1…9 ⌃⌘1…⌃⌘9, Previous Slot ⌃⌘[,
+Next Slot ⌃⌘], Back to Notes ⌃⌘0 (plus a hidden Esc twin that fires only when the note has no use for Esc), Put in
+Slot ▸ (⌥⌘1…9, Remove from Slot). With `shellKitSlotNumberShortcuts` the slot jumps and Back to Notes become
+⌘1…⌘9 and ⌘0, and ⌘1 leaves Jump to Front.
 Help: Show Tutorial Notes, Keyboard Shortcuts (no separate Support menu: it would repeat Help). Window: Pin Super Notes to Top/Unpin from Top ⌘P, Hide/Show
 Super Notes ⌘O, Minimize ⌘M, Zoom, Bring All to Front.
 Toggle items change their titles with state instead of showing checkmarks.

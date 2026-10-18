@@ -143,6 +143,114 @@ public struct SlotBoard: Equatable, Sendable {
     }
 }
 
+public enum SlotStep: Equatable, Sendable {
+    case open(slot: Int)
+    /// Already at that end of the slots; `reason` is shown as a HUD ("First slot" / "Last slot").
+    case stay(reason: String)
+}
+
+/// Moving between the slots holding a note, in slot order: a swipe or Next/Previous Slot never lands on an empty
+/// slot and never falls out into the deck; at either end it stays put.
+public enum SlotNavigator {
+    /// From `current` (nil = coming from the deck: Next Slot opens the first slot in use, Previous Slot the last)
+    /// in `direction` (`.next` = the higher slot). Nil when no slot holds a note.
+    public static func step(from current: Int?, occupied: Set<Int>, direction: SwipeDirection) -> SlotStep? {
+        let used = occupied.filter(SlotBoard.isValid).sorted()
+        guard !used.isEmpty else { return nil }
+        guard let current else { return .open(slot: direction == .next ? used[0] : used[used.count - 1]) }
+        switch direction {
+        case .next:
+            return used.first { $0 > current }.map { .open(slot: $0) } ?? .stay(reason: "Last slot")
+        case .previous:
+            return used.last { $0 < current }.map { .open(slot: $0) } ?? .stay(reason: "First slot")
+        }
+    }
+}
+
+// MARK: - Slot bar visibility
+
+/// When the planets bar is on screen. It is hidden by default and never while the user types: it comes up when the
+/// pointer rests in the bottom strip of the window for `hoverDwell`, for `navigationLinger` after a slot is used,
+/// or all the time with "Always show the slot bar" — and even then a keystroke takes it down until the pointer
+/// comes back into the strip or `typingRest` has passed since the last keystroke. Time is passed in, so the rules
+/// are checked without waiting (`ShellKit.slotBarVisibility`).
+public struct SlotBarVisibility: Equatable, Sendable {
+    /// Height of the strip along the bottom of the window where a resting pointer brings the bar up.
+    public static let hoverZone: Double = 28
+    public static let hoverDwell: TimeInterval = 0.25
+    public static let navigationLinger: TimeInterval = 2
+    public static let typingRest: TimeInterval = 2
+    public static let fadeDuration: TimeInterval = 0.15
+
+    public private(set) var alwaysShow: Bool
+    private var pointerInZone = false
+    /// When the pointer settled in the strip (counting towards the dwell); nil while it is elsewhere.
+    private var dwellStart: Date?
+    /// The keystroke that hid the bar; nil once the pointer came back or the bar may show again.
+    private var typedAt: Date?
+    private var navigatedAt: Date?
+
+    public enum Event: Equatable, Sendable {
+        /// The pointer moved; `inZone` while it is in the bottom strip or on the shown bar.
+        case pointer(inZone: Bool)
+        /// A plain keystroke went into the note.
+        case keystroke
+        /// A slot was opened, left or changed from the keyboard, the bar or a swipe.
+        case navigated
+        case alwaysShow(Bool)
+    }
+
+    public init(alwaysShow: Bool) { self.alwaysShow = alwaysShow }
+
+    public mutating func handle(_ event: Event, at now: Date) {
+        switch event {
+        case .pointer(let inZone):
+            if inZone {
+                // Entering the strip (or moving in it after typing) starts the dwell afresh.
+                if !pointerInZone || typedAt != nil { dwellStart = now }
+                pointerInZone = true
+                typedAt = nil
+            } else {
+                pointerInZone = false
+                dwellStart = nil
+            }
+        case .keystroke:
+            typedAt = now
+            dwellStart = nil
+            navigatedAt = nil
+        case .navigated:
+            navigatedAt = now
+            typedAt = nil
+        case .alwaysShow(let on):
+            alwaysShow = on
+        }
+    }
+
+    public func isVisible(at now: Date) -> Bool {
+        if let typedAt {
+            // Typing hides the bar; with always-show it comes back by itself once typing has stopped.
+            return alwaysShow && now.timeIntervalSince(typedAt) >= Self.typingRest
+        }
+        if alwaysShow { return true }
+        if let navigatedAt, now.timeIntervalSince(navigatedAt) < Self.navigationLinger { return true }
+        if pointerInZone, let dwellStart, now.timeIntervalSince(dwellStart) >= Self.hoverDwell { return true }
+        return false
+    }
+
+    /// The next moment `isVisible` may change by time alone (the dwell ending, the linger or the typing rest
+    /// running out); nil when only an event can change it.
+    public func nextChange(after now: Date) -> Date? {
+        var times: [Date] = []
+        if let typedAt {
+            if alwaysShow { times.append(typedAt.addingTimeInterval(Self.typingRest)) }
+        } else if !alwaysShow {
+            if let navigatedAt { times.append(navigatedAt.addingTimeInterval(Self.navigationLinger)) }
+            if pointerInZone, let dwellStart { times.append(dwellStart.addingTimeInterval(Self.hoverDwell)) }
+        }
+        return times.filter { $0 > now }.min()
+    }
+}
+
 // MARK: - Window chrome
 
 /// Text shown by the window chrome.
@@ -216,17 +324,26 @@ public enum SlotBarLayout {
         (0..<SlotBoard.count).map { $0 == open ? .open : occupied.contains($0) ? .filled : .empty }
     }
 
-    /// The hover tip: "Slot 2 — Groceries" for a slot holding a note (a heading's "#" marks dropped); for an
-    /// empty one, what a click (or the Assign to Slot shortcut, when it has one) does.
-    public static func tip(slot: Int, title: String?, assignShortcut: String?) -> String {
+    /// A note's title as the slot bar names it: a heading's "#" marks dropped, "Untitled" when blank.
+    public static func cleanTitle(_ title: String) -> String {
+        let trimmed = title.drop { $0 == "#" }.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Untitled" : trimmed
+    }
+
+    /// The hover tip: "Slot 2 — Groceries · ⌃⌘2" for a slot holding a note (its Go to Slot shortcut, when it has
+    /// one); for the open slot, how to get back; for an empty one, what a click (or the Put in Slot shortcut) does.
+    public static func tip(slot: Int, title: String?, isOpen: Bool = false, openShortcut: String?, assignShortcut: String?) -> String {
         let name = "Slot \(slot + 1)"
         if let title {
-            let trimmed = title.drop { $0 == "#" }.trimmingCharacters(in: .whitespacesAndNewlines)
-            return "\(name) — \(trimmed.isEmpty ? "Untitled" : trimmed)"
+            if isOpen { return "\(name) — \(cleanTitle(title)) · open\nClick or press Esc to go back to your notes" }
+            return "\(name) — \(cleanTitle(title))" + (openShortcut.map { " · \($0)" } ?? "")
         }
         let how = assignShortcut.map { "Click or press \($0)" } ?? "Click"
         return "\(name) — empty\n\(how) to put this note here"
     }
+
+    /// The label shown for a moment when a slot opens: "Slot 3 · Groceries".
+    public static func label(slot: Int, title: String) -> String { "Slot \(slot + 1) · \(cleanTitle(title))" }
 }
 
 /// What fits in the bottom bar (Delete · date and position · Previous · Next · First · Export), so nothing is ever

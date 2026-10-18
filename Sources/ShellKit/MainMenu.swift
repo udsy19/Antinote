@@ -3,7 +3,8 @@ import Combine
 import SuperNotesCore
 
 extension Defaults.Keys {
-    /// ⌘1…⌘9 open the slotted notes (and ⌘1 stops meaning Jump to Front). Off by default.
+    /// ⌘1…⌘9 open the slotted notes and ⌘0 goes back to the deck, instead of ⌃⌘1…9 / ⌃⌘0 (and ⌘1 stops meaning
+    /// Jump to Front). Off by default.
     static let shellKitSlotNumberShortcuts = Key<Bool>("shellKitSlotNumberShortcuts", default: false)
 }
 
@@ -189,19 +190,31 @@ enum MainMenu {
         ])
 
         let jump = item("Jump to Front", #selector(Shell.goToFirstNote(_:)), "1")
-        let slotItems = [sep()]
-            + (0..<SlotBoard.count).map { item("Go to Slot \($0 + 1)", #selector(Shell.openSlotItem(_:)), "\($0 + 1)", tag: $0) }
-            + [item("Ephemeral Notes", #selector(Shell.goToDeck(_:)), "0")]
-        let assign = submenu("Assign to Slot",
-                             (0..<SlotBoard.count).map {
-                                 item("Slot \($0 + 1)", #selector(Shell.assignSlotItem(_:)), "\($0 + 1)", [.command, .control], tag: $0)
-                             } + [sep(), item("Remove from Slot", #selector(Shell.removeFromSlot(_:)))])
+        // Slots: ⌃⌘1…9 open them and ⌃⌘0 goes back (⌘1…9 / ⌘0 with "⌘1–⌘9 jump to slotted notes"); Esc goes back
+        // too, through a hidden twin that only fires when the note has no use for Esc.
+        let slotItems = (0..<SlotBoard.count).map {
+            item("Go to Slot \($0 + 1)", #selector(Shell.openSlotItem(_:)), "\($0 + 1)", [.command, .control], tag: $0)
+        }
+        let back = item("Back to Notes", #selector(Shell.goToDeck(_:)), "0", [.command, .control])
+        let escape = NSMenuItem(title: "Back to Notes", action: #selector(Shell.backToNotesEscape(_:)), keyEquivalent: "\u{1B}")
+        escape.keyEquivalentModifierMask = []
+        escape.target = shell
+        escape.isHidden = true
+        escape.allowsKeyEquivalentWhenHidden = true
+        let put = submenu("Put in Slot",
+                          (0..<SlotBoard.count).map {
+                              item("Slot \($0 + 1)", #selector(Shell.assignSlotItem(_:)), "\($0 + 1)", [.command, .option], tag: $0)
+                          } + [sep(), item("Remove from Slot", #selector(Shell.removeFromSlot(_:)))])
         add("Navigate", [jump,
                          item("Show Previous Note", #selector(Shell.previousNote(_:)), "["),
-                         item("Show Next Note", #selector(Shell.nextNote(_:)), "]")]
-            + slotItems + [sep(), assign])
+                         item("Show Next Note", #selector(Shell.nextNote(_:)), "]"), sep()]
+            + slotItems
+            + [sep(),
+               item("Previous Slot", #selector(Shell.previousSlot(_:)), "[", [.command, .control]),
+               item("Next Slot", #selector(Shell.nextSlot(_:)), "]", [.command, .control]),
+               back, escape, sep(), put])
         state.jumpToFront = jump
-        state.slotItems = slotItems
+        state.slotItems = slotItems + [back]
 
         let pin = item(MenuState.Toggle.pin.titles.off, #selector(Shell.togglePin(_:)), "p")
         let window = add("Window", [
@@ -344,8 +357,8 @@ struct MenuBinding {
     let modifiers: NSEvent.ModifierFlags
 }
 
-/// Keeps state-dependent menu titles current ("Pin Super Notes to Top" / "Unpin from Top", …), shows the slot jumps
-/// only while ⌘1…⌘9 belong to the slots, and applies rebound shortcuts as soon as they change.
+/// Keeps state-dependent menu titles current ("Pin Super Notes to Top" / "Unpin from Top", …), gives the slot
+/// jumps ⌘1…⌘9 while those belong to the slots, and applies rebound shortcuts as soon as they change.
 @MainActor
 final class MenuState: NSObject, NSMenuDelegate {
     typealias Toggle = MenuLogic.Toggle
@@ -382,15 +395,15 @@ final class MenuState: NSObject, NSMenuDelegate {
         applyBindings()
     }
 
-    /// Every rebindable item gets its override or built-in shortcut. With slot shortcuts on, ⌘1…⌘9 open the
-    /// slots and Jump to Front gives up ⌘1.
+    /// Every rebindable item gets its override or built-in shortcut. With slot shortcuts on, Go to Slot 1…9 and
+    /// Back to Notes drop the ⌃ (⌘1…⌘9, ⌘0) and Jump to Front gives up ⌘1.
     func applyBindings() {
         let slotsOn = Defaults[.shellKitSlotNumberShortcuts]
-        slotItems.forEach { $0.isHidden = !slotsOn }
         let overrides = Defaults[.menuShortcuts]
         for b in bindings {
             let builtIn = b.item === jumpToFront && slotsOn ? "" : b.key
-            let (key, mods) = MenuLogic.shortcut(builtIn: builtIn, b.modifiers, override: overrides[b.id])
+            let builtInMods = slotsOn && slotItems.contains { $0 === b.item } ? .command : b.modifiers
+            let (key, mods) = MenuLogic.shortcut(builtIn: builtIn, builtInMods, override: overrides[b.id])
             b.item.keyEquivalent = key
             b.item.keyEquivalentModifierMask = mods
         }

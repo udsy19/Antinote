@@ -3,6 +3,26 @@
 All notable changes to Super Notes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Fixed
+- The planets bar stays out of the way while writing: it is hidden by default and comes up only once the pointer
+  has rested along the bottom of the window for a moment, for two seconds after a slot is used, or with "Always
+  show the slot bar" — and a keystroke takes it down in every case, until the pointer comes back or typing has
+  stopped for two seconds. It floats over the note, so the text never moves. (Before, it rose with the bottom bar
+  whenever the pointer drifted low and sat over the last lines being typed.)
+- Moving between slots is predictable: your notes are the deck, the nine slots are pinned notes. Opening a slot
+  fades its note in and names it above its planet ("Slot 3 · Groceries"); Esc, ⌃⌘0 or Back to Notes returns to
+  the note you left, caret and scroll position intact. Swiping or ⌘[ / ⌘] in a slot moves through the slots in
+  use only, in order, and nudges back at the ends ("First slot" / "Last slot") instead of jumping into empty slots
+  or the deck; nothing is ever created from a slot. In the split, swipes follow the pane that has the focus.
+- Slot shortcuts are always on and in the menu: Go to Slot 1…9 ⌃⌘1…⌃⌘9, Previous / Next Slot ⌃⌘[ / ⌃⌘],
+  Back to Notes ⌃⌘0, Put in Slot ⌥⌘1…⌥⌘9. The "⌘1–⌘9 jump to slotted notes" switch drops the ⌃. The planet
+  tip shows each slot's shortcut, how to get back from the open one and how to fill an empty one.
+- Putting a note in a slot keeps its caret; replacing an occupied slot or removing a note from its slot happens
+  at once with a pill that says what ⌘Z puts back (Undo Move to Slot), instead of a question. Right-clicking a
+  planet offers Open, Put This Note in, and Remove from that slot.
+
 ## [1.3.3] — 2026-10-18
 
 ### Fixed

@@ -18,9 +18,11 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
     private var slotsBarBottom: NSLayoutConstraint!
     private var bottomBar: BottomBarView!
     private let latestDot = NSView()
-    /// Shows the slot bar for a moment after a slot is used.
-    private var slotsBarFade: DispatchWorkItem?
-    private var slotsBarFlash = false
+    /// Whether the slot bar is up: hover dwell, slot navigation, always-show, and never while typing.
+    private var slotBarState = SlotBarVisibility(alwaysShow: Defaults[.alwaysShowSlotsBar])
+    private var slotBarWork: DispatchWorkItem?
+    /// Where the pointer rested when a keystroke hid the slot bar; it must really move (4 pt) to count again.
+    private var pointerRest: NSPoint?
     private let paneContainer = NSView()
     private let effectView = NSVisualEffectView()
     private let tintView = NSView()
@@ -78,9 +80,10 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
     @objc private func handleReopen(_ event: NSAppleEventDescriptor, reply: NSAppleEventDescriptor) { showMain() }
 
     /// Builds the window without showing it (offscreen renders): the front note, or `slot`, with the hover bars
-    /// pinned visible when `revealed`, the content `size` (the default when nil) and the pointer resting on the
-    /// slot bar's `hoveredSlot`. Returns the window's frame view.
-    func prepareForPreview(revealed: Bool, slot: Int?, size: NSSize? = nil, hoveredSlot: Int? = nil) -> NSView {
+    /// pinned visible when `revealed`, the content `size` (the default when nil), the pointer resting on the slot
+    /// bar's `hoveredSlot`, and the slot bar as `slotBar` has it. Returns the window's frame view.
+    func prepareForPreview(revealed: Bool, slot: Int?, size: NSSize? = nil, hoveredSlot: Int? = nil,
+                           slotBar: WindowPreview.SlotBar = .natural) -> NSView {
         if !launched {
             launched = true
             MainMenu.buildForPreview()
@@ -88,21 +91,33 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
             restoreCurrentNote()
         }
         window.setContentSize(size ?? MainWindow.defaultSize)
+        slotsBar.setHovered(hoveredSlot)   // before the slot opens: a planet under the pointer keeps its tip
         if let slot { openSlot(slot) }
         applyTheme()
         titleBar.pinnedVisible = revealed
         bottomBar.pinnedVisible = revealed
         window.trafficLights.forEach { $0.alphaValue = revealed ? 1 : 0 }
+        let now = Date()
+        switch slotBar {
+        case .natural: break
+        case .hovering:
+            // The pointer has rested in the bottom strip for longer than the dwell.
+            slotBarState.handle(.pointer(inZone: true), at: now.addingTimeInterval(-1))
+        case .typing:
+            slotBarState.handle(.keystroke, at: now)
+        case .hidden:
+            slotBarState = SlotBarVisibility(alwaysShow: Defaults[.alwaysShowSlotsBar])
+        }
         refreshChrome()
         let frame = window.contentView?.superview ?? window.contentView!
         frame.layoutSubtreeIfNeeded()
-        slotsBar.setHovered(hoveredSlot)
         window.alignTrafficLights()
         return frame
     }
 
     private func buildWindow() {
-        let root = NSView()
+        let root = RootView()
+        root.onPointer = { [weak self] point in self?.pointerMoved(to: point) }
         titleBar = TitleBarView(target: self)
         titleBar.onHoverChange = { [weak self] revealed in
             NSAnimationContext.runAnimationGroup { ctx in
@@ -113,6 +128,7 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         slotsBar = SlotsBarView()
         slotsBar.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         slotsBar.onSelect = { [weak self] slot in self?.slotChipClicked(slot) }
+        slotsBar.contextMenu = { [weak self] slot in self?.slotMenu(slot) }
         bottomBar = BottomBarView(target: self)
         bottomBar.onHoverChange = { [weak self] _ in self?.refreshChrome() }
         // The slot bar sits above the revealed bottom bar: moving onto it keeps both up. While it rests low (always
@@ -187,19 +203,24 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         return pane
     }
 
-    /// Delete Note, undone: the note comes back from The Void and is shown again.
-    private func offerUndoDelete(_ id: UUID) {
+    /// Offers "Undo <name>" (⌘Z in the note) until the next edit or move: `undo` puts things back.
+    private func offerUndo(_ name: String, _ undo: @escaping @MainActor (Shell) -> Void) {
         noteUndo.removeAllActions()
         noteUndo.groupsByEvent = false
         noteUndo.beginUndoGrouping()
         defer { noteUndo.endUndoGrouping() }
-        noteUndo.registerUndo(withTarget: self) { shell in
+        noteUndo.registerUndo(withTarget: self) { shell in MainActor.assumeIsolated { undo(shell) } }
+        noteUndo.setActionName(name)
+    }
+
+    /// Delete Note, undone: the note comes back from The Void and is shown again.
+    private func offerUndoDelete(_ id: UUID) {
+        offerUndo("Delete Note") { shell in
             guard shell.store.note(id)?.isInVoid == true else { return }
             shell.store.restoreFromVoid(id)
             shell.showEphemeral(id)   // restored notes rejoin the deck at the front
             HUD.show("Note restored", kind: .success)
         }
-        noteUndo.setActionName("Delete Note")
     }
 
     private func flushEditors() {
@@ -248,8 +269,8 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
             let swallow = MainActor.assumeIsolated { self?.swallowsScroll(event) ?? false }
             return swallow ? nil : event
         }
-        // Typing into the note (a plain keystroke, not a shortcut) takes the hover bars down so they never sit
-        // over the text being written.
+        // Typing into the note (a plain keystroke, not a shortcut) takes the hover bars and the slot bar down so
+        // they never sit over the text being written.
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             MainActor.assumeIsolated {
                 guard let self, event.window === self.window, !event.modifierFlags.contains(.command),
@@ -257,6 +278,8 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
                 let point = self.window.mouseLocationOutsideOfEventStream
                 self.titleBar.typingStarted(pointerAt: point)
                 self.bottomBar.typingStarted(pointerAt: point)
+                self.pointerRest = self.window.contentView?.convert(point, from: nil)
+                self.slotBar(.keystroke)
             }
             return event
         }
@@ -305,8 +328,8 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
     }
 
     func show(noteID: UUID) {
-        guard let note = store.note(noteID) else { return }
-        if let slot = note.slot { openSlot(slot) } else { showEphemeral(noteID) }
+        guard store.note(noteID) != nil else { return }
+        reveal(noteID)
         showMain()
     }
 
@@ -380,7 +403,7 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         ephemeralPane.show(note, locked: isLockedOut(note))
         Defaults[.shellKitCurrentNote] = id.uuidString
         Onboarding.noteShown(id)
-        if !isSplit, openSlot != nil {
+        if !isSplit {
             openSlot = nil
             layoutPanes()
         }
@@ -396,14 +419,9 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         showEphemeral(note.id)
     }
 
+    /// A swipe or ⌘[ / ⌘]: through the deck, or, while a slot is in front, through the slots holding a note.
     func navigate(_ direction: SwipeDirection) {
-        if !isSplit, let current = openSlot {
-            let used = board().occupants.keys.sorted()
-            guard let i = used.firstIndex(of: current) else { return }
-            let j = direction == .previous ? i - 1 : i + 1
-            if used.indices.contains(j) { openSlot(used[j]); slideIn(direction) } else { HUD.show("No more slotted notes") }
-            return
-        }
+        if activeRole == .slot { navigateSlots(direction); return }
         let deck = ephemeralDeck()
         let index = deck.firstIndex { $0.id == ephemeralPane.noteID } ?? 0
         let blank = ephemeralPane.noteID.flatMap(freshNote).map { DeckNavigator.isBlank($0.content) } ?? true
@@ -414,23 +432,50 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         }
     }
 
-    /// The arriving note slides ~9 pt in from the side it came from while fading in (220 ms, ease-out); the page
-    /// itself stays put.
-    private func slideIn(_ direction: SwipeDirection) {
+    /// Next/Previous Slot: the neighbouring slot in use (from the deck, the first or the last one); at either end
+    /// the note nudges back and a pill says so. Nothing is ever created here.
+    func navigateSlots(_ direction: SwipeDirection) {
+        let current = activeRole == .slot ? openSlot : nil
+        switch SlotNavigator.step(from: current, occupied: Set(board().occupants.keys), direction: direction) {
+        case .open(let slot)?: openSlot(slot, transition: direction)
+        case .stay(let reason)?: bounce(direction); slotBar(.navigated); say(reason, at: current)
+        case nil: HUD.show("No slots in use yet — Put in Slot gives this note one")
+        }
+    }
+
+    /// The arriving note slides ~9 pt in from the side it came from while fading in (220 ms, ease-out); without a
+    /// direction (a slot opened from the keyboard or the bar) it only fades in (150 ms). The page itself stays put.
+    private func slideIn(_ direction: SwipeDirection?) {
         let view = pane(activeRole)
         view.wantsLayer = true
         guard let layer = view.layer else { return }
-        let shift = CABasicAnimation(keyPath: "transform.translation.x")
-        shift.fromValue = direction == .previous ? -9 : 9
-        shift.toValue = 0
         let fade = CABasicAnimation(keyPath: "opacity")
         fade.fromValue = 0
         fade.toValue = 1
         let group = CAAnimationGroup()
-        group.animations = [shift, fade]
-        group.duration = 0.22
+        group.animations = [fade]
+        group.duration = direction == nil ? 0.15 : 0.22
+        if let direction {
+            let shift = CABasicAnimation(keyPath: "transform.translation.x")
+            shift.fromValue = direction == .previous ? -9 : 9
+            shift.toValue = 0
+            group.animations?.append(shift)
+        }
         group.timingFunction = CAMediaTimingFunction(name: .easeOut)
         layer.add(group, forKey: "slideIn")
+    }
+
+    /// The end of the slots: the note gives 6 pt the way the swipe went and settles back (200 ms).
+    private func bounce(_ direction: SwipeDirection) {
+        let view = pane(activeRole)
+        view.wantsLayer = true
+        guard let layer = view.layer else { return }
+        let nudge = CAKeyframeAnimation(keyPath: "transform.translation.x")
+        nudge.values = [0, direction == .previous ? 6 : -6, 0]
+        nudge.keyTimes = [0, 0.4, 1]
+        nudge.duration = 0.2
+        nudge.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        layer.add(nudge, forKey: "bounce")
     }
 
     private func startFreshIfInactive() {
@@ -453,27 +498,72 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
 
     // MARK: - Slots
 
-    func openSlot(_ slot: Int) {
+    /// Shows the note in `slot` in place of the deck (or in the slotted half of the split), with a short fade (or
+    /// a slide when `transition` says where it came from) and, when `announce`, a "Slot 3 · <title>" pill. The
+    /// deck note stays loaded in its own pane, caret and scroll position included, for Back to Notes.
+    func openSlot(_ slot: Int, transition: SwipeDirection? = nil, announce: Bool = true) {
         guard let note = slotNote(slot) else {
-            HUD.show("Slot \(slot + 1) is empty — ⌃⌘\(slot + 1) puts this note there")
+            let put = ChromeTooltip.shortcut(action: #selector(assignSlotItem(_:)), tag: slot).map { " · \($0) puts this note there" } ?? ""
+            slotBar(.navigated)
+            say("Slot \(slot + 1) is empty" + put, at: slot)
             return
         }
-        let wasOpen = openSlot != nil
         openSlot = slot
         slotPane.show(note, locked: isLockedOut(note))
-        if !isSplit && !wasOpen { layoutPanes() }
+        if !isSplit { layoutPanes() }
+        focus(.slot)
         afterNavigation()
-        flashSlotsBar()
-        if !isSplit || slotPane.window != nil { window.makeFirstResponder(slotPane.editor.view) }
-        focusActive()
+        slotBar(.navigated)
+        slideIn(transition)
+        if announce { say(SlotBarLayout.label(slot: slot, title: note.isLocked ? "Locked note" : note.title), at: slot) }
     }
 
+    /// Back to Notes: the deck note exactly as it was left. In the split, it just moves the focus over.
     private func showDeck() {
-        guard openSlot != nil, !isSplit else { focusActive(); return }
+        if isSplit { focus(.ephemeral); return }
+        guard openSlot != nil else { focusActive(); return }
         openSlot = nil
         layoutPanes()
-        flashSlotsBar()
+        slotBar(.navigated)
         if ephemeralPane.noteID == nil { showFrontEphemeral() } else { afterNavigation() }
+        slideIn(nil)
+    }
+
+    /// Esc goes back to the deck only when it means nothing to the note: a slot in front (not the split), the
+    /// note's own text focused (not a field editor), Vim off (Esc leaves Insert there) and no editor list open
+    /// over the note (those are child windows that take the mouse; the message pill doesn't).
+    private var escapeGoesBack: Bool {
+        guard !isSplit, openSlot != nil, !Defaults[.vimMode], let text = window.firstResponder as? NSTextView,
+              !text.isFieldEditor, slotPane.contains(responder: text) else { return false }
+        return !(window.childWindows ?? []).contains { $0.isVisible && !$0.ignoresMouseEvents }
+    }
+
+    /// A word about a slot: above its planet on the bar when there is one to point at (the bar is up after any
+    /// slot move), as a message pill otherwise.
+    private func say(_ text: String, at slot: Int?) {
+        if let slot, slotsBar.isShown { slotsBar.announce(text, at: slot) } else { HUD.show(text) }
+    }
+
+    /// Shows `id` where it lives — its slot, or its place in the deck — putting `caret` back.
+    private func reveal(_ id: UUID, caret: NSRange? = nil, announce: Bool = true) {
+        guard let note = store.note(id) else { return }
+        if let slot = note.slot {
+            refillDeckPane()
+            openSlot(slot, announce: announce)
+            if let caret { slotPane.selection = caret }
+        } else {
+            showEphemeral(id)
+            if let caret { ephemeralPane.selection = caret }
+            slideIn(nil)
+        }
+    }
+
+    /// Keeps the deck pane holding a note (the front one) without bringing the deck in front.
+    private func refillDeckPane() {
+        guard ephemeralPane.noteID == nil else { return }
+        let front = ephemeralDeck().first ?? store.create(content: "")
+        ephemeralPane.show(front, locked: isLockedOut(front))
+        Defaults[.shellKitCurrentNote] = front.id.uuidString
     }
 
     /// A planet click opens its slot (the open one goes back to the deck); an empty slot takes the current note.
@@ -482,27 +572,140 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         if slotNote(slot) != nil { openSlot(slot) } else { assign(toSlot: slot) }
     }
 
-    func assign(toSlot slot: Int) {
-        guard let id = currentNoteID else { return }
-        var b = board()
-        let changes = b.assign(id, to: slot)
-        guard !changes.isEmpty else { HUD.show("Slot not available", kind: .warning); return }
-        for change in changes { store.setSlot(change.slot, for: change.id) }
-        guard let note = store.note(id) else { return }
-        if let s = note.slot {
-            openSlot = s
-            slotPane.show(note, locked: isLockedOut(note))
-            if ephemeralPane.noteID == id { ephemeralPane.clear(); showFrontEphemeral() }
-            if !isSplit { openSlot = s; layoutPanes() }
-            HUD.show("Moved to slot \(s + 1)")
-        } else {
-            if slotPane.noteID == id { slotPane.clear(); openSlot = nil }
-            if isSplit && b.isEmpty { Defaults[.shellKitSplit] = false }
-            showEphemeral(id)
-            layoutPanes()
-            HUD.show("Removed from slot")
+    /// The planet's right-click menu.
+    private func slotMenu(_ slot: Int) -> NSMenu {
+        let menu = NSMenu()
+        func add(_ title: String, _ action: Selector) {
+            let item = menu.addItem(withTitle: title, action: action, keyEquivalent: "")
+            item.target = self
+            item.tag = slot
         }
-        afterNavigation()
+        let name = "Slot \(slot + 1)"
+        if let note = slotNote(slot) {
+            if activeRole == .slot, openSlot == slot, !isSplit {
+                add("Back to Notes", #selector(goToDeck(_:)))
+            } else {
+                add("Open \(name)", #selector(openSlotItem(_:)))
+            }
+            if note.id != currentNoteID { add("Put This Note in \(name)", #selector(assignSlotItem(_:))) }
+            menu.addItem(.separator())
+            add("Remove “\(SlotBarLayout.cleanTitle(note.title))” from \(name)", #selector(clearSlotItem(_:)))
+        } else {
+            add("Put This Note in \(name)", #selector(assignSlotItem(_:)))
+        }
+        return menu
+    }
+
+    /// Put in Slot: the current note takes `slot`; a note already there goes back to the deck, and ⌘Z puts both
+    /// back. The note keeps its caret when it changes panes.
+    func assign(toSlot slot: Int) {
+        guard let id = currentNoteID, SlotBoard.isValid(slot) else { return }
+        if store.note(id)?.slot == slot { slotBar(.navigated); say("Already in slot \(slot + 1)", at: slot); return }
+        let replaced = slotNote(slot)
+        var b = board()
+        guard moveSlots(id, changes: b.assign(id, to: slot)) else { return }
+        if let replaced {
+            say("In slot \(slot + 1) · ⌘Z puts “\(SlotBarLayout.cleanTitle(replaced.title))” back", at: slot)
+        } else {
+            say("In slot \(slot + 1)", at: slot)
+        }
+    }
+
+    /// Remove from Slot: the note goes back to the deck (nothing is lost; ⌘Z puts it back in its slot).
+    func removeFromSlot(id: UUID) {
+        guard let slot = store.note(id)?.slot else { return }
+        var b = board()
+        guard moveSlots(id, changes: b.remove(id)) else { return }
+        say("Back in your notes · ⌘Z undoes", at: slot)
+    }
+
+    /// Applies `changes` (`SlotBoard`'s) and shows `id` where it now lives, caret kept; ⌘Z puts everything back
+    /// until the next edit or move. False when there was nothing to do.
+    private func moveSlots(_ id: UUID, changes: [(id: UUID, slot: Int?)]) -> Bool {
+        guard !changes.isEmpty else { HUD.show("Slot not available", kind: .warning); return false }
+        let before = changes.map { (id: $0.id, slot: store.note($0.id)?.slot) }
+        let caret = pane(activeRole).noteID == id ? pane(activeRole).selection : nil
+        setSlots(changes)
+        reveal(id, caret: caret, announce: false)
+        offerUndo("Move to Slot") { shell in
+            shell.setSlots(before)
+            shell.reveal(id, caret: caret, announce: false)
+            shell.say("Slots put back", at: shell.shownSlot)
+        }
+        return true
+    }
+
+    /// Writes slot changes to the store; panes holding a note whose place changed let go of it, and a split
+    /// with no slots left closes.
+    private func setSlots(_ changes: [(id: UUID, slot: Int?)]) {
+        flushEditors()
+        // Notes leaving a slot first, so a note moving in never shares it.
+        for change in changes.sorted(by: { $0.slot == nil && $1.slot != nil }) { store.setSlot(change.slot, for: change.id) }
+        if let id = slotPane.noteID, let s = store.note(id)?.slot {
+            if openSlot != nil { openSlot = s }   // the slot pane follows its note to the new slot
+        } else if slotPane.noteID != nil {
+            slotPane.clear()
+            openSlot = nil
+        }
+        if let id = ephemeralPane.noteID, store.note(id)?.slot != nil { ephemeralPane.clear() }
+        if isSplit, board().isEmpty { Defaults[.shellKitSplit] = false }
+        // The split's slotted half never goes empty: it falls back to the first slot in use.
+        if isSplit, openSlot == nil, let first = board().occupants.keys.min(), let note = slotNote(first) {
+            openSlot = first
+            slotPane.show(note, locked: isLockedOut(note))
+        }
+    }
+
+    // MARK: - Preview and self-test hooks (`WindowPreview`)
+
+    var isSlotBarShown: Bool { slotsBar?.isShown ?? false }
+    var shownSlot: Int? { activeRole == .slot ? openSlot : nil }
+    var escapeMeansBack: Bool { escapeGoesBack }
+
+    /// Starts over on the notes now in the store, as a fresh launch would, without rebuilding the window.
+    func reloadForPreview() {
+        guard launched else { return }
+        ephemeralPane.clear()
+        slotPane.clear()
+        openSlot = nil
+        noteUndo.removeAllActions()
+        slotBarState = SlotBarVisibility(alwaysShow: Defaults[.alwaysShowSlotsBar])
+        restoreCurrentNote()
+        layoutPanes()
+    }
+
+    // MARK: - Slot bar
+
+    private func slotBar(_ event: SlotBarVisibility.Event) {
+        slotBarState.handle(event, at: Date())
+        applySlotBarVisibility()
+    }
+
+    /// Shows or hides the bar as the rules say now, and comes back when time alone would change that.
+    private func applySlotBarVisibility() {
+        guard slotsBar != nil else { return }
+        let now = Date()
+        slotsBar.isShown = slotBarState.isVisible(at: now)
+        slotBarWork?.cancel()
+        slotBarWork = nil
+        guard let next = slotBarState.nextChange(after: now) else { return }
+        let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { self?.applySlotBarVisibility() } }
+        slotBarWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(next.timeIntervalSince(now), 0.01), execute: work)
+    }
+
+    /// The pointer over the window (`point` in the content view, nil when it left): in the strip along the
+    /// bottom, on the revealed bottom bar or on the shown slot bar counts as the bar's zone. After a keystroke the
+    /// pointer must really move before it counts again, so a hand resting on the trackpad never flickers the bar.
+    private func pointerMoved(to point: NSPoint?) {
+        guard let point else { slotBar(.pointer(inZone: false)); return }
+        if let rest = pointerRest {
+            if hypot(point.x - rest.x, point.y - rest.y) < 4 { return }
+            pointerRest = nil
+        }
+        let strip = max(SlotBarVisibility.hoverZone, bottomBar.isRevealed ? Double(BottomBarView.height) : 0)
+        let inZone = Double(point.y) <= strip || (slotsBar.isShown && slotsBar.frame.contains(point))
+        slotBar(.pointer(inZone: inZone))
     }
 
     // MARK: - Split view
@@ -520,8 +723,11 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         refreshChrome()
     }
 
+    /// Puts the right pane(s) in the window: the deck pane, the slot pane, or the split. A pane already in place
+    /// stays put (its caret and scroll position with it).
     private func layoutPanes() {
         guard ephemeralPane != nil else { return }
+        if !isSplit, paneContainer.subviews.first === (openSlot != nil ? slotPane : ephemeralPane) { refreshChrome(); return }
         paneContainer.subviews.forEach { $0.removeFromSuperview() }
         let content: NSView
         if isSplit && openSlot != nil {
@@ -624,9 +830,12 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
-    private func focusActive() {
-        let p = pane(activeRole)
-        if !p.isShowingLock { p.editor.focus() }
+    private func focusActive() { focus(activeRole) }
+
+    /// Puts the caret in `role`'s note (when that pane is in the window and not behind its lock screen).
+    private func focus(_ role: Role) {
+        let p = pane(role)
+        if p.window != nil, !p.isShowingLock { p.editor.focus() }
     }
 
     private func focusMoved() {
@@ -643,14 +852,12 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
             bottomBar.isHidden = !showBar
             if !showBar { bottomBar.setRevealed(false, animated: false) }
         }
-        let b = board()
         var titles: [Int: String] = [:]
         for note in store.deck where note.slot != nil { titles[note.slot!] = note.isLocked ? "Locked note" : note.title }
         let role = activeRole
         slotsBar.update(titles: titles, open: role == .slot ? openSlot : nil, theme: theme)
-        let slotsInUse = !b.isEmpty || openSlot != nil
-        let showSlots = Defaults[.alwaysShowSlotsBar] || slotsBarFlash || (bottomBar.isRevealed && slotsInUse)
-        slotsBar.isShown = showSlots
+        if slotBarState.alwaysShow != Defaults[.alwaysShowSlotsBar] { slotBarState.handle(.alwaysShow(Defaults[.alwaysShowSlotsBar]), at: Date()) }
+        applySlotBarVisibility()
         slotsBarBottom.constant = bottomBar.isRevealed ? -BottomBarView.height : -SlotsBarView.bottomInset
         // An always-shown slot bar rests over the note: the end of a long note scrolls clear of it.
         let overlay = Defaults[.alwaysShowSlotsBar] ? SlotsBarView.height + SlotsBarView.bottomInset : 0
@@ -689,21 +896,6 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
     /// The latest-note dot: 5 pt in `accent1Main`, 16 pt in from the bottom-right corner.
     static let latestDotSize: CGFloat = 5
     static let latestDotInset: CGFloat = 16
-
-    /// Shows the slot bar for two seconds after a slot is used.
-    private func flashSlotsBar() {
-        slotsBarFade?.cancel()
-        slotsBarFlash = true
-        refreshChrome()
-        let work = DispatchWorkItem { [weak self] in
-            MainActor.assumeIsolated {
-                self?.slotsBarFlash = false
-                self?.refreshChrome()
-            }
-        }
-        slotsBarFade = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: work)
-    }
 
     private static let dateFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -902,12 +1094,21 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
     }
 
     @objc func goToDeck(_ sender: Any?) { showDeck() }
+    /// Esc's hidden twin of Back to Notes; `validateMenuItem` lets it fire only when Esc is free.
+    @objc func backToNotesEscape(_ sender: Any?) { showDeck() }
+    @objc func previousSlot(_ sender: Any?) { navigateSlots(.previous) }
+    @objc func nextSlot(_ sender: Any?) { navigateSlots(.next) }
     @objc func openSlotItem(_ sender: NSMenuItem) { openSlot(sender.tag) }
     @objc func assignSlotItem(_ sender: NSMenuItem) { assign(toSlot: sender.tag) }
+    /// The planet menu's Remove: whichever note is in that slot goes back to the deck.
+    @objc func clearSlotItem(_ sender: NSMenuItem) {
+        guard let note = slotNote(sender.tag) else { return }
+        removeFromSlot(id: note.id)
+    }
 
     @objc func removeFromSlot(_ sender: Any?) {
-        guard let id = currentNoteID, let slot = store.note(id)?.slot else { return }
-        assign(toSlot: slot)
+        guard let id = currentNoteID else { return }
+        removeFromSlot(id: id)
     }
 
     @objc func moveToVoid(_ sender: Any?) {
@@ -1053,9 +1254,12 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         case #selector(toggleLock(_:)), #selector(toggleReadOnly(_:)): return note != nil   // MenuState sets their titles
         case #selector(relockNotes(_:)): return !relock.unlocked.isEmpty
         case #selector(removeFromSlot(_:)): return note?.slot != nil
+        case #selector(clearSlotItem(_:)): return slotNote(item.tag) != nil
         case #selector(assignSlotItem(_:)): item.state = note?.slot == item.tag ? .on : .off; return note != nil
         case #selector(openSlotItem(_:)): item.state = activeRole == .slot && openSlot == item.tag ? .on : .off
         case #selector(goToDeck(_:)): item.state = activeRole == .ephemeral ? .on : .off
+        case #selector(backToNotesEscape(_:)): return escapeGoesBack
+        case #selector(previousSlot(_:)), #selector(nextSlot(_:)): return !board().isEmpty
         case #selector(editorCommand(_:)): return note != nil && !pane(activeRole).isShowingLock
         case #selector(moveToVoid(_:)), #selector(archiveNote(_:)), #selector(printNote(_:)),
              #selector(promoteToFront(_:)), #selector(quickExport(_:)), #selector(exportItem(_:)):

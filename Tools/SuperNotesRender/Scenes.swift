@@ -1,6 +1,7 @@
 import AppKit
 import SuperNotesCore
 import EditorKit
+import ExtensionsKit
 import ShellKit
 
 /// Every scene SuperNotesRender knows. Sizes are window content sizes in points.
@@ -19,6 +20,19 @@ enum Scenes {
         scenes.append(Scene(name: "editor-drop", size: window) { EditorPreview.dropOverlay(size: window) })
         scenes.append(Scene(name: "editor-autocomplete", size: window) { autocomplete() })
         scenes.append(Scene(name: "editor-autocomplete-dark", size: window, dark: true) { autocomplete() })
+        // The parameter hint over `::name(…)` while the caret is inside the parentheses (| marks the caret).
+        for (name, text, dark) in [("first", "Errands\nDentist on ::today(3|)", false),
+                                   ("second", "House\nPayments ::loan(300000, |)", false),
+                                   ("optional", "Dinner with Sam\n::tip(84.50, 20|)", false),
+                                   ("defaults", "Standup\nDue ::business_day(|)", false),
+                                   ("noargs", "Who starts?\n::coin(|)", false),
+                                   ("text", "Dinner\n::pick(pizza, sushi, |)", false),
+                                   ("long", "Savings\n::compound(10000, 5, 10, |)", false),
+                                   ("top", "::password(32, |)", false),
+                                   ("dark", "House\nPayments ::loan(300000, |)", true),
+                                   ("defaults-dark", "Standup\nDue ::business_day(|)", true)] {
+            scenes.append(Scene(name: "editor-paramhint-\(name)", size: window, dark: dark) { parameterHint(text) })
+        }
         // The "/" list hangs below the note window when it doesn't fit; these canvases are tall enough to show it.
         scenes.append(Scene(name: "editor-slash", size: slashCanvas) { slashList(query: "") })
         scenes.append(Scene(name: "editor-slash-dark", size: slashCanvas, dark: true) { slashList(query: "") })
@@ -94,6 +108,15 @@ enum Scenes {
                                         endingAt: NSPoint(x: 230, y: window.height - 300), in: view.bounds)
         view.addSubview(tip)
         return view
+    }
+
+    /// The bundled extensions' commands, as the app lists them.
+    static let commands = ExtensionsManager().commands
+
+    /// A note holding `text` with the caret at its "|", and the parameter hint it brings up.
+    static func parameterHint(_ text: String) -> NSView {
+        let caret = (text as NSString).range(of: "|").location
+        return EditorPreview.parameterHint(text.replacingOccurrences(of: "|", with: ""), caret: caret, commands: commands, size: window)
     }
 
     /// The `::` command list under a line ending in `::`.
@@ -255,7 +278,15 @@ extension Scenes {
                 // In the window: the slot bar always shown, resting over the note, the pointer on Aphrodite.
                 Scene(name: "window-slots-always", size: size) { alwaysShowingSlots { windowFrame(revealed: false, hoveredSlot: 1) } },
                 Scene(name: "window-slots-always-dark", size: size, dark: true) { alwaysShowingSlots { windowFrame(revealed: false, hoveredSlot: 6) } },
-                // Last: opening a slot changes the shared window's state.
+                // When the bar shows: hidden at rest with slots in use; hidden while typing even with always-show
+                // (the note keeps its reserved inset, nothing moves); up once the pointer has rested along the bottom.
+                Scene(name: "window-slots-rest", size: size) { windowFrame(revealed: false, slotBar: .hidden) },
+                Scene(name: "window-slots-typing", size: size) { alwaysShowingSlots { windowFrame(revealed: false, slotBar: .typing) } },
+                Scene(name: "window-slots-hover", size: size) { windowFrame(revealed: true, hoveredSlot: 4, slotBar: .hovering) },
+                Scene(name: "window-slots-hover-dark", size: size, dark: true) { windowFrame(revealed: true, hoveredSlot: 4, slotBar: .hovering) },
+                // Last: opening a slot changes the shared window's state ("Slot 2 · Aphrodite" above its planet).
+                Scene(name: "window-slot-open", size: size) { windowFrame(revealed: false, slot: 1) },
+                Scene(name: "window-slot-open-dark", size: size, dark: true) { windowFrame(revealed: false, slot: 1) },
                 Scene(name: "window-slot", size: size) { windowFrame(revealed: true, slot: 1) },
                 Scene(name: "window-slot-own-theme", size: size) { slottedThemeFrame() },
                 Scene(name: "window-locked", size: size) { lockedFrame() }]
@@ -282,8 +313,10 @@ extension Scenes {
     }
 
     /// Seeds a few notes (the demo math note in front, two slotted notes) and snapshots the window frame, showing
-    /// `slot` when given, at content `size` (the default when nil), the pointer on the slot bar's `hoveredSlot`.
-    private static func windowFrame(revealed: Bool, slot: Int? = nil, size: NSSize? = nil, hoveredSlot: Int? = nil) -> NSView {
+    /// `slot` when given, at content `size` (the default when nil), the pointer on the slot bar's `hoveredSlot`,
+    /// the slot bar as `slotBar` has it.
+    private static func windowFrame(revealed: Bool, slot: Int? = nil, size: NSSize? = nil, hoveredSlot: Int? = nil,
+                                    slotBar: WindowPreview.SlotBar = .natural) -> NSView {
         let store = Services.store!
         if store.deck.isEmpty {
             store.setSlot(1, for: store.create(content: "# Aphrodite\nSlot two.").id)
@@ -291,7 +324,7 @@ extension Scenes {
             store.create(content: Demo.notes[2].1)
             store.create(content: Demo.notes[0].1)
         }
-        return Render.drawn(WindowPreview.frameView(revealed: revealed, slot: slot, size: size, hoveredSlot: hoveredSlot))
+        return Render.drawn(WindowPreview.frameView(revealed: revealed, slot: slot, size: size, hoveredSlot: hoveredSlot, slotBar: slotBar))
     }
 
     /// Slot five with its own theme (Meadow) while ephemeral notes keep the default pair.

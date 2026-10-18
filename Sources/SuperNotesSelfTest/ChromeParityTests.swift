@@ -50,13 +50,17 @@ func registerChromeParityTests() {
     }))
 
     SelfTest.cases.append(("ShellKit.slotBarTip", {
-        check(SlotBarLayout.tip(slot: 1, title: "# Aphrodite", assignShortcut: "⌘⌃2") == "Slot 2 — Aphrodite",
-              "a slotted note's title, heading marks dropped")
-        check(SlotBarLayout.tip(slot: 0, title: "  ", assignShortcut: nil) == "Slot 1 — Untitled", "blank title")
-        check(SlotBarLayout.tip(slot: 6, title: nil, assignShortcut: "⌘⌃7") == "Slot 7 — empty\nClick or press ⌘⌃7 to put this note here",
+        check(SlotBarLayout.tip(slot: 1, title: "# Aphrodite", openShortcut: "⌘⌃2", assignShortcut: "⌘⌥2") == "Slot 2 — Aphrodite · ⌘⌃2",
+              "a slotted note's title, heading marks dropped, with its Go to Slot shortcut")
+        check(SlotBarLayout.tip(slot: 0, title: "  ", openShortcut: nil, assignShortcut: nil) == "Slot 1 — Untitled", "blank title, no shortcut")
+        check(SlotBarLayout.tip(slot: 1, title: "# Aphrodite", isOpen: true, openShortcut: "⌘⌃2", assignShortcut: nil)
+              == "Slot 2 — Aphrodite · open\nClick or press Esc to go back to your notes", "the open slot says how to get back")
+        check(SlotBarLayout.tip(slot: 6, title: nil, openShortcut: "⌘⌃7", assignShortcut: "⌘⌥7") == "Slot 7 — empty\nClick or press ⌘⌥7 to put this note here",
               "an empty slot says how to fill it, with the real shortcut")
-        check(SlotBarLayout.tip(slot: 6, title: nil, assignShortcut: nil) == "Slot 7 — empty\nClick to put this note here",
+        check(SlotBarLayout.tip(slot: 6, title: nil, openShortcut: nil, assignShortcut: nil) == "Slot 7 — empty\nClick to put this note here",
               "no shortcut bound: click only")
+        check(SlotBarLayout.label(slot: 2, title: "## Groceries ") == "Slot 3 · Groceries", "the opening label")
+        check(SlotBarLayout.cleanTitle("#") == "Untitled", "a bare heading mark is untitled")
     }))
 
     SelfTest.cases.append(("ShellKit.bottomBarFit", {

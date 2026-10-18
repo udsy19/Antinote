@@ -7,10 +7,15 @@ public enum WindowPreview {
     /// The main window's default content size.
     @MainActor public static var defaultSize: NSSize { MainWindow.defaultSize }
 
+    /// What the slot bar is doing in a render: as the shell's rules leave it, up because the pointer has rested
+    /// along the bottom, down because a keystroke just went into the note, or reset to its hidden start.
+    public enum SlotBar: Sendable { case natural, hovering, typing, hidden }
+
     /// The window's whole frame view (traffic lights included) at content `size` (the default when nil).
     /// `revealed` shows the hover-only bars; `hoveredSlot` rests the pointer on that planet of the slot bar.
-    @MainActor public static func frameView(revealed: Bool, slot: Int? = nil, size: NSSize? = nil, hoveredSlot: Int? = nil) -> NSView {
-        Shell.shared.prepareForPreview(revealed: revealed, slot: slot, size: size, hoveredSlot: hoveredSlot)
+    @MainActor public static func frameView(revealed: Bool, slot: Int? = nil, size: NSSize? = nil, hoveredSlot: Int? = nil,
+                                            slotBar: SlotBar = .natural) -> NSView {
+        Shell.shared.prepareForPreview(revealed: revealed, slot: slot, size: size, hoveredSlot: hoveredSlot, slotBar: slotBar)
     }
 
     /// The offscreen window itself (its first responder is the shown note's text view) and the note it shows,
@@ -21,6 +26,21 @@ public enum WindowPreview {
     @MainActor public static var mainMenu: NSMenu? { MainMenu.buildForPreview(); return MainMenu.built }
     /// File › Delete Note on the shown note (the confirmation is skipped when its warning is suppressed).
     @MainActor public static func deleteCurrentNote() { Shell.shared.moveToVoid(nil) }
+    /// Points the already-built window at the notes now in `Services.store` (self-tests that swap the store).
+    @MainActor public static func reload() { Shell.shared.reloadForPreview() }
+    /// Whether the slot bar is up right now.
+    @MainActor public static var isSlotBarShown: Bool { Shell.shared.isSlotBarShown }
+    /// The slot in front (nil = the deck).
+    @MainActor public static var openSlot: Int? { Shell.shared.shownSlot }
+    /// A swipe or ⌘[ / ⌘]: through the deck, or the slots in use while a slot is in front.
+    @MainActor public static func navigate(_ direction: SwipeDirection) { Shell.shared.navigate(direction) }
+    /// The Navigate menu's slot actions.
+    @MainActor public static func openSlot(_ slot: Int) { Shell.shared.openSlot(slot) }
+    @MainActor public static func backToNotes() { Shell.shared.goToDeck(nil) }
+    @MainActor public static func putInSlot(_ slot: Int) { Shell.shared.assign(toSlot: slot) }
+    @MainActor public static func removeFromSlot() { Shell.shared.removeFromSlot(nil) }
+    /// Whether Esc would go back to the deck right now (the hidden Esc menu item's validation).
+    @MainActor public static var escapeGoesBack: Bool { Shell.shared.escapeMeansBack }
 
     /// The slot bar alone on a strip of the note's background `width` wide: `titles[slot]` for the slots holding
     /// notes, `open` the slot shown, the pointer on `hovered` (its tip above the bar).

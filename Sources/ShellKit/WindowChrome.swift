@@ -462,13 +462,16 @@ final class BottomBarView: HoverBar {
 /// accent glow (Liquid Glass tinted with the background on macOS 26); the planets sit in their own layer above it
 /// so they stay crisp. The open slot is `accent1Main` in a 28 pt frame scaled 1.18; slots holding a note are
 /// filled, empty slots are faint outlines; the planet under the pointer darkens and a tip above it names the
-/// slot's note (or says how to fill it). A click opens the slot (or puts the current note in an empty one).
+/// slot's note (or says how to fill it). A click opens the slot (or puts the current note in an empty one); a
+/// right-click offers the slot's actions. When it shows is `SlotBarVisibility`'s call (fade 150 ms).
 final class SlotsBarView: NSView {
     static let height: CGFloat = 32
     static let bottomInset: CGFloat = 10
     static let openPlanetScale: CGFloat = 1.18
-    static let fadeDuration: TimeInterval = 0.6
+    static let fadeDuration: TimeInterval = SlotBarVisibility.fadeDuration
     var onSelect: ((Int) -> Void)?
+    /// The menu for a right-click on `slot`.
+    var contextMenu: ((Int) -> NSMenu?)?
     /// Called when the pointer comes onto the shown bar or leaves it (the bottom bar stays up meanwhile).
     var onHoverChange: ((Bool) -> Void)?
     /// Fades the bar in or out; a hidden bar lets clicks through to the note.
@@ -487,6 +490,9 @@ final class SlotsBarView: NSView {
     private let tip = SlotTipView()
     private(set) var hovered: Int?
     private var pointerOver = false
+    /// A label shown above a planet for a moment ("Slot 3 · Groceries" as it opens); the pointer's tip takes over.
+    private var announcement: (slot: Int, text: String)?
+    private var announceWork: DispatchWorkItem?
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -539,7 +545,26 @@ final class SlotsBarView: NSView {
         planets.open = open
         planets.theme = theme
         tip.theme = theme
-        if let hovered { showTip(for: hovered) }
+        if let shown = hovered ?? announcement?.slot { showTip(for: shown) }
+    }
+
+    /// Shows `text` above `slot`'s planet for `SlotBarVisibility.navigationLinger` (what just happened there), unless
+    /// the pointer is on a planet, whose tip comes first.
+    func announce(_ text: String, at slot: Int) {
+        announceWork?.cancel()
+        announcement = (slot, text)
+        if hovered == nil { showTip(for: slot) }
+        let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { self?.endAnnouncement() } }
+        announceWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + SlotBarVisibility.navigationLinger, execute: work)
+    }
+
+    private func endAnnouncement() {
+        announceWork?.cancel()
+        announceWork = nil
+        guard announcement != nil else { return }
+        announcement = nil
+        if let hovered { showTip(for: hovered) } else { tip.isHidden = true }
     }
 
     /// A window too narrow for the whole bar shrinks it evenly (its contents are laid out at full size in the
@@ -552,7 +577,7 @@ final class SlotsBarView: NSView {
         glass?.frame = bounds
         planets.frame = bounds
         super.layout()
-        if let hovered { showTip(for: hovered) }
+        if let shown = hovered ?? announcement?.slot { showTip(for: shown) }
     }
 
     // MARK: Pointer
@@ -579,6 +604,7 @@ final class SlotsBarView: NSView {
 
     private func pointerLeft() {
         setHovered(nil)
+        if !isShown { endAnnouncement() }
         guard pointerOver else { return }
         pointerOver = false
         onHoverChange?(false)
@@ -593,6 +619,12 @@ final class SlotsBarView: NSView {
         onSelect?(slot)
     }
 
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let p = convert(event.locationInWindow, from: nil)
+        guard isShown, bounds.contains(p), let slot = SlotBarLayout.slot(atX: Double(p.x), open: open) else { return nil }
+        return contextMenu?(slot)
+    }
+
     private func pointerMoved(_ event: NSEvent) {
         guard isShown else { return setHovered(nil) }
         let p = convert(event.locationInWindow, from: nil)
@@ -604,14 +636,20 @@ final class SlotsBarView: NSView {
         guard slot != hovered || (slot != nil && tip.isHidden) else { return }
         hovered = slot
         planets.hovered = slot
+        if slot != nil { announcement = nil; announceWork?.cancel() }
         if let slot { showTip(for: slot) } else { tip.isHidden = true }
     }
 
-    /// Puts the tip 6 pt above the hovered planet, inside the window.
+    /// Puts the tip (or the announcement) 6 pt above `slot`'s planet, inside the window.
     private func showTip(for slot: Int) {
         guard let container = superview else { return }
-        let assign = ChromeTooltip.shortcut(action: #selector(Shell.assignSlotItem(_:)), tag: slot)
-        tip.text = SlotBarLayout.tip(slot: slot, title: titles[slot], assignShortcut: assign)
+        if let announcement, announcement.slot == slot, hovered == nil {
+            tip.text = announcement.text
+        } else {
+            let opens = ChromeTooltip.shortcut(action: #selector(Shell.openSlotItem(_:)), tag: slot)
+            let assign = ChromeTooltip.shortcut(action: #selector(Shell.assignSlotItem(_:)), tag: slot)
+            tip.text = SlotBarLayout.tip(slot: slot, title: titles[slot], isOpen: slot == open, openShortcut: opens, assignShortcut: assign)
+        }
         let size = tip.fittingSize(maxWidth: container.bounds.width - 16)
         let column = convert(NSRect(x: SlotBarLayout.x(of: slot, open: open), y: 0,
                                     width: SlotBarLayout.frames(open: open)[slot], height: bounds.height), to: container)
@@ -686,6 +724,24 @@ private final class SlotTipView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
+/// The window's content view: it reports where the pointer is over the window (the slot bar comes up when the
+/// pointer rests along the bottom).
+final class RootView: NSView {
+    /// The pointer's position in this view's coordinates, nil once it has left the window.
+    var onPointer: ((NSPoint?) -> Void)?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect],
+                                       owner: self))
+    }
+
+    override func mouseEntered(with event: NSEvent) { onPointer?(convert(event.locationInWindow, from: nil)) }
+    override func mouseMoved(with event: NSEvent) { onPointer?(convert(event.locationInWindow, from: nil)) }
+    override func mouseExited(with event: NSEvent) { onPointer?(nil) }
+}
+
 /// One editor plus the lock screen that replaces it for locked notes.
 final class NotePane: NSView {
     let editor: NoteEditing
@@ -718,6 +774,23 @@ final class NotePane: NSView {
     }
 
     func clear() { noteID = nil }
+
+    /// The note's text view (the editor's scroll view's document).
+    var textView: NSTextView? {
+        editor.view.subviews.lazy.compactMap { $0 as? NSScrollView }.first?.documentView as? NSTextView
+    }
+
+    /// The caret (or selection), carried over when a note changes panes so it never jumps.
+    var selection: NSRange? {
+        get { textView?.selectedRange() }
+        set {
+            guard let newValue, let textView else { return }
+            let length = (textView.string as NSString).length
+            let location = min(newValue.location, length)
+            textView.setSelectedRange(NSRange(location: location, length: min(newValue.length, length - location)))
+            textView.scrollRangeToVisible(textView.selectedRange())
+        }
+    }
 
     func apply(theme: Theme) { lockView.apply(theme: theme) }
 

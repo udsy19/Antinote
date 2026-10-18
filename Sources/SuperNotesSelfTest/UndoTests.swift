@@ -5,76 +5,76 @@ import NoteEngine
 import ShellKit
 import StorageKit
 
+/// A store, an analyzer and an editor in a window that never comes on screen (shared with `SlotsTests`).
+@MainActor
+final class Bench {
+    let window: NSWindow
+    let editor: SuperNotesEditor
+    let tv: NSTextView
+    let store: SQLiteNoteStore
+    let dir: URL
+    let suite = "supernotes.selftest.undo.\(UUID().uuidString)"
+    let savedDefaults: UserDefaults
+
+    init() {
+        savedDefaults = Defaults.store
+        Defaults.store = UserDefaults(suiteName: suite)!
+        dir = FileManager.default.temporaryDirectory.appendingPathComponent("supernotes-undo-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        store = try! SQLiteNoteStore(url: dir.appendingPathComponent("notes.sqlite"),
+                                     backupsFolder: dir.appendingPathComponent("backups"))
+        Services.store = store
+        Services.analyzer = NoteEngine()
+        Services.editorFactory = SuperNotesEditorFactory()
+        editor = SuperNotesEditor()
+        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 480, height: 320), styleMask: [.titled],
+                          backing: .buffered, defer: false)
+        window.contentView = editor.view
+        editor.view.layoutSubtreeIfNeeded()
+        tv = editor.view.subviews.compactMap({ $0 as? NSScrollView }).first!.documentView as! NSTextView
+        window.makeFirstResponder(tv)
+    }
+
+    func load(_ content: String) -> Note {
+        let note = store.create(content: content)
+        editor.load(note)
+        return note
+    }
+
+    func type(_ s: String) { for ch in s { tv.insertText(String(ch), replacementRange: tv.selectedRange()) } }
+    func caret(_ at: Int) { tv.setSelectedRange(NSRange(location: at, length: 0)) }
+    /// Edit › Undo / Redo: nil-targeted actions that start at the window's first responder.
+    @discardableResult func undo() -> Bool { window.firstResponder?.tryToPerform(NSSelectorFromString("undo:"), with: nil) ?? false }
+    @discardableResult func redo() -> Bool { window.firstResponder?.tryToPerform(NSSelectorFromString("redo:"), with: nil) ?? false }
+    func key(_ chars: String, code: UInt16, flags: NSEvent.ModifierFlags = []) {
+        let e = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0, windowNumber: window.windowNumber,
+                                 context: nil, characters: chars, charactersIgnoringModifiers: chars, isARepeat: false, keyCode: code)!
+        tv.keyDown(with: e)
+    }
+    func spin(_ seconds: TimeInterval) { RunLoop.main.run(until: Date().addingTimeInterval(seconds)) }
+    var text: String { tv.string }
+    var selection: NSRange { tv.selectedRange() }
+    /// What the Edit menu would show: the item's title after the first responder validated it.
+    static func menuTitle(_ action: String, in window: NSWindow) -> String {
+        let item = NSMenuItem(title: "", action: NSSelectorFromString(action), keyEquivalent: "")
+        guard let target = window.firstResponder as? NSUserInterfaceValidations, target.validateUserInterfaceItem(item) else { return "" }
+        return item.title
+    }
+    var undoTitle: String { Self.menuTitle("undo:", in: window) }
+    var redoTitle: String { Self.menuTitle("redo:", in: window) }
+    var manager: UndoManager { editor.activeUndoManager }
+
+    func cleanup() {
+        Defaults.store = savedDefaults
+        UserDefaults().removePersistentDomain(forName: suite)
+        try? FileManager.default.removeItem(at: dir)
+    }
+}
+
 /// Undo and redo driven through the real editor offscreen: Edit › Undo / Redo sent down the responder chain of a
 /// window holding the editor (what ⌘Z, ⇧⌘Z and ⌘Y do), typing groups, every programmatic edit as one step that
 /// puts the selection back, one history per note, autosave, Vim's u / ⌃R and Undo Delete Note in the shell.
 func registerUndoTests() {
-    /// A store, an analyzer and an editor in a window that never comes on screen.
-    @MainActor
-    final class Bench {
-        let window: NSWindow
-        let editor: SuperNotesEditor
-        let tv: NSTextView
-        let store: SQLiteNoteStore
-        let dir: URL
-        let suite = "supernotes.selftest.undo.\(UUID().uuidString)"
-        let savedDefaults: UserDefaults
-
-        init() {
-            savedDefaults = Defaults.store
-            Defaults.store = UserDefaults(suiteName: suite)!
-            dir = FileManager.default.temporaryDirectory.appendingPathComponent("supernotes-undo-\(UUID().uuidString)")
-            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            store = try! SQLiteNoteStore(url: dir.appendingPathComponent("notes.sqlite"),
-                                         backupsFolder: dir.appendingPathComponent("backups"))
-            Services.store = store
-            Services.analyzer = NoteEngine()
-            Services.editorFactory = SuperNotesEditorFactory()
-            editor = SuperNotesEditor()
-            window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 480, height: 320), styleMask: [.titled],
-                              backing: .buffered, defer: false)
-            window.contentView = editor.view
-            editor.view.layoutSubtreeIfNeeded()
-            tv = editor.view.subviews.compactMap({ $0 as? NSScrollView }).first!.documentView as! NSTextView
-            window.makeFirstResponder(tv)
-        }
-
-        func load(_ content: String) -> Note {
-            let note = store.create(content: content)
-            editor.load(note)
-            return note
-        }
-
-        func type(_ s: String) { for ch in s { tv.insertText(String(ch), replacementRange: tv.selectedRange()) } }
-        func caret(_ at: Int) { tv.setSelectedRange(NSRange(location: at, length: 0)) }
-        /// Edit › Undo / Redo: nil-targeted actions that start at the window's first responder.
-        @discardableResult func undo() -> Bool { window.firstResponder?.tryToPerform(NSSelectorFromString("undo:"), with: nil) ?? false }
-        @discardableResult func redo() -> Bool { window.firstResponder?.tryToPerform(NSSelectorFromString("redo:"), with: nil) ?? false }
-        func key(_ chars: String, code: UInt16, flags: NSEvent.ModifierFlags = []) {
-            let e = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0, windowNumber: window.windowNumber,
-                                     context: nil, characters: chars, charactersIgnoringModifiers: chars, isARepeat: false, keyCode: code)!
-            tv.keyDown(with: e)
-        }
-        func spin(_ seconds: TimeInterval) { RunLoop.main.run(until: Date().addingTimeInterval(seconds)) }
-        var text: String { tv.string }
-        var selection: NSRange { tv.selectedRange() }
-        /// What the Edit menu would show: the item's title after the first responder validated it.
-        static func menuTitle(_ action: String, in window: NSWindow) -> String {
-            let item = NSMenuItem(title: "", action: NSSelectorFromString(action), keyEquivalent: "")
-            guard let target = window.firstResponder as? NSUserInterfaceValidations, target.validateUserInterfaceItem(item) else { return "" }
-            return item.title
-        }
-        var undoTitle: String { Self.menuTitle("undo:", in: window) }
-        var redoTitle: String { Self.menuTitle("redo:", in: window) }
-        var manager: UndoManager { editor.activeUndoManager }
-
-        func cleanup() {
-            Defaults.store = savedDefaults
-            UserDefaults().removePersistentDomain(forName: suite)
-            try? FileManager.default.removeItem(at: dir)
-        }
-    }
-
     SelfTest.cases.append(("EditorKit.typingCoalescing", {
         func extends(_ typed: String, _ caret: Int, _ old: String, _ new: String, after: TimeInterval = 0.1) -> Bool {
             TypingCoalescing.extends(typed: typed, caret: caret, old: old, new: new, elapsed: after)
