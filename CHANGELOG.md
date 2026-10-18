@@ -3,6 +3,32 @@
 All notable changes to Super Notes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Added
+- AI commands work out of the box: `::ask`, `::summarize`, `::rewrite` and `::translate` are answered on your Mac
+  by a small open model (Qwen3.5 2B, Q4_K_M, Apache-2.0, 1.28 GB) run with llama.cpp. Super Notes fetches it once
+  in the background a few minutes after launch — only on Wi-Fi or another unmetered connection, never in Low Power
+  Mode, only with 10 GB free, at low priority, resumed where it stopped and verified against its SHA-256 before it
+  is used. A command used before the model has arrived shows "Getting ready… 40%" in the note and runs on its own
+  when it has; when the download can't run it says so ("Try again when the download finishes"). Esc stops an answer
+  that is being written. The pill wraps and never widens the window.
+- Settings → AI: the engine (On-device model, Apple on-device model on macOS 26 — chosen for you where the Mac has
+  it — or an installed command-line tool), the model's state with size and progress, Download Now / Pause /
+  Remove / Re-download, and "Download models automatically" (on by default; also listed in Settings → Privacy with
+  its host, `huggingface.co`).
+- An optional engine that runs a command-line tool you installed and signed in to yourself (`codex`, `claude` or
+  `gemini`, found on your PATH or in the usual install folders) as a separate program in its non-interactive mode,
+  with a timeout; only when you pick it, labelled plainly with the tool's name. Super Notes never reads its sign-in.
+- Extensions can ask the chosen engine with `AI.complete(prompt, {system, maxTokens})` by declaring
+  `"usesAI": true` in their manifest; the permissions list says so.
+- The bundle embeds llama.cpp's framework in Contents/Frameworks, signed before the app that seals it.
+
+### Removed
+- The AI commands' provider list (OpenAI, Anthropic, Gemini, OpenRouter, Ollama), their API keys and their HTTP
+  calls. "Let extensions call their own APIs" stays for community extensions that need the network; the built-in
+  AI commands no longer need it.
+
 ## [1.3.4] — 2026-10-18
 
 ### Added

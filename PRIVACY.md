@@ -19,8 +19,9 @@ off, Super Notes works fully offline.
 |---|---|---|---|
 | Currency rates | **On** | `open.er-api.com` (fiat) and CoinGecko (crypto), at most once a day | A plain request for the latest rates. No note text, no identifiers. |
 | Install updates automatically | **On** | `api.github.com` for this project's latest release, every six hours while Super Notes runs and never more often than every four; `github.com` and GitHub's download servers only when a newer version exists | One anonymous HTTPS request with a `SuperNotes/<version>` User-Agent. No cookies, no note text, no identifiers. |
+| Download the AI model automatically | **On** | `huggingface.co`, once, for the 1.28 GB on-device model behind `::ask` (see below): a few minutes after launch, only on Wi-Fi or another unmetered connection, never in Low Power Mode, only with 10 GB free | One anonymous HTTPS download, resumed where it stopped. No note text, no identifiers. |
 | Extension updates | Off | `raw.githubusercontent.com`, for extensions you installed from GitHub | The extension's repository path |
-| Extension APIs | Off | Only the endpoints an extension declares in its manifest (for example the `llm` extension's OpenAI, Anthropic, Gemini, OpenRouter or local Ollama endpoint) | Whatever that command needs, such as the line you asked about. You choose the provider and supply your own API key. |
+| Extension APIs | Off | Only the endpoints a community extension declares in its manifest. The built-in AI commands don't use this. | Whatever that command needs, such as the line you asked about, with an API key you stored for that extension. |
 | Sync notes | Off | Your own iCloud Drive folder | Notes encrypted on this Mac with AES-GCM before they are written |
 | Sync preferences | Off | Your own iCloud Drive folder | Settings, keywords and themes, encrypted the same way |
 
@@ -46,6 +47,26 @@ lives in, it doesn't update itself.
 Turn off **Settings → Privacy → Install updates automatically** to stop the check and the downloads. You can still
 update with the one-line installer or the DMG.
 
+## AI commands
+
+`::ask`, `::summarize`, `::rewrite` and `::translate` work out of the box with no account and no API key. **Settings →
+AI** picks the engine:
+
+- **On-device model (default).** A small open model (Qwen3.5 2B, Q4_K_M, Apache-2.0; 1.28 GB) that Super Notes
+  downloads once from `huggingface.co` in the background and runs on your Mac with llama.cpp. The download is
+  verified against a SHA-256 before it is used, lands in `~/Library/Application Support/Super Notes/Models`, and
+  is the only network call involved. Prompts and notes never leave your Mac. Until the model has arrived a command
+  shows "Getting ready… 40%" and runs on its own when it has.
+- **Apple on-device model.** On macOS 26 with Apple Intelligence, Apple's own model, chosen for you where it is
+  present. Nothing leaves your Mac.
+- **Use an installed command-line tool.** Only if you pick it. Super Notes looks for a supported tool you installed
+  yourself (`codex`, `claude` or `gemini` on your PATH or in the usual install folders) and runs it as a separate
+  program in its documented non-interactive mode, with the prompt. Whatever you ask then goes wherever that tool
+  sends it, under the account you signed in with there. Super Notes never reads the tool's credential files, never
+  signs in for you, and shows the tool's name plainly in the picker.
+
+Esc stops an answer that is being written.
+
 ## What stays on your Mac
 
 | Data | Location |
@@ -54,6 +75,7 @@ update with the one-line installer or the DMG.
 | Automatic backups | `~/Library/Application Support/Super Notes/Backups` |
 | Extensions you installed | `~/Library/Application Support/Super Notes/Extensions` |
 | Custom themes | `~/Library/Application Support/Super Notes/Themes` |
+| The downloaded AI model | `~/Library/Application Support/Super Notes/Models` (Settings → AI removes it) |
 | Saved exchange rates | `~/Library/Application Support/Super Notes/exchange-rates.json` |
 | Settings | `~/Library/Preferences/com.udsy.supernotes.plist` |
 | Extension API keys and the sync encryption key | macOS Keychain |
@@ -66,7 +88,8 @@ run on-device using Apple's frameworks.
 Extensions are JavaScript that runs inside Super Notes, each in its own JavaScriptCore context. An extension can only
 reach the network when **Extension APIs** is on, only at the URLs its manifest declares, and only with an API key you
 granted to that extension. Keys are substituted outside the script, so the JavaScript never sees them. Each extension
-also declares how much of a note it can read (`none`, the current `line`, or the `full` note).
+also declares how much of a note it can read (`none`, the current `line`, or the `full` note), and whether it asks
+the AI engine (`usesAI`), which is what the bundled `llm` extension does instead of calling anyone itself.
 
 ## Sync
 

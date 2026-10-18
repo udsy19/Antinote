@@ -1,7 +1,8 @@
 # Architecture
 
 Super Notes is a native macOS scratchpad written in Swift (Swift 5 language mode), built with SwiftPM and Apple
-frameworks only — no third-party dependencies, no Xcode project. Deployment target: macOS 14.
+frameworks — the one outside dependency is llama.cpp's release xcframework (a SwiftPM binary target behind the AI
+commands), no Xcode project. Deployment target: macOS 14.
 
 ```
 Sources/
@@ -18,6 +19,9 @@ Sources/
   ToolsKit/       timers & pomodoro, export, URL scheme, command palette, The Void, search
   UpdateKit/      background updates from GitHub Releases: version check, SHA-256 and code-signature
                   verification, staging next to the app, swap on quit or while idle (see RELEASING.md)
+  AIKit/          the engines behind `::ask` & co (`Services.ai`): the on-device llama.cpp model with its
+                  background download (resumable, SHA-256 verified, network/power/disk guarded), Apple's
+                  on-device model on macOS 26, or an installed command-line tool run as a subprocess
   SuperNotes/     app target: wires modules together
   SuperNotesSelfTest/ headless logic tests (`swift run SuperNotesSelfTest`)
 ```

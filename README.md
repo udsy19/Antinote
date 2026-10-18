@@ -172,7 +172,7 @@ Type `::` anywhere for autocomplete, then press Return to run the command on tha
 | finance | `::loan`, `::tip`, `::percent_change`, `::compound` |
 | checklists | `::check_all`, `::uncheck_all`, `::remove_checked`, `::checked_to_bottom` |
 | templates | `::meeting`, `::standup`, `::journal` |
-| llm | `::ask`, `::summarize`, `::rewrite`, `::translate` with your own OpenAI, Anthropic, Gemini or OpenRouter key, or a local Ollama model |
+| llm | `::ask`, `::summarize`, `::rewrite`, `::translate` — answered on your Mac by a small model Super Notes downloads in the background (or Apple's on-device model on macOS 26, or a command-line tool you installed; **Settings → AI**). No account, no API key. |
 
 Extensions are folders with an `extension.json` and an `index.js`, run in their own JavaScriptCore context. Install
 more from GitHub in **Settings → Extensions**, or drop a folder into `~/Library/Application Support/Super Notes/Extensions`.

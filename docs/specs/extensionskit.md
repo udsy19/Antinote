@@ -28,7 +28,7 @@ Sources, in load order:
 ```json
 { "name": "date", "version": "1.0.0", "author": "Super Notes", "description": "…", "license": "MIT",
   "category": "Date & Time", "dataScope": "none", "dependencies": [], "endpoints": [],
-  "requiredAPIKeys": [], "files": ["index.js"], "isService": false }
+  "requiredAPIKeys": [], "files": ["index.js"], "isService": false, "usesAI": false }
 ```
 
 Validation errors (shown in the manager and the log, the extension is skipped):
@@ -65,7 +65,7 @@ union of the extension's and its dependencies' manifests.
 - Bridges: `console.log/info/warn/error` → `ExtensionLogger` (only when `Defaults[.extensionLogging]`; load
   failures are always logged); `__evaluateMathExpression` → `Services.analyzer.evaluate` via a main-thread hop;
   `getPreference(key)` and `getExtensionPreference(ext, key)` (own extension or a dependency only); `now()`
-  returns the manager's clock in milliseconds (tests inject a fixed date); `callAPI(…)`.
+  returns the manager's clock in milliseconds (tests inject a fixed date); `callAPI(…)`; `AI.complete(…)`.
 
 ### callAPI(apiKeyName, url, method, headers, body) → { success, status, data, error }
 
@@ -151,10 +151,23 @@ Parameter coercion happens in Swift before JS runs, with friendly errors:
 - Update check: refetch remote manifests of GitHub-installed extensions, compare versions numerically.
 - Remove: deletes a user extension folder (bundled ones can only be disabled).
 
+### AI.complete(prompt, {system, maxTokens}) → string
+
+Synchronous from JavaScript's view; the extension's queue waits while `Services.ai` (AIKit) answers on the main
+queue with the engine chosen in Settings → AI. Allowed only for an extension whose manifest says `"usesAI": true`;
+otherwise it throws ("This extension doesn't declare \"usesAI\": true in its extension.json"). It throws `Error("Stopped")`
+when the user pressed Esc, and the engine's reason otherwise. No network switch is involved: the on-device engines
+never leave the Mac, and the command-line engine is the user's own choice.
+
+Before an AI command's script runs, the manager asks the service's readiness: `.ready` runs it; `.preparing(text)`
+holds it with a status pill ("Getting ready… 40%", updated as the download moves) and runs it when the model
+lands (`run` returns an `ExtensionRun`; `cancel()` drops a held command with "Stopped"); `.unavailable(reason)`
+fails it with the reason. While the engine works the pill says "Thinking…".
+
 ## Bundled extensions (original code, MIT)
 
-date, lines, text, random, json, regex, finance, checklists, templates, llm (OpenAI, Anthropic, Gemini, OpenRouter,
-Ollama; provider and model in preferences; Ollama needs no key but still needs the APIs switch).
+date, lines, text, random, json, regex, finance, checklists, templates, llm (`::ask`, `::summarize`, `::rewrite`,
+`::translate` through `AI.complete`; instructions and answer length in preferences; no keys, no endpoints).
 
 ## Settings view
 
