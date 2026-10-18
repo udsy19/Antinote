@@ -7,6 +7,7 @@ import EditorKit
 import ShellKit
 import ToolsKit
 import UpdateKit
+import AIKit
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -16,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         StorageKitModule.install()
         NoteEngineModule.install()
         ExtensionsKitModule.install()
+        AIKitModule.install()
         EditorKitModule.install()
         ToolsKitModule.install()
         UpdateKitModule.install()

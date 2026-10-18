@@ -71,6 +71,7 @@ final class SettingsWindow: NSObject {
         case .timer: TimerSettings()
         case .export: ExportSettings()
         case .extensions: ExtensionsSettings()
+        case .ai: AISettings()
         case .privacy: PrivacySettings()
         case .updates: UpdatesSettings()
         }

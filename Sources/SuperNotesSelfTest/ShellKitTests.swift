@@ -112,6 +112,7 @@ func registerShellKitTests() {
         check(SettingsTab(routing: "nonsense") == nil, "unknown")
         check(SettingsTab.allCases.allSatisfy { SettingsTab(routing: $0.title) == $0 }, "every title routes to itself")
         check(SettingsTab.allCases.map(\.title) == ["General", "Appearance", "Editor", "Notes", "Keywords", "Shortcuts",
-                                                     "Timer", "Export", "Extensions", "Privacy", "Updates"], "eleven tabs in order")
+                                                     "Timer", "Export", "Extensions", "AI", "Privacy", "Updates"], "twelve tabs in order")
+        check(SettingsTab(routing: "model") == .ai && SettingsTab(routing: "AI") == .ai, "AI aliases")
     }))
 }

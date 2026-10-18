@@ -236,6 +236,15 @@ public extension Defaults.Keys {
     static let extensionsEnabled = Key<Bool>("extensionsEnabled", default: true)
     static let extensionLogging = Key<Bool>("extensionLogging", default: false)
 
+    // AI (Settings → AI)
+    /// The engine behind `::ask` and the other AI commands; nil picks for the user: Apple's on-device model where
+    /// the Mac has it, else the downloaded one.
+    static let aiEngine = Key<AIEngineKind?>("aiEngine", default: nil)
+    /// Fetch the on-device model in the background without asking (Settings → Privacy lists it as well).
+    static let aiAutoDownload = Key<Bool>("aiAutoDownload", default: true)
+    /// Path of the command-line tool the `commandLine` engine runs (empty: the first one found).
+    static let aiCommandLineTool = Key<String>("aiCommandLineTool", default: "")
+
     // Shortcuts
     /// Rebound menu shortcuts by menu item id (`MenuLogic.bindingID`); a nil value removes the item's shortcut.
     static let menuShortcuts = Key<[String: Shortcut?]>("menuShortcuts", default: [:])

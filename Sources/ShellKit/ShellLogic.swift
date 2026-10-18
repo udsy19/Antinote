@@ -448,7 +448,7 @@ public enum InactivityPolicy {
 
 /// The Settings window's toolbar tabs, in order.
 public enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
-    case general, appearance, editor, notes, keywords, shortcuts, timer, export, extensions, privacy, updates
+    case general, appearance, editor, notes, keywords, shortcuts, timer, export, extensions, ai, privacy, updates
 
     public var id: String { rawValue }
 
@@ -463,6 +463,7 @@ public enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
         case .timer: "Timer"
         case .export: "Export"
         case .extensions: "Extensions"
+        case .ai: "AI"
         case .privacy: "Privacy"
         case .updates: "Updates"
         }
@@ -479,6 +480,7 @@ public enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
         case .timer: "stopwatch"
         case .export: "square.and.arrow.up"
         case .extensions: "puzzlepiece.extension.fill"
+        case .ai: "sparkles"
         case .privacy: "eye.slash"
         case .updates: "arrow.down.circle"
         }
@@ -498,6 +500,7 @@ public enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
             "math": .keywords, "currency": .keywords, "currencies": .keywords, "keyword": .keywords,
             "keyboard": .shortcuts, "hotkey": .shortcuts, "keys": .shortcuts,
             "timers": .timer, "pomodoro": .timer, "extension": .extensions, "network": .privacy,
+            "model": .ai, "models": .ai, "llm": .ai, "assistant": .ai, "ask": .ai,
             "about": .updates, "version": .updates, "update": .updates,
         ]
         if let tab = SettingsTab.allCases.first(where: { $0.rawValue.lowercased() == key }) { self = tab; return }

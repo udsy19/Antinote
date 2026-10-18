@@ -7,6 +7,7 @@ public enum Log {
     public static let extensions = Logger(subsystem: SuperNotesPaths.bundleID, category: "extensions")
     public static let sync = Logger(subsystem: SuperNotesPaths.bundleID, category: "sync")
     public static let updates = Logger(subsystem: SuperNotesPaths.bundleID, category: "updates")
+    public static let ai = Logger(subsystem: SuperNotesPaths.bundleID, category: "ai")
 }
 
 // MARK: - Alerts & HUD

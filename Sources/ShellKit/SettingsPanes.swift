@@ -1152,6 +1152,21 @@ private struct ExtensionsHost: NSViewRepresentable {
     func updateNSView(_ view: NSView, context: Context) {}
 }
 
+// MARK: - AI
+
+/// Settings → AI is AIKit's own form (engine, model, download switch), hosted whole.
+struct AISettings: View {
+    var body: some View { AIHost().frame(maxWidth: .infinity, maxHeight: .infinity) }
+}
+
+private struct AIHost: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        if let ai = Services.ai { return ai.makeSettingsView() }
+        return NSTextField(labelWithString: "AI isn't available in this copy of Super Notes.")
+    }
+    func updateNSView(_ view: NSView, context: Context) {}
+}
+
 // MARK: - Privacy
 
 /// The reference's layout: a "Network access" header with Turn Everything Off, then one group per area (iCloud
@@ -1164,6 +1179,7 @@ struct PrivacySettings: View {
     @Default(.syncPreferences) private var syncPreferences
     @Default(.syncExtensions) private var syncExtensions
     @Default(.installUpdates) private var installUpdates
+    @Default(.aiAutoDownload) private var aiAutoDownload
 
     private struct Call: Identifiable {
         let title: String
@@ -1191,10 +1207,15 @@ struct PrivacySettings: View {
                  detail: "Checks GitHub every few hours and installs new versions in the background.",
                  endpoint: "api.github.com, github.com (release downloads)", isOn: $installUpdates),
          ]),
+         ("AI", "The one download behind the on-device AI commands. Prompts and notes never leave this Mac with the on-device engines.", [
+            Call(title: "Download the AI model automatically",
+                 detail: "Fetches the 1.3 GB on-device model once, a few minutes after launch, on Wi-Fi or another unmetered connection.",
+                 endpoint: "huggingface.co", isOn: $aiAutoDownload),
+         ]),
          ("Extensions", "Calls to find community extensions on GitHub, and the calls extensions make to their own services.", [
             Call(title: "Check GitHub for extension updates", detail: "Looks for new community extensions and updates.",
                  endpoint: "github.com, raw.githubusercontent.com", isOn: $extensionUpdates),
-            Call(title: "Let extensions call their own APIs", detail: "Some extensions send note text to an outside service.",
+            Call(title: "Let extensions call their own APIs", detail: "Some community extensions send note text to an outside service. The built-in AI commands don't need this.",
                  endpoint: "Only the web addresses each extension declares", isOn: $extensionAPIs),
          ])]
     }
@@ -1205,7 +1226,7 @@ struct PrivacySettings: View {
                 LabeledContent {
                     Button("Turn Everything Off") {
                         for key in [Defaults.Keys.allowCurrencyRates, .allowExtensionUpdates, .allowExtensionAPIs,
-                                    .syncNotes, .syncPreferences, .syncExtensions, .installUpdates] { Defaults[key] = false }
+                                    .syncNotes, .syncPreferences, .syncExtensions, .installUpdates, .aiAutoDownload] { Defaults[key] = false }
                     }
                 } label: {
                     Text("Network access")

@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 
 // MARK: - Extensions
 
@@ -134,6 +135,96 @@ public protocol ExtensionsServicing: AnyObject {
     func makeSettingsView() -> NSView
 }
 
+// MARK: - AI
+
+/// Which engine answers `::ask` and the other AI commands (Settings → AI).
+public enum AIEngineKind: String, Codable, CaseIterable, Sendable {
+    /// The downloaded llama.cpp model, run on this Mac.
+    case onDevice
+    /// Apple's on-device model (macOS 26 and later, where the Mac has it).
+    case apple
+    /// A command-line tool the user installed and signed in to, run as a subprocess.
+    case commandLine
+}
+
+/// Whether the chosen engine can answer right now.
+public enum AIReadiness: Equatable, Sendable {
+    case ready
+    /// The model is on its way; the text is the pill to show ("Getting ready… 40%"). Commands run when it lands.
+    case preparing(String)
+    /// Nothing will change on its own; the text says what to do.
+    case unavailable(String)
+}
+
+public struct AIRequest: Sendable, Equatable {
+    public var prompt: String
+    /// Standing instructions ("Answer in plain text").
+    public var system: String
+    public var maxTokens: Int
+
+    public init(prompt: String, system: String = "", maxTokens: Int = 1024) {
+        self.prompt = prompt; self.system = system; self.maxTokens = maxTokens
+    }
+}
+
+public enum AIError: Error, Equatable, LocalizedError, Sendable {
+    case cancelled
+    case unavailable(String)
+    case failed(String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .cancelled: "Stopped"
+        case .unavailable(let m), .failed(let m): m
+        }
+    }
+}
+
+/// An answer being generated; `cancel()` stops it and the completion reports `AIError.cancelled`.
+public final class AIGeneration: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cancelled = false
+    private var onCancel: (@Sendable () -> Void)?
+
+    public init() {}
+    public var isCancelled: Bool { lock.withLock { cancelled } }
+
+    public func cancel() {
+        let action: (@Sendable () -> Void)? = lock.withLock {
+            guard !cancelled else { return nil }
+            cancelled = true
+            defer { onCancel = nil }
+            return onCancel
+        }
+        action?()
+    }
+
+    /// Sets what `cancel()` does (called at once if the generation was already cancelled).
+    public func onCancel(_ action: @escaping @Sendable () -> Void) {
+        let now: Bool = lock.withLock {
+            if cancelled { return true }
+            onCancel = action
+            return false
+        }
+        if now { action() }
+    }
+}
+
+@MainActor
+public protocol AIServicing: AnyObject {
+    var readiness: AIReadiness { get }
+    /// Emits every change of `readiness` (on the main queue).
+    var readinessChanges: AnyPublisher<AIReadiness, Never> { get }
+    /// An AI command was just used: anything waiting for a quiet moment (the model download) starts now.
+    func noteUsed()
+    /// Answers `request` with the chosen engine. `onToken` gets each piece of the answer as it is generated and
+    /// `completion` the whole answer, both on the main queue.
+    func complete(_ request: AIRequest, onToken: @escaping @Sendable (String) -> Void,
+                  completion: @escaping @Sendable (Result<String, AIError>) -> Void) -> AIGeneration
+    /// Settings → AI.
+    func makeSettingsView() -> NSView
+}
+
 // MARK: - Other services
 
 @MainActor
@@ -228,6 +319,8 @@ public enum Services {
     public static var store: NoteStoring!
     public static var analyzer: NoteAnalyzing!
     public static var extensions: ExtensionsServicing!
+    /// The AI engines behind `::ask` and friends (nil in a tool that doesn't load AIKit).
+    public static var ai: AIServicing?
     public static var timers: TimerServicing!
     public static var sync: SyncServicing!
     public static var windows: WindowServicing!
@@ -247,6 +340,8 @@ public enum SuperNotesPaths {
     public static var backups: URL { ensure(support.appendingPathComponent("Backups", isDirectory: true)) }
     public static var extensions: URL { ensure(support.appendingPathComponent("Extensions", isDirectory: true)) }
     public static var themes: URL { ensure(support.appendingPathComponent("Themes", isDirectory: true)) }
+    /// Downloaded AI models (AIKit).
+    public static var models: URL { ensure(support.appendingPathComponent("Models", isDirectory: true)) }
     @discardableResult public static func ensure(_ url: URL) -> URL {
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url

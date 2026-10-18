@@ -5,6 +5,7 @@ import NoteEngine
 import EditorKit
 import ShellKit
 import ToolsKit
+import AIKit
 
 // Renders Super Notes' views offscreen to PNG files for visual checks. Nothing is ever shown on screen: windows are
 // created but never ordered front, and the app never runs or activates.
@@ -179,7 +180,12 @@ MainActor.assumeIsolated {
                                           backupsFolder: temp.appendingPathComponent("Backups"))
     Services.analyzer = NoteEngine(rates: { ExchangeRates(perUSD: ["EUR": 0.92, "CAD": 1.37, "JPY": 148.6, "GBP": 0.79]) })
     Services.editorFactory = SuperNotesEditorFactory()
+    // Settings → AI over an empty Models folder; nothing is downloaded (the service is never started).
+    let models = ModelDownloader(spec: ModelCatalog.default, folder: temp.appendingPathComponent("Models"),
+                                 conditions: { DownloadConditions(networkOK: true, lowPowerMode: false, freeDiskBytes: 100_000_000_000) })
+    Services.ai = AIService(downloader: models, tools: [])
 }
+
 
 // MARK: - Run
 
