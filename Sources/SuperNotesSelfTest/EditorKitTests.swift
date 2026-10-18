@@ -28,9 +28,11 @@ private final class RecordingExtensions: ExtensionsServicing {
     var runs: [(invocation: String, line: String)] = []
     init(_ commands: [ExtensionCommandInfo]) { self.commands = commands }
     func complete(_ prefix: String) -> [ExtensionCommandInfo] { commands.filter { $0.name.hasPrefix(prefix) } }
-    func run(invocation: String, line: String, note: String, completion: @escaping (ExtensionEdit) -> Void) {
+    func run(invocation: String, line: String, note: String, progress: @escaping (ExtensionProgress) -> Void,
+             completion: @escaping (ExtensionEdit) -> Void) -> ExtensionRun {
         runs.append((invocation, line))
         completion(.insert("RAN"))
+        return ExtensionRun()
     }
     func reload() {}
     func makeSettingsView() -> NSView { NSView() }

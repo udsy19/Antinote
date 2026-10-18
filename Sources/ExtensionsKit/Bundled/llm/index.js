@@ -1,106 +1,26 @@
 // Super Notes extension: llm (MIT)
-// Talks to the provider chosen in this extension's settings through callAPI. Keys come from the Keychain
-// (Settings → Extensions → API Keys); Ollama runs locally and needs no key, but every provider needs the
-// "Let extensions call their own APIs" privacy switch.
+// Asks the engine chosen in Settings → AI through AI.complete: the downloaded on-device model, Apple's on-device
+// model, or a command-line tool the user installed and signed in to. No keys, no endpoints, no network of its own.
 (function () {
-  var ext = new Extension({ name: "llm", version: "1.0.0", author: "Super Notes", category: "AI", dataScope: "full" });
-
-  var PROVIDERS = {
-    openai: { label: "OpenAI", key: "apikey_openai", model: "gpt-4o-mini", style: "chat",
-              url: function () { return "https://api.openai.com/v1/chat/completions"; } },
-    anthropic: { label: "Anthropic", key: "apikey_anthropic", model: "", style: "messages",
-                 url: function () { return "https://api.anthropic.com/v1/messages"; } },
-    gemini: { label: "Google Gemini", key: "apikey_google", model: "gemini-2.0-flash", style: "gemini",
-              url: function (model) { return "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent"; } },
-    openrouter: { label: "OpenRouter", key: "apikey_openrouter", model: "openrouter/auto", style: "chat",
-                  url: function () { return "https://openrouter.ai/api/v1/chat/completions"; } },
-    ollama: { label: "Ollama (local)", key: "", model: "llama3.2", style: "chat",
-              url: function () { return "http://localhost:11434/v1/chat/completions"; } }
-  };
+  var ext = new Extension({ name: "llm", version: "2.0.0", author: "Super Notes", category: "AI", dataScope: "full" });
 
   ext.register_preference(new Preference({
-    key: "provider", label: "Provider", type: "selectOne", defaultValue: "openai",
-    options: ["openai", "anthropic", "gemini", "openrouter", "ollama"],
-    helpText: "Where prompts are sent. Ollama runs on this Mac and needs no API key."
-  }));
-  ext.register_preference(new Preference({
-    key: "model", label: "Model", type: "string", defaultValue: "",
-    helpText: "Model id. Leave empty for the provider's default (Anthropic: the first model your key can use)."
-  }));
-  ext.register_preference(new Preference({
-    key: "systemPrompt", label: "System prompt", type: "paragraph",
+    key: "systemPrompt", label: "Instructions", type: "paragraph",
     defaultValue: "You are a concise assistant inside a plain-text scratchpad. Answer in plain text without Markdown.",
-    helpText: "Instructions sent with every request."
+    helpText: "Standing instructions sent with every request."
   }));
   ext.register_preference(new Preference({
-    key: "maxTokens", label: "Maximum response tokens", type: "string", defaultValue: "1024",
-    helpText: "Upper limit for the length of a response."
+    key: "maxTokens", label: "Maximum answer length (tokens)", type: "string", defaultValue: "1024",
+    helpText: "Upper limit for the length of an answer."
   }));
-
-  function provider() {
-    var id = getPreference("provider") || "openai";
-    var p = PROVIDERS[id];
-    if (!p) throw new Error("Unknown provider '" + id + "'. Choose one in the llm extension settings.");
-    return p;
-  }
-
-  function call(p, url, method, headers, body) {
-    var result = callAPI(p.key, url, method, JSON.stringify(headers), body === null ? null : JSON.stringify(body));
-    var data = null;
-    try { data = JSON.parse(result.data); } catch (e) { data = null; }
-    if (data && data.error) {
-      var err = data.error.message || data.error;
-      throw new Error(p.label + " error: " + (typeof err === "object" ? JSON.stringify(err) : err));
-    }
-    // Refused before any request was sent (no status): the reason says what to do on its own.
-    if (!result.success && result.status === undefined) throw new Error(result.error || "The request was refused");
-    if (!result.success) throw new Error(p.label + " request failed: " + (result.error || "unknown error"));
-    if (!data) throw new Error("Could not read the response from " + p.label);
-    return data;
-  }
-
-  function authHeaders(p) {
-    if (p.style === "messages") return { "x-api-key": "{{API_KEY}}", "anthropic-version": "2023-06-01", "Content-Type": "application/json" };
-    if (p.style === "gemini") return { "x-goog-api-key": "{{API_KEY}}", "Content-Type": "application/json" };
-    return p.key ? { "Authorization": "Bearer {{API_KEY}}", "Content-Type": "application/json" } : { "Content-Type": "application/json" };
-  }
-
-  function model(p) {
-    var chosen = (getPreference("model") || "").trim();
-    if (chosen) return chosen;
-    if (p.model) return p.model;
-    // Anthropic: ask the API which models this key can use and take the first (newest) one.
-    var list = call(p, "https://api.anthropic.com/v1/models?limit=1", "GET", authHeaders(p), null);
-    if (list.data && list.data.length) return list.data[0].id;
-    throw new Error("No " + p.label + " model available. Set one in the llm extension settings.");
-  }
 
   function complete(prompt) {
-    var p = provider(), m = model(p);
-    var system = getPreference("systemPrompt") || "";
-    var maxTokens = parseInt(getPreference("maxTokens"), 10) || 1024;
-    var data, text;
-    if (p.style === "messages") {
-      data = call(p, p.url(m), "POST", authHeaders(p),
-                  { model: m, max_tokens: maxTokens, system: system, messages: [{ role: "user", content: prompt }] });
-      text = (data.content || []).filter(function (c) { return c.type === "text"; }).map(function (c) { return c.text; }).join("");
-    } else if (p.style === "gemini") {
-      data = call(p, p.url(m), "POST", authHeaders(p), {
-        systemInstruction: { parts: [{ text: system }] },
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: maxTokens }
-      });
-      var cand = data.candidates && data.candidates[0];
-      text = cand && cand.content ? cand.content.parts.map(function (x) { return x.text || ""; }).join("") : "";
-    } else {
-      data = call(p, p.url(m), "POST", authHeaders(p), {
-        model: m, max_tokens: maxTokens,
-        messages: [{ role: "system", content: system }, { role: "user", content: prompt }]
-      });
-      text = data.choices && data.choices[0] && data.choices[0].message ? data.choices[0].message.content : "";
-    }
+    var text = AI.complete(prompt, {
+      system: getPreference("systemPrompt") || "",
+      maxTokens: parseInt(getPreference("maxTokens"), 10) || 1024
+    });
     text = (text || "").trim();
-    if (!text) throw new Error(p.label + " returned an empty response");
+    if (!text) throw new Error("The model returned an empty answer");
     return text;
   }
 
@@ -111,9 +31,9 @@
       execute: function (payload) {
         try {
           var prompt = def.prompt(this.getParsedParams(payload), payload);
-          return new ReturnObject({ status: "success", message: "Response received", payload: complete(prompt) });
+          return new ReturnObject({ status: "success", message: "Answer received", payload: complete(prompt) });
         } catch (e) {
-          console.error(def.name + ": " + e.message);
+          if (e.message !== "Stopped") console.error(def.name + ": " + e.message);
           return new ReturnObject({ status: "error", message: e.message });
         }
       }

@@ -1,7 +1,7 @@
 /// The JavaScript globals every extension context starts with. Same API shape as the original extension format
 /// (config-object and positional constructors), implemented from scratch. Native bridges (`__nativeLog`,
-/// `__evaluateMathExpression`, `getPreference`, `getExtensionPreference`, `callAPI`, `now`) are installed by
-/// `ExtensionRuntime` before this script runs.
+/// `__evaluateMathExpression`, `getPreference`, `getExtensionPreference`, `callAPI`, `__aiComplete`, `now`) are
+/// installed by `ExtensionRuntime` before this script runs.
 enum BaseLibrary {
     static let source = #"""
 var global = this;
@@ -149,6 +149,18 @@ var MathEvaluator = {
   }
 };
 global.MathEvaluator = MathEvaluator;
+
+// The AI engine chosen in Settings → AI (an extension declares "usesAI": true in its manifest). Synchronous from
+// JavaScript's view: the answer comes back as a string, or an Error says why there is none ("Stopped" when the
+// user pressed Esc).
+var AI = {
+  complete: function (prompt, options) {
+    var r = __aiComplete(String(prompt), options ? JSON.stringify(options) : null);
+    if (!r || !r.success) throw new Error((r && r.error) || "AI isn't available");
+    return r.text;
+  }
+};
+global.AI = AI;
 
 // Called by the host. Returns a JSON string {status, message, payload}.
 function __superNotesRun(extensionName, commandName, payloadJSON) {

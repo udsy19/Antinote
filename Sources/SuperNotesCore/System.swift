@@ -170,6 +170,13 @@ public final class PillView: NSView {
         DispatchQueue.main.asyncAfter(deadline: .now() + (duration ?? Self.duration(for: text)), execute: work)
     }
 
+    /// Takes the pill down now (a held status whose command has finished).
+    public func hide() {
+        hideWork?.cancel()
+        hideWork = nil
+        NSAnimationContext.runAnimationGroup { $0.duration = 0.2; animator().alphaValue = 0 }
+    }
+
     /// Clicks go through to what's under it; a cut-short message takes the pointer while shown, for its tooltip.
     public override func hitTest(_ point: NSPoint) -> NSView? {
         toolTip != nil && alphaValue > 0.01 && frame.contains(point) ? self : nil

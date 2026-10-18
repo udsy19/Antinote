@@ -27,8 +27,11 @@ public struct ExtensionManifest: Codable, Sendable, Equatable {
     public var requiredAPIKeys: [String]?
     public var files: [String]?
     public var isService: Bool?
+    /// The extension calls `AI.complete` (the engine chosen in Settings → AI).
+    public var usesAI: Bool?
 
     public var scope: DataScope { dataScope ?? .full }
+    public var needsAI: Bool { usesAI ?? false }
     public var dependencyNames: [String] { dependencies ?? [] }
     public var endpointList: [String] { endpoints ?? [] }
     public var keyIDs: [String] { (requiredAPIKeys ?? []).map(APIKeyID.normalize) }

@@ -167,8 +167,11 @@ private struct ExtensionDetail: View {
 
                 section("Extension Permissions") {
                     Label(ext.manifest.scope.explanation, systemImage: ext.manifest.scope == .none ? "lock" : "doc.text")
+                    if ext.manifest.needsAI {
+                        Label("Asks the AI engine chosen in Settings → AI", systemImage: "sparkles")
+                    }
                     if ext.manifest.endpointList.isEmpty {
-                        Label("Makes no network calls", systemImage: "network.slash")
+                        Label("Makes no network calls of its own", systemImage: "network.slash")
                     } else {
                         ForEach(ext.manifest.endpointList, id: \.self) { Label($0, systemImage: "network").font(.callout.monospaced()) }
                     }

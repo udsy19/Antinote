@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 import SuperNotesCore
 
@@ -112,7 +113,7 @@ public final class ExtensionsManager: ObservableObject, ExtensionsServicing {
                     }
                 }
                 let policy = NetworkPolicy(endpoints: ([name] + deps).flatMap { candidates[$0]!.manifest.endpointList },
-                                           keyOwners: [name] + deps)
+                                           keyOwners: [name] + deps, usesAI: candidate.manifest.needsAI)
                 let clock = self.clock
                 let (runtime, registered) = try ExtensionRuntime.load(name: name, scripts: scripts, policy: policy,
                                                                      clock: { clock.now() })
@@ -194,22 +195,31 @@ public final class ExtensionsManager: ObservableObject, ExtensionsServicing {
         return nil
     }
 
-    public func run(invocation: String, line: String, note: String, completion: @escaping (ExtensionEdit) -> Void) {
+    @discardableResult
+    public func run(invocation: String, line: String, note: String, progress: @escaping (ExtensionProgress) -> Void,
+                    completion: @escaping (ExtensionEdit) -> Void) -> ExtensionRun {
+        let run = ExtensionRun()
         guard Defaults[.extensionsEnabled] else {
-            return completion(.failure("Extensions are turned off. Turn them on in Settings → Extensions."))
+            completion(.failure("Extensions are turned off. Turn them on in Settings → Extensions."))
+            return run
         }
         let parsed: ExtensionInvocation
         do { parsed = try ExtensionInvocation.parse(invocation) } catch {
-            return completion(.failure(error.localizedDescription))
+            completion(.failure(error.localizedDescription))
+            return run
         }
-        guard let (ext, spec) = resolve(parsed.name) else { return completion(.failure("Unknown command ::\(parsed.name)")) }
+        guard let (ext, spec) = resolve(parsed.name) else {
+            completion(.failure("Unknown command ::\(parsed.name)"))
+            return run
+        }
         let values: [JSONValue]
         do {
             values = try parsed.coerced(for: spec) { expression in
                 Services.analyzer.map { $0.evaluate(expression) } ?? .failure(ExtensionError.script("Math is unavailable"))
             }
         } catch {
-            return completion(.failure(error.localizedDescription))
+            completion(.failure(error.localizedDescription))
+            return run
         }
         let scope = ext.manifest.scope
         let text = ScopedText(invocation: invocation.trimmingCharacters(in: .whitespacesAndNewlines), line: line, note: note, scope: scope)
@@ -217,10 +227,73 @@ public final class ExtensionsManager: ObservableObject, ExtensionsServicing {
             "parameters": values.map(\.foundation), "line": text.line, "fullText": text.fullText,
             "command": spec.name, "dataScope": scope.rawValue,
         ]
+        // An AI command waits for the model when it is still on its way, and says what to do when it isn't coming.
+        if ext.manifest.needsAI, let ai = Services.ai {
+            ai.noteUsed()
+            switch ai.readiness {
+            case .ready: break
+            case .unavailable(let reason):
+                completion(.failure(reason))
+                return run
+            case .preparing(let status):
+                progress(.status(status))
+                waiting.append(Waiting(run: run, progress: progress, completion: completion) { [weak self] in
+                    self?.execute(ext, spec, payload: payload, run: run, progress: progress, completion: completion)
+                })
+                watchReadiness(ai)
+                run.whenCancelled { [weak self] in
+                    DispatchQueue.main.async {
+                        MainActor.assumeIsolated {
+                            guard let self, let index = self.waiting.firstIndex(where: { $0.run === run }) else { return }
+                            self.waiting.remove(at: index)
+                            completion(.message("Stopped"))
+                        }
+                    }
+                }
+                return run
+            }
+        }
+        execute(ext, spec, payload: payload, run: run, progress: progress, completion: completion)
+        return run
+    }
+
+    private func execute(_ ext: Installed, _ spec: CommandSpec, payload: [String: Any], run: ExtensionRun,
+                         progress: @escaping (ExtensionProgress) -> Void, completion: @escaping (ExtensionEdit) -> Void) {
         let type = spec.type
         nonisolated(unsafe) let deliver = completion
-        ext.runtime.execute(command: spec.name, extensionName: ext.manifest.name, payload: payload) { result in
-            MainActor.assumeIsolated { deliver(Self.edit(for: result, type: type)) }
+        nonisolated(unsafe) let report = progress
+        ext.runtime.execute(command: spec.name, extensionName: ext.manifest.name, payload: payload, run: run,
+                            progress: { status in DispatchQueue.main.async { MainActor.assumeIsolated { report(status) } } }) { result in
+            MainActor.assumeIsolated { deliver(run.isCancelled ? .message("Stopped") : Self.edit(for: result, type: type)) }
+        }
+    }
+
+    /// A command held back until the AI model is ready.
+    private struct Waiting {
+        let run: ExtensionRun
+        let progress: (ExtensionProgress) -> Void
+        let completion: (ExtensionEdit) -> Void
+        let start: () -> Void
+    }
+    private var waiting: [Waiting] = []
+    private var readinessWatch: AnyCancellable?
+
+    private func watchReadiness(_ ai: AIServicing) {
+        guard readinessWatch == nil else { return }
+        // Every change is answered with the readiness as it is now, so a change in flight can't act on stale news.
+        readinessWatch = ai.readinessChanges.receive(on: DispatchQueue.main).sink { [weak self, weak ai] _ in
+            guard let self, let ai, !self.waiting.isEmpty else { return }
+            switch ai.readiness {
+            case .preparing(let status): for item in self.waiting { item.progress(.status(status)) }
+            case .ready:
+                let due = self.waiting
+                self.waiting.removeAll()
+                for item in due { item.start() }
+            case .unavailable(let reason):
+                let due = self.waiting
+                self.waiting.removeAll()
+                for item in due { item.completion(.failure(reason)) }
+            }
         }
     }
 

@@ -1,12 +1,11 @@
 {
   "name": "llm",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "author": "Super Notes",
-  "description": "Ask, summarize, rewrite and translate with OpenAI, Anthropic, Google Gemini, OpenRouter or a local Ollama model.",
+  "description": "Ask, summarize, rewrite and translate with the AI engine chosen in Settings → AI: the on-device model, Apple's on-device model, or a command-line tool you installed.",
   "license": "MIT",
   "category": "AI",
   "dataScope": "full",
   "dependencies": [],
-  "endpoints": ["https://api.openai.com/v1/chat/completions", "https://api.anthropic.com/v1/messages", "https://generativelanguage.googleapis.com/v1beta/models/", "https://openrouter.ai/api/v1/chat/completions", "http://localhost:11434/v1/chat/completions"],
-  "requiredAPIKeys": ["apikey_openai", "apikey_anthropic", "apikey_google", "apikey_openrouter"]
+  "usesAI": true
 }

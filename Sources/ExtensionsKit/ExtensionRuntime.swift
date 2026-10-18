@@ -26,13 +26,17 @@ struct CommandResult: Sendable, Equatable {
     var payload: String
 }
 
-/// Who may call what: the extension's (and its dependencies') declared endpoints and key grants.
+/// Who may call what: the extension's (and its dependencies') declared endpoints and key grants, and whether
+/// `AI.complete` is declared.
 public struct NetworkPolicy: Sendable {
     public var endpoints: [String]
     /// The extension and its dependencies; a key granted to any of them may be used.
     public var keyOwners: [String]
+    public var usesAI: Bool
 
-    public init(endpoints: [String], keyOwners: [String]) { self.endpoints = endpoints; self.keyOwners = keyOwners }
+    public init(endpoints: [String], keyOwners: [String], usesAI: Bool = false) {
+        self.endpoints = endpoints; self.keyOwners = keyOwners; self.usesAI = usesAI
+    }
 
     /// Returns the key secret to substitute (nil when no key is needed), or a user-facing reason for refusing.
     public func authorize(keyName: String, url: String) -> Result<String?, ExtensionError> {
@@ -72,7 +76,11 @@ final class ExtensionRuntime: @unchecked Sendable {
     private var loading = true
     /// Extension name → preference key → default (filled after loading).
     private var preferenceDefaults: [String: [String: JSONValue]] = [:]
+    /// The command being run on the queue, for `AI.complete`'s cancellation and status pill.
+    private var current: (run: ExtensionRun, progress: @Sendable (ExtensionProgress) -> Void)?
     static let requestTimeout: TimeInterval = 60
+    /// How long `AI.complete` waits for an answer (a long note on a slow Mac takes a while).
+    static let aiTimeout: TimeInterval = 10 * 60
 
     private init(name: String, policy: NetworkPolicy, clock: @escaping @Sendable () -> Date) {
         self.name = name
@@ -172,9 +180,13 @@ final class ExtensionRuntime: @unchecked Sendable {
             guard let self else { return ["success": false, "error": "Extension unloaded"] }
             return self.callAPI(keyName: key, url: url, method: method, headers: headers, body: body)
         }
+        let aiComplete: @convention(block) (String, JSValue?) -> [String: Any] = { [weak self] prompt, options in
+            guard let self else { return ["success": false, "error": "Extension unloaded"] }
+            return self.aiComplete(prompt: prompt, options: options)
+        }
         let bridges: [String: Any] = [
             "__nativeLog": log, "__evaluateMathExpression": math, "now": now, "getPreference": getPreference,
-            "getExtensionPreference": getExtensionPreference, "callAPI": callAPI,
+            "getExtensionPreference": getExtensionPreference, "callAPI": callAPI, "__aiComplete": aiComplete,
         ]
         for (key, block) in bridges { context.setObject(block, forKeyedSubscript: key as NSString) }
     }
@@ -239,6 +251,51 @@ final class ExtensionRuntime: @unchecked Sendable {
         var data: Data?; var status = 0; var error: Error?
     }
 
+    /// `AI.complete(prompt, {system, maxTokens})`: asks `Services.ai` on the main queue and waits for the answer
+    /// while the extension's queue holds. The command's run cancels the generation; "Thinking…" shows meanwhile.
+    private func aiComplete(prompt: String, options: JSValue?) -> [String: Any] {
+        guard policy.usesAI else {
+            return ["success": false, "error": "This extension doesn't declare \"usesAI\": true in its extension.json"]
+        }
+        guard let current else { return ["success": false, "error": "AI.complete can only be called while a command runs"] }
+        if current.run.isCancelled { return ["success": false, "cancelled": true, "error": "Stopped"] }
+        let opts = Self.dictionary(options)
+        let request = AIRequest(prompt: prompt, system: opts["system"] as? String ?? "",
+                                maxTokens: (opts["maxTokens"] as? NSNumber)?.intValue ?? 1024)
+        let done = DispatchSemaphore(value: 0)
+        let box = AIBox()
+        let run = current.run, progress = current.progress
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated {
+                guard let ai = Services.ai else {
+                    box.result = .failure(.unavailable("AI isn't available in this copy of Super Notes"))
+                    done.signal()
+                    return
+                }
+                progress(.status("Thinking…"))
+                let generation = ai.complete(request, onToken: { _ in }) { result in
+                    box.result = result
+                    done.signal()
+                }
+                run.whenCancelled { generation.cancel() }
+            }
+        }
+        guard done.wait(timeout: .now() + Self.aiTimeout) == .success else {
+            run.cancel()
+            return ["success": false, "error": "The answer took longer than \(Int(Self.aiTimeout / 60)) minutes"]
+        }
+        switch box.result {
+        case .success(let text)?: return ["success": true, "text": text]
+        case .failure(.cancelled)?: return ["success": false, "cancelled": true, "error": "Stopped"]
+        case .failure(let error)?: return ["success": false, "error": error.localizedDescription]
+        case nil: return ["success": false, "error": "No answer"]
+        }
+    }
+
+    private final class AIBox: @unchecked Sendable {
+        var result: Result<String, AIError>?
+    }
+
     private static func dictionary(_ value: JSValue?) -> [String: Any] {
         guard let value, !value.isUndefined, !value.isNull else { return [:] }
         if value.isString {
@@ -250,12 +307,16 @@ final class ExtensionRuntime: @unchecked Sendable {
 
     // MARK: Execution
 
-    /// Runs a command on the extension's queue; `completion` is called on the main queue.
-    func execute(command: String, extensionName: String, payload: [String: Any],
+    /// Runs a command on the extension's queue; `completion` is called on the main queue. `run` lets the caller
+    /// cancel what the command waits on (an AI answer) and `progress` carries its status pill.
+    func execute(command: String, extensionName: String, payload: [String: Any], run: ExtensionRun,
+                 progress: @escaping @Sendable (ExtensionProgress) -> Void,
                  completion: @escaping @Sendable (CommandResult) -> Void) {
         let payloadJSON = (try? JSONSerialization.data(withJSONObject: payload)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
         queue.async { [self] in
+            current = (run, progress)
             let result = self.runNow(command: command, extensionName: extensionName, payloadJSON: payloadJSON)
+            current = nil
             DispatchQueue.main.async { completion(result) }
         }
     }

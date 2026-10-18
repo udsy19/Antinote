@@ -1115,6 +1115,7 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
             }
         }
         if event.keyCode == 53, autoPaste.isRunning { stopAutoPaste(announce: true); return true }
+        if event.keyCode == 53, let run = activeRun { run.cancel(); return true }
         guard Defaults[.vimMode], !mods.contains(.command) else { return false }
         guard let key = vimKey(event, mods: mods) else {
             // Normal/Visual: navigation keys work, anything else that would type is swallowed.
@@ -1560,12 +1561,35 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
         return true
     }
 
-    /// Runs `invocation`; its result replaces the `written` text nearest `location`.
+    /// Runs `invocation`; its result replaces the `written` text nearest `location`. A status pill ("Getting
+    /// ready… 40%", "Thinking…") stays up while the command works, and Esc stops it.
     private func run(_ ext: ExtensionsServicing, _ invocation: String, line: String, note: String, written: String, at location: Int) {
-        ext.run(invocation: invocation, line: line, note: note) { [weak self] edit in
-            Task { @MainActor in self?.applyExtensionEdit(edit, invocation: written, near: location) }
+        activeRun?.cancel()
+        var run: ExtensionRun?
+        run = ext.run(invocation: invocation, line: line, note: note, progress: { [weak self] progress in
+            guard let self, self.activeRun === run else { return }
+            if case .status(let text) = progress { self.hold(text) }
+        }) { [weak self] edit in
+            Task { @MainActor in
+                guard let self else { return }
+                if self.activeRun === run { self.activeRun = nil; self.pill.hide() }
+                self.applyExtensionEdit(edit, invocation: written, near: location)
+            }
         }
+        if activeRun == nil { activeRun = run }
     }
+
+    /// The `::` command in flight, if any (Esc cancels it).
+    private var activeRun: ExtensionRun?
+
+    /// Shows `text` in the pill and keeps it there (a status that lasts as long as the command).
+    private func hold(_ text: String) {
+        pill.maxWidth = pillWidth
+        pill.configure(text, kind: .info, theme: theme)
+        placePill()
+        pill.show(text, kind: .info, theme: theme, duration: 3600)
+    }
+
 
     private func applyExtensionEdit(_ edit: ExtensionEdit, invocation: String, near location: Int) {
         let s = textView.string as NSString
@@ -1604,14 +1628,20 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
     public func toast(_ message: String, kind: PillKind = .info) {
         pill.maxWidth = pillWidth
         pill.configure(message, kind: kind, theme: theme)
+        placePill()
+        pill.show(message, kind: kind, theme: theme)
+    }
+
+    /// The pill sits low, or at the top while the caret's line would be under it.
+    private func placePill() {
         let caret = textView.convert(textView.rect(for: textView.selectedRange()), to: view)
         let low = caret.minY < PillView.bottomInset + pill.fittingSize.height + 8
         if pillAtBottom.isActive == low {
             pillAtBottom.isActive = !low
             pillAtTop.isActive = low
         }
-        pill.show(message, kind: kind, theme: theme)
     }
+
 
     /// The pill wraps at the text column: at least 160 pt, at most 80% of the note.
     private var pillWidth: CGFloat {

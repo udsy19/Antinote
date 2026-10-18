@@ -341,19 +341,14 @@ private func bundledCommandTests() {
     check(payload(run(m, "::standup"))?.hasPrefix("Standup — October 16, 2026\n\nYesterday:") == true, "standup")
     check(payload(run(m, "::journal"))?.hasPrefix("Journal — Friday, October 16, 2026") == true, "journal")
 
-    // llm: no network without the privacy switch, and keys must be granted
-    if case .failure(let message)? = run(m, "::ask(Hello there)") { check(message == "Turn on “Let extensions call their own APIs” in Settings → Privacy.",
-                                                                      "llm blocked by privacy switch, the reason as is: \(message)") }
-    else { check(false, "llm fails without the APIs switch") }
-    Defaults[.allowExtensionAPIs] = true
-    ExtensionStore.setPreference("llm", "provider", .string("openai"))
-    if ExtensionStore.grants("openai").contains("llm") == false {
-        if case .failure(let message)? = run(m, "::ask(Hello there)") { check(message.contains("not allowed to use the 'openai' API key"), "llm needs a granted key: \(message)") }
-        else { check(false, "llm fails without a granted key") }
-    }
+    // llm: asks the AI service (none here, so the reason says so); the input checks come first
+    if case .failure(let message)? = run(m, "::ask(Hello there)") { check(message == "AI isn't available in this copy of Super Notes", "llm without an AI service: \(message)") }
+    else { check(false, "llm fails without an AI service") }
     if case .failure(let message)? = run(m, "::translate(French)", line: "::translate(French)", note: "::translate(French)") {
         check(message.contains("Write the text to translate"), "translate needs text")
     } else { check(false, "translate fails without text") }
+    check(m.installed.first { $0.manifest.name == "llm" }?.manifest.needsAI == true
+          && m.installed.first { $0.manifest.name == "llm" }?.manifest.endpointList.isEmpty == true, "llm declares AI and no endpoints")
 
     // autocomplete, aliases, enablement
     check(m.complete("tod").first?.name == "today", "complete by prefix")

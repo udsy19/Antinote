@@ -123,16 +123,64 @@ public enum ExtensionEdit: Sendable, Equatable {
     case failure(String)
 }
 
+/// What a running command reports before its result: a pill to keep up ("Getting ready… 40%", "Thinking…") until
+/// the completion arrives.
+public enum ExtensionProgress: Sendable, Equatable {
+    case status(String)
+}
+
+/// A command in flight. `cancel()` stops what it is waiting on (an AI answer, a queued model download); the
+/// completion then reports a stop instead of a result.
+public final class ExtensionRun: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cancelled = false
+    private var onCancel: [@Sendable () -> Void] = []
+
+    public init() {}
+
+    public var isCancelled: Bool { lock.withLock { cancelled } }
+
+    public func cancel() {
+        let actions: [@Sendable () -> Void] = lock.withLock {
+            guard !cancelled else { return [] }
+            cancelled = true
+            defer { onCancel.removeAll() }
+            return onCancel
+        }
+        for action in actions { action() }
+    }
+
+    /// Runs `action` when the run is cancelled (at once if it already was).
+    public func whenCancelled(_ action: @escaping @Sendable () -> Void) {
+        let now: Bool = lock.withLock {
+            if cancelled { return true }
+            onCancel.append(action)
+            return false
+        }
+        if now { action() }
+    }
+}
+
 @MainActor
 public protocol ExtensionsServicing: AnyObject {
     var commands: [ExtensionCommandInfo] { get }
     /// Commands whose name or alias starts with `prefix` (for `::` autocomplete).
     func complete(_ prefix: String) -> [ExtensionCommandInfo]
-    /// Runs a `::name(args)` invocation found on `line` of `note`.
-    func run(invocation: String, line: String, note: String, completion: @escaping (ExtensionEdit) -> Void)
+    /// Runs a `::name(args)` invocation found on `line` of `note`. `progress` may report a status pill before
+    /// `completion` delivers the one result; both are called on the main queue.
+    @discardableResult
+    func run(invocation: String, line: String, note: String, progress: @escaping (ExtensionProgress) -> Void,
+             completion: @escaping (ExtensionEdit) -> Void) -> ExtensionRun
     func reload()
     /// The extension manager (installed extensions, preferences, API keys, community extensions) for Settings.
     func makeSettingsView() -> NSView
+}
+
+public extension ExtensionsServicing {
+    @discardableResult
+    func run(invocation: String, line: String, note: String, completion: @escaping (ExtensionEdit) -> Void) -> ExtensionRun {
+        run(invocation: invocation, line: line, note: note, progress: { _ in }, completion: completion)
+    }
 }
 
 // MARK: - AI
