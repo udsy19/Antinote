@@ -188,6 +188,9 @@ public protocol NoteEditing: AnyObject {
     var hasUnsavedChanges: Bool { get }
     /// Called after every content change with the latest analysis (window chrome shows mode/summary/timer).
     var onAnalysis: ((NoteAnalysis) -> Void)? { get set }
+    /// Height of chrome resting over the bottom of the note (the always-shown slot bar); the end of a long note
+    /// scrolls clear of it.
+    var bottomOverlay: CGFloat { get set }
 }
 
 @MainActor

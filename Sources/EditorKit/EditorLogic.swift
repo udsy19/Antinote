@@ -582,6 +582,99 @@ extension EditorLogic {
     }
 }
 
+// MARK: - Inline command lists
+
+extension EditorLogic {
+    /// The `::` and "/" lists under the caret: which row is selected, which rows are scrolled into view, which row
+    /// sits under the pointer, and where the list goes on screen. Rows are `rowHeight` tall below a `topPadding`
+    /// strip, with the footer under the last visible row (y grows downwards).
+    public struct CommandList: Equatable, Sendable {
+        public static let rowHeight: Double = 28
+        public static let topPadding: Double = 4
+        public static let footerHeight: Double = 28
+        /// Gap between the caret line and the list.
+        public static let caretGap: Double = 6
+        /// The list's left edge sits this far left of the caret.
+        public static let caretLead: Double = 12
+
+        public private(set) var count: Int
+        /// Rows shown at once; more scroll.
+        public let visible: Int
+        public private(set) var selected = 0
+        /// The first row shown.
+        public private(set) var top = 0
+
+        public init(count: Int = 0, visible: Int) {
+            self.count = max(0, count)
+            self.visible = max(1, visible)
+        }
+
+        /// Rows on screen (the empty state keeps room for two).
+        public var shownRows: Int { min(count, visible) }
+        public var canScroll: Bool { count > visible }
+        /// The list's height: padding, the rows shown (at least two) and the footer.
+        public var height: Double { Self.height(rows: shownRows) }
+        public static func height(rows: Int) -> Double { topPadding + Double(max(rows, 2)) * rowHeight + footerHeight }
+
+        /// New rows: the selection and scroll stay where they were when they still fit.
+        public mutating func reset(count: Int) {
+            self.count = max(0, count)
+            select(min(selected, max(0, self.count - 1)))
+        }
+
+        /// Back to the first row (the list was closed).
+        public mutating func rewind() { selected = 0; top = 0 }
+
+        /// ↑/↓: moves the selection, wrapping, and scrolls it into view.
+        public mutating func move(_ delta: Int) {
+            guard count > 0 else { return }
+            select(((selected + delta) % count + count) % count)
+        }
+
+        /// Selects `row` (clamped) and scrolls it into view.
+        public mutating func select(_ row: Int) {
+            guard count > 0 else { selected = 0; top = 0; return }
+            selected = min(max(row, 0), count - 1)
+            if selected < top { top = selected }
+            if selected >= top + visible { top = selected - visible + 1 }
+            top = min(max(top, 0), max(0, count - visible))
+        }
+
+        /// Scrolls by whole rows (positive shows later rows); the selection stays put.
+        public mutating func scroll(by rows: Int) {
+            top = min(max(top + rows, 0), max(0, count - visible))
+        }
+
+        /// The row under `y` (list coordinates, y down), if it is a shown row.
+        public func row(atY y: Double) -> Int? {
+            guard y >= Self.topPadding else { return nil }
+            let shown = Int(((y - Self.topPadding) / Self.rowHeight).rounded(.down))
+            guard shown < shownRows else { return nil }
+            let row = top + shown
+            return row < count ? row : nil
+        }
+
+        /// Top edge of `row` in list coordinates (rows above `top` are scrolled out, at negative offsets).
+        public func y(of row: Int) -> Double { Self.topPadding + Double(row - top) * Self.rowHeight }
+
+        /// The list's frame on screen (y up) for a caret line `anchor`: under the caret, its left edge a little
+        /// left of it; above the caret when the caret is in the lower 40% of the note window or the list would
+        /// run off the bottom of the screen (unless it would then run off the top). Kept inside `screen`.
+        public static func frame(size: CGSize, anchor: CGRect, window: CGRect, screen: CGRect) -> CGRect {
+            let belowY = anchor.minY - caretGap - size.height
+            let aboveY = anchor.maxY + caretGap
+            let fitsBelow = belowY >= screen.minY
+            let fitsAbove = aboveY + size.height <= screen.maxY
+            let lowInWindow = !window.isEmpty && anchor.minY < window.minY + window.height * 0.4
+            let above = (lowInWindow || !fitsBelow) && (fitsAbove || !fitsBelow)
+            var y = above ? aboveY : belowY
+            y = min(max(y, screen.minY), screen.maxY - size.height)
+            let x = min(max(anchor.minX - caretLead, screen.minX + 4), screen.maxX - size.width - 4)
+            return CGRect(x: x, y: y, width: size.width, height: size.height)
+        }
+    }
+}
+
 // MARK: - Find and replace
 
 extension EditorLogic {

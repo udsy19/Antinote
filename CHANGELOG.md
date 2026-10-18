@@ -3,6 +3,18 @@
 All notable changes to Super Notes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Fixed
+- The "/" list and the `::` list work with the mouse: the row under the pointer is selected, a click runs it, the
+  scroll wheel scrolls longer lists, and clicking elsewhere closes them, all without taking the caret away from the
+  note. Both now share one tidier popover: keyword chips in their colours, aligned descriptions, numbers on the right.
+- The slot bar's planets are drawn crisply above its glass instead of blurred under it. Slots holding a note are
+  filled, empty ones outlined, and hovering a planet shows which note it holds or how to fill it. Moving from the
+  bottom bar onto the slot bar no longer hides it, and an always-shown slot bar no longer covers the end of a note.
+- The bottom bar never runs past the window edge: the date is shortened, then hidden, then Export and First make
+  room in narrow windows. The find shelf no longer forces the window's content wider than the window.
+
 ## [1.3.1] — 2026-10-18
 
 ### Changed

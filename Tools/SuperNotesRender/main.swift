@@ -78,14 +78,30 @@ enum Render {
         let visible = v.visibleRect.intersection(v.bounds)
         NSBezierPath(rect: visible).addClip()
         cg.setAlpha(a)
-        if let layer = v.layer, let fill = layer.backgroundColor, fill.alpha > 0, let color = NSColor(cgColor: fill) {
+        let isGlass: Bool = if #available(macOS 26, *) { v is NSGlassEffectView } else { false }
+        if !isGlass, let layer = v.layer, let fill = layer.backgroundColor, fill.alpha > 0, let color = NSColor(cgColor: fill) {
             color.setFill()
             NSBezierPath(roundedRect: v.bounds, xRadius: layer.cornerRadius, yRadius: layer.cornerRadius).fill()
+        }
+        // Liquid Glass can't be captured offscreen: a tinted glass shape stands in as a frosted fill of its tint
+        // colour with a hairline edge.
+        if #available(macOS 26, *), let glass = v as? NSGlassEffectView, let tint = glass.tintColor {
+            let shape = NSBezierPath(roundedRect: v.bounds, xRadius: glass.cornerRadius, yRadius: glass.cornerRadius)
+            tint.withAlphaComponent(0.85).setFill()
+            shape.fill()
+            NSColor.gray.withAlphaComponent(0.25).setStroke()
+            shape.lineWidth = 0.5
+            shape.stroke()
         }
         v.draw(visible)
         cg.setAlpha(1)
         NSGraphicsContext.restoreGraphicsState()
         NSGraphicsContext.current = outer
+        // Glass draws its own private layers; only its content view (if any) is ours.
+        if #available(macOS 26, *), let glass = v as? NSGlassEffectView {
+            if let content = glass.contentView { drawTree(content, root: root, alpha: a) }
+            return
+        }
         for sub in v.subviews { drawTree(sub, root: root, alpha: a) }
     }
 

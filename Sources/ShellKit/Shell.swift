@@ -76,13 +76,16 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
     @objc private func handleReopen(_ event: NSAppleEventDescriptor, reply: NSAppleEventDescriptor) { showMain() }
 
     /// Builds the window without showing it (offscreen renders): the front note, or `slot`, with the hover bars
-    /// pinned visible when `revealed`. Returns the window's frame view.
-    func prepareForPreview(revealed: Bool, slot: Int?) -> NSView {
+    /// pinned visible when `revealed`, the content `size` (the default when nil) and the pointer resting on the
+    /// slot bar's `hoveredSlot`. Returns the window's frame view.
+    func prepareForPreview(revealed: Bool, slot: Int?, size: NSSize? = nil, hoveredSlot: Int? = nil) -> NSView {
         if !launched {
             launched = true
+            MainMenu.buildForPreview()
             buildWindow()
             restoreCurrentNote()
         }
+        window.setContentSize(size ?? MainWindow.defaultSize)
         if let slot { openSlot(slot) }
         applyTheme()
         titleBar.pinnedVisible = revealed
@@ -91,6 +94,7 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         refreshChrome()
         let frame = window.contentView?.superview ?? window.contentView!
         frame.layoutSubtreeIfNeeded()
+        slotsBar.setHovered(hoveredSlot)
         window.alignTrafficLights()
         return frame
     }
@@ -105,9 +109,18 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
             }
         }
         slotsBar = SlotsBarView()
+        slotsBar.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         slotsBar.onSelect = { [weak self] slot in self?.slotChipClicked(slot) }
         bottomBar = BottomBarView(target: self)
         bottomBar.onHoverChange = { [weak self] _ in self?.refreshChrome() }
+        // The slot bar sits above the revealed bottom bar: moving onto it keeps both up. While it rests low (always
+        // shown, bottom bar hidden), hovering it doesn't raise the bottom bar, so it never jumps from under the pointer.
+        slotsBar.onHoverChange = { [weak self] hovering in self?.bottomBar.hold(hovering) }
+        bottomBar.lingers = 0.25
+        bottomBar.revealExcluded = { [weak self] point in
+            guard let bar = self?.slotsBar, bar.isShown, let root = bar.superview else { return false }
+            return bar.frame.contains(root.convert(point, from: nil))
+        }
         effectView.material = .underWindowBackground
         effectView.blendingMode = .behindWindow
         effectView.state = .followsWindowActiveState
@@ -135,6 +148,8 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
             bottomBar.heightAnchor.constraint(equalToConstant: BottomBarView.height),
             bottomBar.bottomAnchor.constraint(equalTo: root.bottomAnchor),
             slotsBar.centerXAnchor.constraint(equalTo: root.centerXAnchor),
+            // In a window narrower than the bar it shrinks, 8 pt from each side.
+            slotsBar.widthAnchor.constraint(lessThanOrEqualTo: root.widthAnchor, constant: -16),
             slotsBar.heightAnchor.constraint(equalToConstant: SlotsBarView.height),
             slotsBarBottom,
             latestDot.widthAnchor.constraint(equalToConstant: Self.latestDotSize),
@@ -597,6 +612,9 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         let showSlots = Defaults[.alwaysShowSlotsBar] || slotsBarFlash || (bottomBar.isRevealed && slotsInUse)
         slotsBar.isShown = showSlots
         slotsBarBottom.constant = bottomBar.isRevealed ? -BottomBarView.height : -SlotsBarView.bottomInset
+        // An always-shown slot bar rests over the note: the end of a long note scrolls clear of it.
+        let overlay = Defaults[.alwaysShowSlotsBar] ? SlotsBarView.height + SlotsBarView.bottomInset : 0
+        for pane in [ephemeralPane, slotPane] { pane?.editor.bottomOverlay = overlay }
 
         let id = pane(role).noteID
         let note = id.flatMap { store.note($0) }

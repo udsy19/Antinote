@@ -136,11 +136,14 @@ final class EditorTextView: NSTextView {
         (textContainerOrigin.x, bounds.width - textContainerOrigin.x)
     }
 
-    /// Keeps the view at least as tall as the visible area so the paper fills it, plus room for the summary.
+    /// Keeps the view at least as tall as the visible area (above any chrome resting over the bottom of the note)
+    /// so the paper fills it, plus room for the summary.
     override func setFrameSize(_ newSize: NSSize) {
         var size = newSize
         if model.summary != nil { size.height += model.lineHeight * 2 }
-        if let clip = enclosingScrollView?.contentView { size.height = max(size.height, clip.bounds.height) }
+        if let clip = enclosingScrollView?.contentView {
+            size.height = max(size.height, clip.bounds.height - clip.contentInsets.top - clip.contentInsets.bottom)
+        }
         super.setFrameSize(size)
     }
 

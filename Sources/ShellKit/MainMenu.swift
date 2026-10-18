@@ -27,7 +27,8 @@ enum MainMenu {
 
     /// Items whose title or visibility follows app state (pin, read-only, archive, lock, slot shortcuts).
     private static let state = MenuState()
-    private static var built: NSMenu?
+    /// The menus once built (installed as the main menu in the app; only built in offscreen renders).
+    private(set) static var built: NSMenu?
     /// File › Export Note › Quick Export: one lasting item, so its shortcut can be rebound like the others.
     private static var quickExportItem: NSMenuItem?
 

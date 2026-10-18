@@ -22,7 +22,9 @@ themeAppearanceObserver), `WindowTopBar` (buttonVisibilityState, isHovered), `Cu
 - Bottom bar (30 pt, hover; gone with "Show bottom bar" off): Move to The Void on the left; the note's date
   ("Show note modified/created time" adds the time, "Show the note creation date" shows when it was created instead of
   last changed) and position "14 of 18" ("Show note count") in the middle; Previous, Next, Latest and Export (a menu
-  of the export destinations, Quick Export and Print) on the right.
+  of the export destinations, Quick Export and Print) on the right. Nothing is ever clipped (`BottomBarLayout`): as
+  the window narrows the text is cut short in the middle, then dropped, then Export and First give way. The find
+  shelf never makes the note wider than the window.
 - Latest-note dot: 5 pt `accent1Main`, 10 pt from the bottom-right corner, on the front note only
   (`showLatestNoteIndicator`).
 - The editor comes from `Services.editorFactory.makeEditor()`; each pane owns one editor.
@@ -77,10 +79,14 @@ notes bar", "Create new notes in the ephemeral pane when in slotted view", "Swap
 - Nine slots (`Note.slot` 0…8). Rules (`SlotBoard`): assigning a note to its own slot removes it from the slot;
   assigning to an occupied slot pushes the occupant back to the deck; a note is in at most one slot.
 - ⌘1…⌘9 open slots; ⌘0 returns to the ephemeral deck. ⌃⌘1…⌃⌘9 assign the current note.
-- The slot bar is a floating capsule (55% of the width, 24 pt, 16 pt up) of nine planets, Mercury → Pluto, in
-  `typeLight` with the open slot in `accent1Main`; hovering names the planet and its note. It shows when
-  `alwaysShowSlotsBar`, for 2 s after a slot is used, and with the bottom bar when slots are in use. Clicking a
-  planet opens its slot (the open one goes back to the deck); an empty one takes the current note.
+- The slot bar is a floating capsule (32 pt, 10 pt up; shrunk evenly in windows narrower than it) of nine planets,
+  Mercury → Pluto, drawn crisp above its glass or filled capsule: the open slot in `accent1Main`, slots holding a
+  note filled, empty slots as faint outlines. Hovering a planet darkens it and shows a tip above it: "Slot 2 —
+  <title>", or "Slot 7 — empty / Click or press ⌘⌃7 to put this note here" (the live Assign to Slot shortcut). It
+  shows when `alwaysShowSlotsBar` (the note then scrolls clear of it), for 2 s after a slot is used, and with the
+  bottom bar when slots are in use; moving onto it keeps the bottom bar up, and while it rests low it doesn't raise
+  the bottom bar. Clicking a planet opens its slot (the open one goes back to the deck); an empty one takes the
+  current note.
 - Split view (`shellKitSplit`): ephemeral pane + slotted pane, side by side or stacked
   (`shellKitSplitHorizontal`, "Split horizontally"), order swappable (`shellKitSwapPanes`).
 - ⌘N while a slotted note is focused creates the note in the ephemeral deck when

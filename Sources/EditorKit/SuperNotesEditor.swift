@@ -15,6 +15,13 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
     public let view: NSView = NSView()
     public private(set) var note: Note?
     public var onAnalysis: ((NoteAnalysis) -> Void)?
+    public var bottomOverlay: CGFloat = 0 {
+        didSet {
+            guard bottomOverlay != oldValue else { return }
+            scrollView.contentInsets.bottom = bottomOverlay
+            textView.setFrameSize(textView.frame.size)
+        }
+    }
 
     let textView: EditorTextView
     private let storage = NSTextStorage()
@@ -26,12 +33,13 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
     private let dropOverlay = DropOverlayView()
     private let linkTip = LinkTipView()
     /// The `::` extension command list.
-    private let completion = CompletionPanel(footer: CompletionListView.commandFooter, maxRows: 8)
+    private let completion = CompletionPanel(footer: CompletionListView.commandFooter, visibleRows: CompletionListView.commandRows)
     private var completionItems: [ExtensionCommandInfo] = []
     /// The "/" list: the command palette's commands, inline.
-    private let slash = CompletionPanel(footer: CompletionListView.paletteFooter, maxRows: 9)
+    private let slash = CompletionPanel(footer: CompletionListView.paletteFooter, visibleRows: CompletionListView.paletteRows)
     private var slashItems: [PaletteCommand] = []
-    /// Where a "/" list closed with Esc started; it stays closed while that "/" is being typed after.
+    /// Where a "/" list closed with Esc (or a click elsewhere) started; it stays closed while that "/" is being
+    /// typed after.
     private var slashDismissed: Int?
     private let autoPaste = AutoPasteMonitor()
     /// Find and replace (⇧⌘F): the shelf under the note, its matches and the one shown.
@@ -184,6 +192,7 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
         findShelf.onClose = { [weak self] in self?.closeFind() }
         findShelf.onResize = { [weak self] in self?.layoutFindShelf() }
         slash.onAccept = { [weak self] index in self?.acceptSlash(index) }
+        slash.onDismiss = { [weak self] in self?.slashClosed() }
         autoPaste.onNewString = { [weak self] s in self?.appendAutoPaste(s) }
     }
 
@@ -925,8 +934,7 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
             case 125: slash.move(1); return true
             case 48, 36, 76: acceptSlash(nil); return true
             case 53:
-                slashDismissed = slashToken()?.range.location
-                hideSlash()
+                slashClosed()
                 return true
             default:
                 if mods.isEmpty, let token = slashToken(), let chars = event.characters,
@@ -1345,7 +1353,7 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
         guard textView.isEditable, Defaults[.extensionsEnabled], let ext = Services.extensions,
               let token = completionToken() else { return completion.hide() }
         let caret = textView.firstRect(forCharacterRange: NSRange(location: NSMaxRange(token.range), length: 0), actualRange: nil)
-        completionItems = Array(ext.complete(token.prefix).prefix(completion.maxRows))
+        completionItems = Array(ext.complete(token.prefix).prefix(CompletionPanel.maxItems))
         completion.show(completionItems.map(CompletionRow.command), theme: theme, below: caret, parent: textView.window)
     }
 
@@ -1426,9 +1434,11 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
         return token
     }
 
-    /// The "/" list's rows, numbered 1…9 for the quick pick.
+    /// The "/" list's rows; the first nine are numbered 1…9 for the quick pick.
     static func slashRows(_ commands: [PaletteCommand]) -> [CompletionRow] {
-        commands.prefix(9).enumerated().map { i, command in CompletionRow.palette(command, number: i + 1) }
+        commands.prefix(CompletionPanel.maxItems).enumerated().map { i, command in
+            CompletionRow.palette(command, number: i < 9 ? i + 1 : nil)
+        }
     }
 
     private func updateSlash() {
@@ -1437,7 +1447,7 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
             if dismissed == token.range.location { return hideSlash() }
             slashDismissed = nil
         }
-        slashItems = Array(EditorLogic.Slash.ordered(panels.commands(matching: token.query), query: token.query).prefix(slash.maxRows))
+        slashItems = Array(EditorLogic.Slash.ordered(panels.commands(matching: token.query), query: token.query).prefix(CompletionPanel.maxItems))
         // Nothing matches (a path, a fraction): stay out of the way.
         guard !slashItems.isEmpty else { return hideSlash() }
         let caret = textView.firstRect(forCharacterRange: NSRange(location: token.range.location, length: 0), actualRange: nil)
@@ -1447,6 +1457,12 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
     private func hideSlash() {
         slash.hide()
         slashItems = []
+    }
+
+    /// Esc or a click elsewhere: the list closes and stays closed while this "/" is being typed after.
+    private func slashClosed() {
+        slashDismissed = slashToken()?.range.location
+        hideSlash()
     }
 
     /// Runs the chosen command: the "/query" text goes, then a keyword becomes the first line (one undoable edit)

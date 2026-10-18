@@ -111,9 +111,13 @@ final class FindShelf: NSView, NSTextFieldDelegate {
         rows.translatesAutoresizingMaskIntoConstraints = false
         addSubview(rows)
         for row in [findRow, replaceRow] { row.widthAnchor.constraint(equalTo: rows.widthAnchor).isActive = true }
+        // Below the window's own size (NSLayoutPriorityWindowSizeStayPut, 500): the shelf's controls never make
+        // the note window wider than it is (which would push the window's chrome past its right edge).
+        let trailing = rows.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.padding)
+        trailing.priority = NSLayoutConstraint.Priority(490)
         NSLayoutConstraint.activate([
             rows.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.padding),
-            rows.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.padding),
+            trailing,
             rows.topAnchor.constraint(equalTo: topAnchor, constant: Self.padding),
             chevron.widthAnchor.constraint(equalToConstant: 20),
             findRow.heightAnchor.constraint(equalToConstant: Self.rowHeight),

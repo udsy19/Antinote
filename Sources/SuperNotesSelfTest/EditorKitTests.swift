@@ -23,6 +23,68 @@ private func keys(_ s: String) -> [String] { s.map(String.init) }
 
 /// Append cases with `SelfTest.cases.append(("name", { check(..., "msg") }))`.
 func registerEditorKitTests() {
+    SelfTest.cases.append(("EditorKit.commandListSelection", {
+        var list = EditorLogic.CommandList(count: 12, visible: 9)
+        check(list.selected == 0 && list.top == 0 && list.shownRows == 9 && list.canScroll, "starts at the top, 9 of 12 shown")
+        list.move(-1)
+        check(list.selected == 11 && list.top == 3, "↑ from the first row wraps to the last and scrolls it into view")
+        list.move(1)
+        check(list.selected == 0 && list.top == 0, "↓ from the last wraps to the first")
+        list.select(9)
+        check(list.top == 1, "selecting below the view scrolls just enough")
+        list.reset(count: 3)
+        check(list.selected == 2 && list.top == 0 && !list.canScroll, "fewer rows: selection clamped, no scrolling")
+        list.rewind()
+        check(list.selected == 0 && list.top == 0, "closing rewinds")
+        var empty = EditorLogic.CommandList(count: 0, visible: 8)
+        empty.move(1)
+        check(empty.selected == 0 && empty.row(atY: 10) == nil, "an empty list has no rows to pick")
+        check(empty.height == EditorLogic.CommandList.height(rows: 2), "the empty state keeps room for two rows")
+    }))
+
+    SelfTest.cases.append(("EditorKit.commandListPointer", {
+        typealias L = EditorLogic.CommandList
+        var list = L(count: 12, visible: 9)
+        check(list.row(atY: L.topPadding - 1) == nil, "the top padding is no row")
+        check(list.row(atY: L.topPadding) == 0 && list.row(atY: L.topPadding + L.rowHeight - 0.5) == 0, "first row's band")
+        check(list.row(atY: L.topPadding + L.rowHeight * 3.5) == 3, "row under the pointer")
+        check(list.row(atY: L.topPadding + L.rowHeight * 9) == nil, "the footer is no row")
+        list.scroll(by: 2)
+        check(list.top == 2 && list.selected == 0, "the wheel scrolls without moving the selection")
+        check(list.row(atY: L.topPadding + 1) == 2, "after scrolling, the top band is the first row shown")
+        check(list.y(of: 2) == L.topPadding && list.y(of: 0) < 0, "rows above the view sit above it")
+        list.scroll(by: 50)
+        check(list.top == 3, "scrolling stops at the last page")
+        list.scroll(by: -50)
+        check(list.top == 0, "and at the first")
+        if let hovered = list.row(atY: L.topPadding + L.rowHeight * 4.2) { list.select(hovered) }
+        check(list.selected == 4 && list.top == 0, "hovering selects the row without scrolling")
+        let short = L(count: 3, visible: 9)
+        check(short.row(atY: L.topPadding + L.rowHeight * 3.5) == nil, "below the last row of a short list")
+        check(short.height == L.topPadding + 3 * L.rowHeight + L.footerHeight, "height fits the rows shown")
+    }))
+
+    SelfTest.cases.append(("EditorKit.commandListPlacement", {
+        typealias L = EditorLogic.CommandList
+        let screen = CGRect(x: 0, y: 0, width: 1440, height: 900)
+        let window = CGRect(x: 400, y: 300, width: 350, height: 400)
+        let size = CGSize(width: 280, height: 200)
+        let high = CGRect(x: 460, y: 640, width: 1, height: 18)   // near the window's top
+        let below = L.frame(size: size, anchor: high, window: window, screen: screen)
+        check(below.maxY == high.minY - L.caretGap && below.minX == high.minX - L.caretLead, "under the caret, a little left of it")
+        let low = CGRect(x: 460, y: 340, width: 1, height: 18)    // in the window's lower 40%
+        let above = L.frame(size: size, anchor: low, window: window, screen: screen)
+        check(above.minY == low.maxY + L.caretGap, "low in the window: above the caret")
+        let nearScreenBottom = CGRect(x: 460, y: 120, width: 1, height: 18)
+        let flipped = L.frame(size: size, anchor: nearScreenBottom, window: CGRect(x: 400, y: 0, width: 350, height: 900), screen: screen)
+        check(flipped.minY > nearScreenBottom.maxY, "would run off the screen's bottom: above")
+        let tallScreen = CGRect(x: 0, y: 0, width: 1440, height: 260)
+        let squeezed = L.frame(size: size, anchor: CGRect(x: 460, y: 150, width: 1, height: 18), window: .zero, screen: tallScreen)
+        check(squeezed.minY >= tallScreen.minY && squeezed.maxY <= tallScreen.maxY, "never off the screen")
+        let edge = L.frame(size: size, anchor: CGRect(x: 1430, y: 640, width: 1, height: 18), window: window, screen: screen)
+        check(edge.maxX <= screen.maxX - 4, "kept inside the screen's right edge")
+    }))
+
     SelfTest.cases.append(("EditorKit.listMarkers", {
         let box = ListLine.parse("[ ] milk")
         check(box?.kind == .checkbox(checked: false) && box?.markerLength == 4 && box?.content == "milk", "unchecked box")

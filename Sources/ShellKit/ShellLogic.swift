@@ -199,6 +199,68 @@ public enum SlotBarLayout {
         let f = frames(open: open)
         return padding * 2 + f.reduce(0, +) + spacing * Double(f.count - 1)
     }
+
+    /// The slot whose column holds `x` (bar coordinates); the gaps between planets belong to the nearer one.
+    public static func slot(atX x: Double, open: Int?) -> Int? {
+        let f = frames(open: open)
+        guard x >= padding, x < width(open: open) - padding else { return nil }
+        for slot in 0..<f.count where x < Self.x(of: slot, open: open) + f[slot] + spacing / 2 { return slot }
+        return f.count - 1
+    }
+
+    /// How a planet is drawn: the open slot in the accent colour; slots holding a note filled; empty slots as
+    /// faint outlines.
+    public enum State: Equatable, Sendable { case empty, filled, open }
+
+    public static func states(occupied: Set<Int>, open: Int?) -> [State] {
+        (0..<SlotBoard.count).map { $0 == open ? .open : occupied.contains($0) ? .filled : .empty }
+    }
+
+    /// The hover tip: "Slot 2 — Groceries" for a slot holding a note (a heading's "#" marks dropped); for an
+    /// empty one, what a click (or the Assign to Slot shortcut, when it has one) does.
+    public static func tip(slot: Int, title: String?, assignShortcut: String?) -> String {
+        let name = "Slot \(slot + 1)"
+        if let title {
+            let trimmed = title.drop { $0 == "#" }.trimmingCharacters(in: .whitespacesAndNewlines)
+            return "\(name) — \(trimmed.isEmpty ? "Untitled" : trimmed)"
+        }
+        let how = assignShortcut.map { "Click or press \($0)" } ?? "Click"
+        return "\(name) — empty\n\(how) to put this note here"
+    }
+}
+
+/// What fits in the bottom bar (Delete · date and position · Previous · Next · First · Export), so nothing is ever
+/// clipped: 30 pt buttons 8 pt apart, 10 pt from the sides; the text sits between Delete and Previous with 8 pt on
+/// each side. As the window narrows the text is cut short (with "…"), then dropped below `minTextWidth`; then
+/// Export goes, then First. Delete, Previous and Next always stay.
+public enum BottomBarLayout {
+    public static let sideInset = 10.0
+    public static let spacing = 8.0
+    public static let button = 30.0
+    public static let minTextWidth = 48.0
+
+    public struct Fit: Equatable, Sendable {
+        /// 3…5: Delete, Previous and Next, then First, then Export.
+        public var buttons: Int
+        /// The text's width; 0 when it is hidden.
+        public var textWidth: Double
+        public var showsFirst: Bool { buttons >= 4 }
+        public var showsExport: Bool { buttons >= 5 }
+        public init(buttons: Int, textWidth: Double) { self.buttons = buttons; self.textWidth = textWidth }
+    }
+
+    /// The width `buttons` buttons and `text` points of text need.
+    public static func width(buttons: Int, text: Double) -> Double {
+        2 * sideInset + Double(buttons) * button + Double(buttons - 1) * spacing + (text > 0 ? text + spacing : 0)
+    }
+
+    /// The items that fit a bar `width` wide whose text wants `textWidth` points.
+    public static func fit(width: Double, textWidth: Double) -> Fit {
+        let room = width - self.width(buttons: 5, text: 0) - spacing
+        if textWidth > 0, room >= min(textWidth, minTextWidth) { return Fit(buttons: 5, textWidth: min(textWidth, room)) }
+        for n in [5, 4] where width >= self.width(buttons: n, text: 0) { return Fit(buttons: n, textWidth: 0) }
+        return Fit(buttons: 3, textWidth: 0)
+    }
 }
 
 // MARK: - Dropdown window

@@ -41,17 +41,22 @@ final class MainWindow: NSWindow {
 enum ChromeTooltip {
     /// `label`, plus " - " and the shortcut of the main-menu item whose action is `action` (when there is one).
     @MainActor static func text(_ label: String, action: Selector) -> String {
-        guard let item = NSApp?.mainMenu.flatMap({ find(action, in: $0) }), !item.keyEquivalent.isEmpty else { return label }
-        let mods = item.keyEquivalentModifierMask
-        return ChromeText.tooltip(label, shortcut: ChromeText.shortcut(key: item.keyEquivalent, command: mods.contains(.command),
-                                                                       shift: mods.contains(.shift), option: mods.contains(.option),
-                                                                       control: mods.contains(.control)))
+        ChromeText.tooltip(label, shortcut: shortcut(action: action))
     }
 
-    private static func find(_ action: Selector, in menu: NSMenu) -> NSMenuItem? {
+    /// The shortcut ("⌃⌘3") of the main-menu item whose action is `action` (and tag `tag`, when given), if it has one.
+    @MainActor static func shortcut(action: Selector, tag: Int? = nil) -> String? {
+        guard let menu = NSApp?.mainMenu ?? MainMenu.built, let item = find(action, tag: tag, in: menu), !item.keyEquivalent.isEmpty
+        else { return nil }
+        let mods = item.keyEquivalentModifierMask
+        return ChromeText.shortcut(key: item.keyEquivalent, command: mods.contains(.command), shift: mods.contains(.shift),
+                                   option: mods.contains(.option), control: mods.contains(.control))
+    }
+
+    private static func find(_ action: Selector, tag: Int?, in menu: NSMenu) -> NSMenuItem? {
         for item in menu.items {
-            if item.action == action { return item }
-            if let sub = item.submenu, let found = find(action, in: sub) { return found }
+            if item.action == action, tag == nil || item.tag == tag { return item }
+            if let sub = item.submenu, let found = find(action, tag: tag, in: sub) { return found }
         }
         return nil
     }
@@ -229,14 +234,58 @@ class HoverBar: NSView {
         if case .solid(let color) = backdrop { content.layer?.backgroundColor = color.cgColor } else { content.layer?.backgroundColor = nil }
     }
 
+    /// How long the bar lingers after the pointer leaves it (time to reach chrome that belongs to it).
+    var lingers: TimeInterval = 0
+    /// Window points where hovering doesn't bring the bar up (the slot bar resting over it).
+    var revealExcluded: ((NSPoint) -> Bool)?
+    private var pointerInside = false
+    private var held = false
+    private var hideWork: DispatchWorkItem?
+
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         trackingAreas.forEach(removeTrackingArea)
-        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self))
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect],
+                                       owner: self))
     }
 
-    override func mouseEntered(with event: NSEvent) { setRevealed(true, animated: true) }
-    override func mouseExited(with event: NSEvent) { setRevealed(pinnedVisible, animated: true) }
+    override func mouseEntered(with event: NSEvent) {
+        pointerInside = true
+        pointerMoved(event)
+    }
+
+    override func mouseMoved(with event: NSEvent) { pointerMoved(event) }
+
+    override func mouseExited(with event: NSEvent) {
+        pointerInside = false
+        hideUnlessHovered()
+    }
+
+    private func pointerMoved(_ event: NSEvent) {
+        if !isRevealed, revealExcluded?(event.locationInWindow) == true { return }
+        hideWork?.cancel()
+        if !isRevealed { setRevealed(true, animated: true) }
+    }
+
+    /// Keeps a revealed bar up while the pointer is on chrome that belongs to it (the slot bar above the bottom
+    /// bar); it doesn't bring a hidden bar up.
+    func hold(_ hold: Bool) {
+        held = hold
+        if hold { hideWork?.cancel() } else { hideUnlessHovered() }
+    }
+
+    private func hideUnlessHovered() {
+        hideWork?.cancel()
+        guard !pointerInside, !held, isRevealed, !pinnedVisible else { return }
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, !self.pointerInside, !self.held else { return }
+                self.setRevealed(self.pinnedVisible, animated: true)
+            }
+        }
+        hideWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + lingers, execute: work)
+    }
 
     func setRevealed(_ revealed: Bool, animated: Bool) {
         isRevealed = revealed
@@ -310,53 +359,60 @@ final class TitleBarView: HoverBar {
 }
 
 /// Bottom strip (40 pt), shown on hover: Delete on the left; the note's date and position ("Oct 17, 2026 | 3 of
-/// 12") in the middle, in the system's grey 11 pt subheadline; Previous / Next / First and Export on the right.
-/// Buttons are 30 pt, centred 20 pt above the bottom, 10 pt in from the sides and 8 pt apart.
+/// 12", the bar 8 pt from each part) in the middle, in the system's grey 11 pt subheadline; Previous / Next /
+/// First and Export on the right. Buttons are 30 pt, centred 20 pt above the bottom, 10 pt in from the sides and
+/// 8 pt apart. In a narrow window the text is cut short in the middle, then dropped, then Export and First give
+/// way (`BottomBarLayout`), so nothing is clipped or overlapped.
 final class BottomBarView: HoverBar {
     static let height: CGFloat = 40
-    static let sideInset: CGFloat = 10
-    static let spacing: CGFloat = 8
     static let textFont = NSFont.preferredFont(forTextStyle: .subheadline)
-    private let info = NSStackView()
+    private let info = NSTextField(labelWithString: "")
+    private let delete: ChromeButton
+    /// Previous, Next, First, Export: the right-hand group, in order.
+    private let trailing: [ChromeButton]
     private let buttons: [ChromeButton]
     let exportButton: ChromeButton
 
     init(target: AnyObject) {
-        let delete = ChromeButton(.delete, "Delete Note", glass: .clear, target: target, action: #selector(Shell.moveToVoid(_:)))
+        delete = ChromeButton(.delete, "Delete Note", glass: .clear, target: target, action: #selector(Shell.moveToVoid(_:)))
         let previous = ChromeButton(.previous, "Previous Note", glass: .clear, target: target, action: #selector(Shell.previousNote(_:)))
         let next = ChromeButton(.next, "Next Note", glass: .clear, target: target, action: #selector(Shell.nextNote(_:)))
         let front = ChromeButton(.front, "Go to First Note", glass: .clear, target: target, action: #selector(Shell.goToFirstNote(_:)))
         exportButton = ChromeButton(.export, "Export", glass: .clear, target: target, action: #selector(Shell.exportFromBar(_:)))
-        buttons = [delete, previous, next, front, exportButton]
+        trailing = [previous, next, front, exportButton]
+        buttons = [delete] + trailing
         super.init(frame: .zero)
-        info.orientation = .horizontal
-        info.spacing = Self.spacing
-        info.setHuggingPriority(.defaultHigh, for: .horizontal)
-        info.setClippingResistancePriority(.defaultLow, for: .horizontal)
-        info.translatesAutoresizingMaskIntoConstraints = false
-        (buttons + [info] as [NSView]).forEach(content.addSubview)
-        let row = Self.height / 2, step = ChromeButton.side + Self.spacing
-        var constraints = buttons.map { $0.centerYAnchor.constraint(equalTo: content.bottomAnchor, constant: -row) }
-        constraints += [
-            delete.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: Self.sideInset),
-            exportButton.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -Self.sideInset),
-            front.trailingAnchor.constraint(equalTo: exportButton.trailingAnchor, constant: -step),
-            next.trailingAnchor.constraint(equalTo: front.trailingAnchor, constant: -step),
-            previous.trailingAnchor.constraint(equalTo: next.trailingAnchor, constant: -step),
-            info.centerYAnchor.constraint(equalTo: delete.centerYAnchor),
-            info.leadingAnchor.constraint(greaterThanOrEqualTo: delete.trailingAnchor, constant: Self.spacing),
-            info.trailingAnchor.constraint(lessThanOrEqualTo: previous.leadingAnchor, constant: -Self.spacing),
-        ]
-        // The text sits centred in the free space between the left and right buttons.
-        let gap = NSLayoutGuide()
-        content.addLayoutGuide(gap)
-        let centred = info.centerXAnchor.constraint(equalTo: gap.centerXAnchor)
-        centred.priority = .defaultHigh
-        constraints += [gap.leadingAnchor.constraint(equalTo: delete.trailingAnchor),
-                        gap.trailingAnchor.constraint(equalTo: previous.leadingAnchor), centred]
-        NSLayoutConstraint.activate(constraints)
+        info.lineBreakMode = .byTruncatingMiddle
+        // Placed by frame in `layout()`, from `BottomBarLayout.fit`.
+        for view in buttons + [info] as [NSView] {
+            view.translatesAutoresizingMaskIntoConstraints = true
+            content.addSubview(view)
+        }
     }
     required init?(coder: NSCoder) { fatalError() }
+
+    override func layout() {
+        super.layout()
+        let width = content.bounds.width, side = CGFloat(BottomBarLayout.button)
+        let text = info.attributedStringValue.length == 0 ? 0 : ceil(info.cell?.cellSize.width ?? 0)   // with the cell's padding
+        let fit = BottomBarLayout.fit(width: Double(width), textWidth: Double(text))
+        let row = Self.height / 2, y = row - side / 2
+        let inset = CGFloat(BottomBarLayout.sideInset), step = side + CGFloat(BottomBarLayout.spacing)
+        delete.frame = NSRect(x: inset, y: y, width: side, height: side)
+        let shown = Array(trailing.prefix(fit.buttons - 1))
+        for button in trailing { button.isHidden = !shown.contains { $0 === button } }
+        for (i, button) in shown.reversed().enumerated() {
+            button.frame = NSRect(x: width - inset - side - CGFloat(i) * step, y: y, width: side, height: side)
+        }
+        // The text sits centred between Delete and Previous, at least 8 pt from each.
+        info.isHidden = fit.textWidth == 0
+        guard let left = shown.first?.frame.minX, !info.isHidden else { return }
+        let gap = CGFloat(BottomBarLayout.spacing), textWidth = CGFloat(fit.textWidth)
+        let lo = delete.frame.maxX + gap, hi = left - gap - textWidth
+        let height = info.fittingSize.height
+        info.frame = NSRect(x: min(max((delete.frame.maxX + left - textWidth) / 2, lo), hi), y: row - height / 2,
+                            width: textWidth, height: height)
+    }
 
     override func setRevealed(_ revealed: Bool, animated: Bool) {
         if revealed { buttons.filter { $0 !== exportButton }.forEach { $0.refreshTooltip() } }
@@ -365,42 +421,58 @@ final class BottomBarView: HoverBar {
 
     /// `parts` are the note's date and position ("Oct 17, 2026", "3 of 12", …), shown with "|" between them.
     func update(parts: [String], theme: Theme) {
-        let texts = Array(parts.map { [$0] }.joined(separator: ["|"]))
-        while info.arrangedSubviews.count > texts.count { info.arrangedSubviews.last?.removeFromSuperview() }
-        while info.arrangedSubviews.count < texts.count {
-            let label = NSTextField(labelWithString: "")
-            label.font = Self.textFont
-            label.textColor = .systemGray
-            label.lineBreakMode = .byTruncatingTail
-            label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-            info.addArrangedSubview(label)
+        let text = NSMutableAttributedString()
+        let gap = CGFloat(BottomBarLayout.spacing)
+        for (i, part) in parts.enumerated() {
+            if i > 0, text.length > 0 {
+                // 8 pt either side of the bar: kerning after the previous part's last character and after the bar.
+                text.addAttribute(.kern, value: gap, range: NSRange(location: text.length - 1, length: 1))
+                text.append(NSAttributedString(string: "|", attributes: [.kern: gap]))
+            }
+            text.append(NSAttributedString(string: part))
         }
-        for (view, text) in zip(info.arrangedSubviews, texts) { (view as? NSTextField)?.stringValue = text }
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byTruncatingMiddle
+        text.addAttributes([.font: Self.textFont, .foregroundColor: NSColor.systemGray, .paragraphStyle: paragraph],
+                           range: NSRange(location: 0, length: text.length))
+        if !info.attributedStringValue.isEqual(to: text) {
+            info.attributedStringValue = text
+            needsLayout = true
+        }
         buttons.forEach { $0.theme = theme }
     }
 }
 
-/// The slot bar: a floating capsule of the nine planets (Mercury … Pluto). Planets sit in 22 pt frames 3 pt apart,
-/// in `typeLight` at 65%; the open slot gets a 28 pt frame, scaled 1.18, in `accent1Main`. The capsule is 32 pt
-/// tall with 16 pt side padding, filled with the theme background, a hairline grey border and a faint accent glow
-/// (Liquid Glass tinted with the background on macOS 26). Hovering a planet names its slot.
-final class SlotsBarView: NSView, NSViewToolTipOwner {
+/// The slot bar: a floating capsule of the nine planets (Mercury … Pluto), 32 pt tall with 16 pt side padding,
+/// planets in 22 pt frames 3 pt apart. The capsule is the theme background with a hairline grey border and a faint
+/// accent glow (Liquid Glass tinted with the background on macOS 26); the planets sit in their own layer above it
+/// so they stay crisp. The open slot is `accent1Main` in a 28 pt frame scaled 1.18; slots holding a note are
+/// filled, empty slots are faint outlines; the planet under the pointer darkens and a tip above it names the
+/// slot's note (or says how to fill it). A click opens the slot (or puts the current note in an empty one).
+final class SlotsBarView: NSView {
     static let height: CGFloat = 32
     static let bottomInset: CGFloat = 10
     static let openPlanetScale: CGFloat = 1.18
     static let fadeDuration: TimeInterval = 0.6
     var onSelect: ((Int) -> Void)?
+    /// Called when the pointer comes onto the shown bar or leaves it (the bottom bar stays up meanwhile).
+    var onHoverChange: ((Bool) -> Void)?
     /// Fades the bar in or out; a hidden bar lets clicks through to the note.
     var isShown = false {
         didSet {
             guard isShown != oldValue else { return }
             NSAnimationContext.runAnimationGroup { $0.duration = Self.fadeDuration; animator().alphaValue = isShown ? 1 : 0 }
+            if !isShown { pointerLeft() }
         }
     }
     private var titles: [Int: String] = [:]
     private var open: Int?
     private var theme: Theme = .defaultLight
     private var glass: NSView?
+    private let planets = PlanetsView()
+    private let tip = SlotTipView()
+    private(set) var hovered: Int?
+    private var pointerOver = false
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -411,8 +483,6 @@ final class SlotsBarView: NSView, NSViewToolTipOwner {
         if #available(macOS 26, *) {
             let g = NSGlassEffectView()
             g.cornerRadius = Self.height / 2
-            g.frame = bounds
-            g.autoresizingMask = [.width, .height]
             addSubview(g)
             glass = g
         } else {
@@ -421,6 +491,8 @@ final class SlotsBarView: NSView, NSViewToolTipOwner {
             layer?.shadowOffset = .zero
             layer?.shadowOpacity = 0.2
         }
+        addSubview(planets)   // above the glass, never blurred by it
+        tip.isHidden = true
     }
     required init?(coder: NSCoder) { fatalError() }
 
@@ -428,10 +500,17 @@ final class SlotsBarView: NSView, NSViewToolTipOwner {
 
     override var intrinsicContentSize: NSSize { NSSize(width: SlotBarLayout.width(open: open), height: Self.height) }
 
+    /// The tip floats above the bar, over the note, so it lives in the bar's superview.
+    override func viewDidMoveToSuperview() {
+        super.viewDidMoveToSuperview()
+        tip.removeFromSuperview()
+        superview?.addSubview(tip, positioned: .above, relativeTo: self)
+    }
+
     /// `titles[slot]` is the occupant's title; `open` is the slot shown (nil = the ephemeral deck).
     func update(titles: [Int: String], open: Int?, theme: Theme) {
         self.titles = titles
-        if open != self.open { invalidateIntrinsicContentSize() }
+        if open != self.open { invalidateIntrinsicContentSize(); needsLayout = true }
         self.open = open
         self.theme = theme
         let background = NSColor(hex: theme.background)
@@ -442,44 +521,155 @@ final class SlotsBarView: NSView, NSViewToolTipOwner {
             layer?.borderColor = NSColor.systemGray.withAlphaComponent(0.15).cgColor
             layer?.shadowColor = NSColor(hex: theme.accent1Main).withAlphaComponent(0.45).cgColor
         }
-        removeAllToolTips()
-        for planet in Planet.allCases { addToolTip(slotRect(planet.rawValue), owner: self, userData: nil) }
-        needsDisplay = true
+        planets.states = SlotBarLayout.states(occupied: Set(titles.keys), open: open)
+        planets.open = open
+        planets.theme = theme
+        tip.theme = theme
+        if let hovered { showTip(for: hovered) }
     }
 
-    func view(_ view: NSView, stringForToolTip tag: NSView.ToolTipTag, point: NSPoint, userData data: UnsafeMutableRawPointer?) -> String {
-        guard let slot = Planet.allCases.map(\.rawValue).first(where: { slotRect($0).contains(point) }) else { return "" }
-        return "Slot \(slot + 1)"
-    }
-
-    /// The frame a planet is laid out in (its column, full height for hit testing).
-    private func slotRect(_ slot: Int) -> NSRect {
-        NSRect(x: SlotBarLayout.x(of: slot, open: open), y: 0, width: SlotBarLayout.frames(open: open)[slot], height: bounds.height)
-    }
-
+    /// A window too narrow for the whole bar shrinks it evenly (its contents are laid out at full size in the
+    /// bounds, which scale to the frame).
     override func layout() {
+        let natural = CGFloat(SlotBarLayout.width(open: open))
+        let scale = frame.width > 0 ? min(1, frame.width / natural) : 1
+        let size = NSSize(width: frame.width / scale, height: frame.height / scale)
+        if bounds.size != size { setBoundsSize(size) }
+        glass?.frame = bounds
+        planets.frame = bounds
         super.layout()
-        update(titles: titles, open: open, theme: theme)
+        if let hovered { showTip(for: hovered) }
     }
 
-    override func draw(_ dirtyRect: NSRect) {
-        for planet in Planet.allCases {
-            let slot = planet.rawValue
-            let column = slotRect(slot)
-            let isOpen = slot == open
-            let side = column.width * (isOpen ? Self.openPlanetScale : 1)
-            let rect = NSRect(x: column.midX - side / 2, y: bounds.midY - side / 2, width: side, height: side)
-            let color = isOpen ? NSColor(hex: theme.accent1Main) : NSColor(hex: theme.typeLight).withAlphaComponent(0.65)
-            planet.draw(in: rect, color: color)
-        }
-    }
+    // MARK: Pointer
 
     override func hitTest(_ point: NSPoint) -> NSView? { isShown && frame.contains(point) ? self : nil }
 
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect],
+                                       owner: self))
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        guard isShown else { return }
+        pointerOver = true
+        onHoverChange?(true)
+        pointerMoved(event)
+    }
+
+    override func mouseMoved(with event: NSEvent) { pointerMoved(event) }
+
+    override func mouseExited(with event: NSEvent) { pointerLeft() }
+
+    private func pointerLeft() {
+        setHovered(nil)
+        guard pointerOver else { return }
+        pointerOver = false
+        onHoverChange?(false)
+    }
+
+    /// The click is the bar's (nothing behind it, the window included, sees the press).
+    override func mouseDown(with event: NSEvent) {}
+
     override func mouseUp(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
-        if let slot = Planet.allCases.map(\.rawValue).first(where: { slotRect($0).contains(p) }) { onSelect?(slot) }
+        guard isShown, bounds.contains(p), let slot = SlotBarLayout.slot(atX: Double(p.x), open: open) else { return }
+        onSelect?(slot)
     }
+
+    private func pointerMoved(_ event: NSEvent) {
+        guard isShown else { return setHovered(nil) }
+        let p = convert(event.locationInWindow, from: nil)
+        setHovered(bounds.contains(p) ? SlotBarLayout.slot(atX: Double(p.x), open: open) : nil)
+    }
+
+    /// Marks `slot` as under the pointer (offscreen renders call this directly).
+    func setHovered(_ slot: Int?) {
+        guard slot != hovered || (slot != nil && tip.isHidden) else { return }
+        hovered = slot
+        planets.hovered = slot
+        if let slot { showTip(for: slot) } else { tip.isHidden = true }
+    }
+
+    /// Puts the tip 6 pt above the hovered planet, inside the window.
+    private func showTip(for slot: Int) {
+        guard let container = superview else { return }
+        let assign = ChromeTooltip.shortcut(action: #selector(Shell.assignSlotItem(_:)), tag: slot)
+        tip.text = SlotBarLayout.tip(slot: slot, title: titles[slot], assignShortcut: assign)
+        let size = tip.fittingSize(maxWidth: container.bounds.width - 16)
+        let column = convert(NSRect(x: SlotBarLayout.x(of: slot, open: open), y: 0,
+                                    width: SlotBarLayout.frames(open: open)[slot], height: bounds.height), to: container)
+        let x = min(max(column.midX - size.width / 2, 8), container.bounds.width - size.width - 8)
+        let y = container.isFlipped ? column.minY - 6 - size.height : column.maxY + 6
+        tip.frame = NSRect(x: x, y: y, width: size.width, height: size.height)
+        tip.isHidden = false
+    }
+}
+
+/// The nine planets, drawn above the slot bar's capsule; it never takes the mouse (the bar does).
+private final class PlanetsView: NSView {
+    var states: [SlotBarLayout.State] = [] { didSet { needsDisplay = true } }
+    var open: Int? { didSet { needsDisplay = true } }
+    var hovered: Int? { didSet { needsDisplay = true } }
+    var theme: Theme = .defaultLight { didSet { needsDisplay = true } }
+    override var isFlipped: Bool { true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let main = NSColor(hex: theme.typeMain), light = NSColor(hex: theme.typeLight)
+        for planet in Planet.allCases {
+            let slot = planet.rawValue
+            let state = states.indices.contains(slot) ? states[slot] : .empty
+            let width = CGFloat(SlotBarLayout.frames(open: open)[slot])
+            let side = width * (state == .open ? SlotsBarView.openPlanetScale : 1)
+            let midX = CGFloat(SlotBarLayout.x(of: slot, open: open)) + width / 2
+            let rect = NSRect(x: midX - side / 2, y: bounds.midY - side / 2, width: side, height: side)
+            let hot = slot == hovered
+            let color: NSColor = switch state {
+            case .open: NSColor(hex: theme.accent1Main)
+            case .filled: hot ? main : main.withAlphaComponent(0.55)
+            case .empty: hot ? main.withAlphaComponent(0.7) : light
+            }
+            planet.draw(in: rect, color: color, outlined: state == .empty)
+        }
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
+/// The slot bar's hover tip: one or two lines of system 11 pt text in `typeReverse` on a `typeMain` rounded
+/// rectangle (the message pill's colours), padded 10 × 5 pt.
+private final class SlotTipView: NSView {
+    var text = "" { didSet { needsDisplay = true } }
+    var theme: Theme = .defaultLight { didSet { needsDisplay = true } }
+    private static let padding = NSSize(width: 10, height: 5)
+    override var isFlipped: Bool { true }
+
+    private var attributed: NSAttributedString {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineSpacing = 1
+        paragraph.lineBreakMode = .byTruncatingTail
+        return NSAttributedString(string: text, attributes: [
+            .font: NSFont.systemFont(ofSize: 11, weight: .medium), .foregroundColor: NSColor(hex: theme.typeReverse),
+            .paragraphStyle: paragraph,
+        ])
+    }
+
+    func fittingSize(maxWidth: CGFloat) -> NSSize {
+        let bounds = attributed.boundingRect(with: NSSize(width: maxWidth - 2 * Self.padding.width, height: 100),
+                                             options: [.usesLineFragmentOrigin])
+        return NSSize(width: ceil(bounds.width) + 2 * Self.padding.width, height: ceil(bounds.height) + 2 * Self.padding.height)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor(hex: theme.typeMain).setFill()
+        let radius = min(8, bounds.height / 2)
+        NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius).fill()
+        attributed.draw(with: bounds.insetBy(dx: Self.padding.width, dy: Self.padding.height), options: [.usesLineFragmentOrigin])
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
 /// One editor plus the lock screen that replaces it for locked notes.

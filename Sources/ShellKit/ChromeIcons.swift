@@ -185,8 +185,9 @@ enum Planet: Int, CaseIterable {
     }
 
     /// Draws the planet's 30-unit canvas into `rect` (y down) in `color`. Details are cut out of the body
-    /// (transparent), so whatever is behind shows through.
-    func draw(in rect: NSRect, color: NSColor) {
+    /// (transparent), so whatever is behind shows through. `outlined` hollows the body out to a ring about 1 pt
+    /// wide at bar size (the tiny dwarf planets stay solid).
+    func draw(in rect: NSRect, color: NSColor, outlined: Bool = false) {
         guard let ctx = NSGraphicsContext.current else { return }
         NSGraphicsContext.saveGraphicsState()
         ctx.cgContext.beginTransparencyLayer(auxiliaryInfo: nil)
@@ -204,6 +205,13 @@ enum Planet: Int, CaseIterable {
             draw()
             ctx.compositingOperation = .sourceOver
         }
+        func fillBody() {
+            disc.fill()
+            let ring: CGFloat = 1.4
+            guard outlined, b.d > 3 * ring else { return }
+            knockout { NSBezierPath(ovalIn: NSRect(x: b.x - b.d / 2 + ring, y: b.y - b.d / 2 + ring,
+                                                   width: b.d - 2 * ring, height: b.d - 2 * ring)).fill() }
+        }
         switch self {
         case .saturn:
             // A tilted ring: its back half hides behind the body, its front half crosses it with a gap.
@@ -213,7 +221,7 @@ enum Planet: Int, CaseIterable {
             ring.transform(using: t)
             ring.lineWidth = 1.2
             ring.stroke()
-            disc.fill()
+            fillBody()
             NSGraphicsContext.saveGraphicsState()
             let front = NSBezierPath()
             front.move(to: NSPoint(x: -14, y: 0))
@@ -235,12 +243,12 @@ enum Planet: Int, CaseIterable {
             ring.transform(using: t)
             ring.lineWidth = 0.55
             ring.stroke()
-            disc.fill()
+            fillBody()
         default:
-            disc.fill()
+            fillBody()
         }
         switch self {
-        case .venus:
+        case .venus where !outlined:
             // A wavy cloud band across the middle.
             let wave = NSBezierPath()
             wave.move(to: NSPoint(x: 10.5, y: 15.2))
@@ -249,7 +257,7 @@ enum Planet: Int, CaseIterable {
             knockout { wave.stroke() }
         case .earth:
             NSBezierPath(ovalIn: NSRect(x: 7.75, y: 11, width: 1.5, height: 1.5)).fill()
-        case .mars:
+        case .mars where !outlined:
             // Polar caps: short cuts near the top and bottom.
             for y in [11.9, 18.1] as [CGFloat] {
                 let cap = NSBezierPath()

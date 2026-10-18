@@ -19,9 +19,14 @@ enum Scenes {
         scenes.append(Scene(name: "editor-drop", size: window) { EditorPreview.dropOverlay(size: window) })
         scenes.append(Scene(name: "editor-autocomplete", size: window) { autocomplete() })
         scenes.append(Scene(name: "editor-autocomplete-dark", size: window, dark: true) { autocomplete() })
-        scenes.append(Scene(name: "editor-slash", size: window) { slashList(query: "") })
-        scenes.append(Scene(name: "editor-slash-dark", size: window, dark: true) { slashList(query: "") })
+        // The "/" list hangs below the note window when it doesn't fit; these canvases are tall enough to show it.
+        scenes.append(Scene(name: "editor-slash", size: slashCanvas) { slashList(query: "") })
+        scenes.append(Scene(name: "editor-slash-dark", size: slashCanvas, dark: true) { slashList(query: "") })
+        scenes.append(Scene(name: "editor-slash-hover", size: slashCanvas) { slashList(query: "", hover: 3) })
+        scenes.append(Scene(name: "editor-slash-hover-dark", size: slashCanvas, dark: true) { slashList(query: "", hover: 3) })
+        scenes.append(Scene(name: "editor-slash-scrolled", size: slashCanvas) { slashList(query: "", hover: 9) })
         scenes.append(Scene(name: "editor-slash-filtered", size: window) { slashList(query: "ti") })
+        scenes.append(Scene(name: "editor-slash-flipped", size: window) { slashList(query: "ti", low: true) })
         scenes.append(Scene(name: "editor-find", size: window) { EditorPreview.findShelf(Demo.notes[2].1, term: "the", replace: false) })
         scenes.append(Scene(name: "editor-find-replace", size: window) {
             EditorPreview.findShelf(Demo.notes[2].1, term: "the", replace: true)
@@ -37,9 +42,11 @@ enum Scenes {
         return scenes + windows + settings + tools + themes
     }
 
-    /// The "/" list under a line holding "/" plus `query`, filled with commands like the palette's.
-    static func slashList(query: String) -> NSView {
-        let view = editor("Groceries\nmilk and eggs\n/" + query)
+    static let slashCanvas = NSSize(width: 337, height: 420)
+
+    /// The "/" list under a line holding "/" plus `query`, filled with commands like the palette's; the pointer
+    /// on row `hover` (selected, scrolled into view). `low` puts the line near the bottom so the list flips above.
+    static func slashList(query: String, hover: Int? = nil, low: Bool = false) -> NSView {
         var commands = NoteMode.keywordModes.map { mode in
             PaletteCommand(title: "Insert Keyword: \(mode.mainKeyword)", detail: mode.summary, symbol: "text.insert",
                            keywords: mode.keywords.joined(separator: " "), keyword: mode.mainKeyword) {}
@@ -52,10 +59,10 @@ enum Scenes {
                         PaletteCommand(title: "Start Pomodoro (25/5)", symbol: "timer") {},
                         PaletteCommand(title: "Settings: Timer", symbol: "gearshape") {}]
         }
-        let list = EditorPreview.slashList(commands, query: query, width: window.width)
-        list.setFrameOrigin(NSPoint(x: 33, y: window.height - 128 - list.frame.height))
-        view.addSubview(list)
-        return view
+        let canvas = query.isEmpty ? slashCanvas : window
+        let list = EditorPreview.slashList(commands, query: query, selected: hover ?? 0, width: canvas.width)
+        let lines = "Groceries\nmilk and eggs\n" + (low ? "bread\nbutter\napples\nrice\ncoffee\noats\nbasil\nlimes\n" : "")
+        return EditorPreview.note(lines + "/" + query, size: canvas, showing: list, anchor: (lines as NSString).length, pointerOn: hover)
     }
 
     /// A list note whose plain lines took the bullet style.
@@ -91,7 +98,6 @@ enum Scenes {
 
     /// The `::` command list under a line ending in `::`.
     static func autocomplete() -> NSView {
-        let view = editor("did you think i was a city\nbig enough for a weekend getaway\nBUT ALWAYS PASS THROUGH ::")
         func command(_ name: String, _ ext: String, _ action: String) -> ExtensionCommandInfo {
             ExtensionCommandInfo(name: name, aliases: [], extensionName: ext, helpText: "", signature: "", action: action)
         }
@@ -100,9 +106,8 @@ enum Scenes {
             command("title_case_line", "line_format", "replaceLine"), command("roll", "dice", "insert"),
             command("today", "date", "insert"),
         ], width: window.width)
-        list.setFrameOrigin(NSPoint(x: 40, y: window.height - 120 - list.frame.height))
-        view.addSubview(list)
-        return view
+        return EditorPreview.note("did you think i was a city\nbig enough for a weekend getaway\nBUT ALWAYS PASS THROUGH ::",
+                                  size: window, showing: list)
     }
 
     /// The four pill kinds stacked over a plain note.
@@ -231,6 +236,25 @@ extension Scenes {
         return [Scene(name: "window-revealed", size: size) { windowFrame(revealed: true) },
                 Scene(name: "window-rest", size: size) { windowFrame(revealed: false) },
                 Scene(name: "window-revealed-dark", size: size, dark: true) { windowFrame(revealed: true) },
+                // The bottom bar at the default width and at the narrowest window, with the longest date text.
+                Scene(name: "window-bottombar-350", size: size) { withDates { windowFrame(revealed: true) } },
+                Scene(name: "window-bottombar-350-dark", size: size, dark: true) { withDates { windowFrame(revealed: true) } },
+                Scene(name: "window-bottombar-240", size: NSSize(width: 240, height: size.height)) {
+                    withDates { windowFrame(revealed: true, size: NSSize(width: 240, height: size.height)) }
+                },
+                // The slot bar alone: no notes slotted, some, all nine; the pointer on a slot holding a note and on
+                // an empty one.
+                Scene(name: "slots-empty", size: slotStrip) { Render.drawn(WindowPreview.slotsBar(titles: [:], open: nil, hovered: nil, width: slotStrip.width)) },
+                Scene(name: "slots-partial", size: slotStrip) { Render.drawn(WindowPreview.slotsBar(titles: someSlots, open: nil, hovered: nil, width: slotStrip.width)) },
+                Scene(name: "slots-partial-open", size: slotStrip) { Render.drawn(WindowPreview.slotsBar(titles: someSlots, open: 4, hovered: nil, width: slotStrip.width)) },
+                Scene(name: "slots-full", size: slotStrip) { Render.drawn(WindowPreview.slotsBar(titles: allSlots, open: 2, hovered: nil, width: slotStrip.width)) },
+                Scene(name: "slots-hover-filled", size: slotStrip) { Render.drawn(WindowPreview.slotsBar(titles: someSlots, open: nil, hovered: 1, width: slotStrip.width)) },
+                Scene(name: "slots-hover-empty", size: slotStrip) { Render.drawn(WindowPreview.slotsBar(titles: someSlots, open: nil, hovered: 6, width: slotStrip.width)) },
+                Scene(name: "slots-partial-dark", size: slotStrip, dark: true) { Render.drawn(WindowPreview.slotsBar(titles: someSlots, open: 4, hovered: nil, width: slotStrip.width)) },
+                Scene(name: "slots-hover-empty-dark", size: slotStrip, dark: true) { Render.drawn(WindowPreview.slotsBar(titles: someSlots, open: 4, hovered: 6, width: slotStrip.width)) },
+                // In the window: the slot bar always shown, resting over the note, the pointer on Aphrodite.
+                Scene(name: "window-slots-always", size: size) { alwaysShowingSlots { windowFrame(revealed: false, hoveredSlot: 1) } },
+                Scene(name: "window-slots-always-dark", size: size, dark: true) { alwaysShowingSlots { windowFrame(revealed: false, hoveredSlot: 6) } },
                 // Last: opening a slot changes the shared window's state.
                 Scene(name: "window-slot", size: size) { windowFrame(revealed: true, slot: 1) },
                 Scene(name: "window-slot-own-theme", size: size) { slottedThemeFrame() },
@@ -238,9 +262,28 @@ extension Scenes {
             + chromeGlyphs
     }
 
+    static let slotStrip = NSSize(width: 350, height: 96)
+    static let someSlots: [Int: String] = [0: "Hermes", 1: "Aphrodite", 4: "Zeus"]
+    static let allSlots = Dictionary(uniqueKeysWithValues: ["Hermes", "Aphrodite", "Gaia", "Ares", "Zeus", "Cronus", "Ouranos",
+                                                            "Poseidon", "Hades"].enumerated().map { ($0, $1) })
+
+    /// Renders with "Show note modified/created time" on (the longest bottom-bar text).
+    private static func withDates(_ make: () -> NSView) -> NSView {
+        Defaults[.showNoteDates] = true
+        defer { Defaults.reset(.showNoteDates) }
+        return make()
+    }
+
+    /// Renders with "Always show the slotted notes bar" on.
+    private static func alwaysShowingSlots(_ make: () -> NSView) -> NSView {
+        Defaults[.alwaysShowSlotsBar] = true
+        defer { Defaults.reset(.alwaysShowSlotsBar) }
+        return make()
+    }
+
     /// Seeds a few notes (the demo math note in front, two slotted notes) and snapshots the window frame, showing
-    /// `slot` when given.
-    private static func windowFrame(revealed: Bool, slot: Int? = nil) -> NSView {
+    /// `slot` when given, at content `size` (the default when nil), the pointer on the slot bar's `hoveredSlot`.
+    private static func windowFrame(revealed: Bool, slot: Int? = nil, size: NSSize? = nil, hoveredSlot: Int? = nil) -> NSView {
         let store = Services.store!
         if store.deck.isEmpty {
             store.setSlot(1, for: store.create(content: "# Aphrodite\nSlot two.").id)
@@ -248,7 +291,7 @@ extension Scenes {
             store.create(content: Demo.notes[2].1)
             store.create(content: Demo.notes[0].1)
         }
-        return Render.drawn(WindowPreview.frameView(revealed: revealed, slot: slot))
+        return Render.drawn(WindowPreview.frameView(revealed: revealed, slot: slot, size: size, hoveredSlot: hoveredSlot))
     }
 
     /// Slot five with its own theme (Meadow) while ephemeral notes keep the default pair.

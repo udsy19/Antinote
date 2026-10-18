@@ -1,4 +1,5 @@
 import AppKit
+import SuperNotesCore
 
 /// The main note window built offscreen for rendering (SuperNotesRender); it is never shown. Notes come from
 /// `Services.store` (front note first), so the caller seeds the store before asking.
@@ -6,9 +7,30 @@ public enum WindowPreview {
     /// The main window's default content size.
     @MainActor public static var defaultSize: NSSize { MainWindow.defaultSize }
 
-    /// The window's whole frame view (traffic lights included). `revealed` shows the hover-only bars.
-    @MainActor public static func frameView(revealed: Bool, slot: Int? = nil) -> NSView {
-        Shell.shared.prepareForPreview(revealed: revealed, slot: slot)
+    /// The window's whole frame view (traffic lights included) at content `size` (the default when nil).
+    /// `revealed` shows the hover-only bars; `hoveredSlot` rests the pointer on that planet of the slot bar.
+    @MainActor public static func frameView(revealed: Bool, slot: Int? = nil, size: NSSize? = nil, hoveredSlot: Int? = nil) -> NSView {
+        Shell.shared.prepareForPreview(revealed: revealed, slot: slot, size: size, hoveredSlot: hoveredSlot)
+    }
+
+    /// The slot bar alone on a strip of the note's background `width` wide: `titles[slot]` for the slots holding
+    /// notes, `open` the slot shown, the pointer on `hovered` (its tip above the bar).
+    @MainActor public static func slotsBar(titles: [Int: String], open: Int?, hovered: Int?, width: CGFloat) -> NSView {
+        MainMenu.buildForPreview()   // the empty slots' tip names the Assign to Slot shortcut
+        let theme = Theme.current
+        let strip = NSView(frame: NSRect(x: 0, y: 0, width: width, height: 96))
+        strip.wantsLayer = true
+        strip.layer?.backgroundColor = NSColor(hex: theme.background).cgColor
+        let bar = SlotsBarView()
+        bar.update(titles: titles, open: open, theme: theme)
+        bar.isShown = true
+        bar.alphaValue = 1
+        let size = bar.intrinsicContentSize
+        bar.frame = NSRect(x: ((width - size.width) / 2).rounded(), y: SlotsBarView.bottomInset, width: size.width, height: size.height)
+        strip.addSubview(bar)
+        bar.layoutSubtreeIfNeeded()
+        bar.setHovered(hovered)
+        return strip
     }
 }
 

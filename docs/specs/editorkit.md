@@ -75,7 +75,10 @@ its UI strings (quoted below).
   line. Letters after the `/` filter the list.
 - A bare `/` lists the keyword commands first (`NoteMode.keywordModes` order, each keyword in its colour with what
   it does), then the rest. Rows 1–9 are numbered: typing the digit, Return, Tab or a click runs the row; ↑/↓ move.
-  Esc closes it until the next `/`; `//` (a comment) or a space closes it.
+  Esc or a click elsewhere closes it until the next `/`; `//` (a comment) or a space closes it.
+- It is the same popover as the `::` list (below): nine rows show at once and the rest scroll. Keyword rows show
+  the keyword as a chip tinted with its colour, the descriptions lined up after the widest chip and cut short with
+  "…"; other rows show their title and shortcut; the number sits right-aligned in a muted mono.
 - A keyword command removes the `/query` and makes its keyword (`NoteMode.mainKeyword`) the note's first line as
   one undoable edit (`NoteMode.settingKeyword`). Other commands remove the `/query`, save, then run.
 
@@ -128,8 +131,12 @@ its UI strings (quoted below).
 - Typing `::` shows a completion panel from `Services.extensions.complete(prefix)`; ↑↓ move, Tab/Return accept
   (inserts `::name()` with the caret inside the parentheses when the signature takes arguments), Esc closes.
   The panel (~60% of the window, `background` with a `typeSuperlight` border) lists 28 pt rows: `›` on the
-  selected (`typeHyperLight`) row, the command name, its extension in `typeSuperlight`, and an action badge
-  ("⇆ replaceLine" accent 1, "↓ insert" accent 3), with a key-hint footer; "No commands found" when empty.
+  selected row (a rounded `typeHyperLight` fill), the command name, its extension in `typeSuperlight`, and an action
+  badge ("⇆ replaceLine" accent 1, "↓ insert" accent 3), with a key-hint footer; "No commands found" when empty.
+- Both lists (`CompletionPanel`) sit under the caret, or above it when the caret is in the window's lower 40% or the
+  list would leave the screen. They take the mouse without taking focus (a borderless panel that never becomes
+  key; the first click counts): the row under the pointer is selected (↑↓ carry on from it), a click runs it, the
+  wheel scrolls (8 `::` / 9 "/" rows at once), and a click outside or leaving the app closes the list.
 - Return on a line containing `::name(args)` runs it; the `ExtensionEdit` is applied (insert replaces the
   invocation, replaceLine, replaceAll, openURL opens and removes the invocation, message/failure → inline toast).
 
