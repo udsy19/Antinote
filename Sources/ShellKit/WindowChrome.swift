@@ -62,13 +62,16 @@ enum ChromeTooltip {
     }
 }
 
-/// A chrome button (30 × 30): a line-art glyph drawn at 22 pt (4 pt inset) in `typeMain`, a `typeHyperLight`
-/// rounded square (radius 5) on hover and `typeLight` while pressed; the pin turns `accent3Main` when pinned
-/// (`accent3Secondary` on hover). On macOS 26 the background is a round Liquid Glass button instead, tinted for
-/// the same states.
+/// A chrome button on `ChromeMetrics` (30 × 30): a line-art glyph drawn at 22 pt (4 pt inset) in `typeMain`, a
+/// `typeHyperLight` rounded square (radius 5) on hover and `typeLight` while pressed; the pin turns `accent3Main`
+/// when pinned (`accent3Secondary` on hover). Disabled, the glyph fades to 35 % and the mouse does nothing. With
+/// Full Keyboard Access the button takes the focus (a rounded focus ring) and Space or Return presses it. On
+/// macOS 26 the background is a round Liquid Glass button instead, tinted for the same states.
 final class ChromeButton: NSView {
-    static let side: CGFloat = 30
-    static let cornerRadius: CGFloat = 5
+    static let side = ChromeMetrics.button
+    static let cornerRadius = ChromeMetrics.cornerRadius
+    /// The glyph's opacity while disabled.
+    static let disabledAlpha: CGFloat = 0.35
     /// The glass flavour on macOS 26: regular for the top bar, clear for the bottom bar (whose hover tint is
     /// `typeHyperLight` at 20%).
     enum GlassStyle { case regular, clear }
@@ -86,6 +89,14 @@ final class ChromeButton: NSView {
     private var pressed = false { didSet { stateChanged() } }
     var isPinned = false { didSet { stateChanged() } }
     var theme: Theme = .defaultLight { didSet { stateChanged() } }
+    var isEnabled = true {
+        didSet {
+            guard isEnabled != oldValue else { return }
+            if !isEnabled { hovered = false; pressed = false }
+            setAccessibilityEnabled(isEnabled)
+            stateChanged()
+        }
+    }
 
     init(_ icon: ChromeIcon, _ label: String, tooltip: String? = nil, glass: GlassStyle = .regular,
          target: AnyObject?, action: Selector) {
@@ -100,6 +111,7 @@ final class ChromeButton: NSView {
         setAccessibilityElement(true)
         setAccessibilityRole(.button)
         setAccessibilityLabel(label)
+        focusRingType = .exterior
         translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([widthAnchor.constraint(equalToConstant: Self.side),
                                      heightAnchor.constraint(equalToConstant: Self.side)])
@@ -135,19 +147,43 @@ final class ChromeButton: NSView {
         }
     }
 
+    private var shape: NSBezierPath { NSBezierPath(roundedRect: bounds, xRadius: Self.cornerRadius, yRadius: Self.cornerRadius) }
+
     override func draw(_ dirtyRect: NSRect) {
         if glass == nil, pressed || hovered {
             NSColor(hex: pressed ? theme.typeLight : theme.typeHyperLight).setFill()
-            NSBezierPath(roundedRect: bounds, xRadius: Self.cornerRadius, yRadius: Self.cornerRadius).fill()
+            shape.fill()
         }
     }
+
+    // MARK: Keyboard focus (Full Keyboard Access tabs through the revealed bars)
+
+    override var acceptsFirstResponder: Bool { isEnabled && isShownInBar }
+    override var canBecomeKeyView: Bool { acceptsFirstResponder }
+    override var focusRingMaskBounds: NSRect { bounds }
+    override func drawFocusRingMask() { shape.fill() }
+    override func becomeFirstResponder() -> Bool { needsDisplay = true; return super.becomeFirstResponder() }
+    override func resignFirstResponder() -> Bool { needsDisplay = true; return super.resignFirstResponder() }
+    override func keyDown(with event: NSEvent) {
+        if event.charactersIgnoringModifiers == " " || event.keyCode == 36 { press() } else { super.keyDown(with: event) }
+    }
+
+    /// Hidden bars (and hidden buttons) take no focus.
+    private var isShownInBar: Bool {
+        guard !isHiddenOrHasHiddenAncestor else { return false }
+        var v: NSView? = superview
+        while let view = v { if let bar = view as? HoverBar { return bar.isRevealed }; v = view.superview }
+        return true
+    }
+
+    private func press() { if isEnabled { NSApp.sendAction(action, to: target, from: self) } }
 
     /// The glyph, in a child view so it sits above the glass.
     private func addGlyph() {
         let inset = (Self.side - ChromeIcon.size) / 2
         let view = GlyphView { [unowned self] rect in
             let tint = NSColor(hex: self.isPinned ? (self.hovered ? self.theme.accent3Secondary : self.theme.accent3Main)
-                                                  : self.theme.typeMain)
+                                                  : self.theme.typeMain).withAlphaComponent(self.isEnabled ? 1 : Self.disabledAlpha)
             let tinted = NSImage(size: rect.size, flipped: false) { r in
                 self.icon.image.draw(in: r)
                 tint.set()
@@ -170,16 +206,16 @@ final class ChromeButton: NSView {
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self))
     }
 
-    override func mouseEntered(with event: NSEvent) { hovered = true }
+    override func mouseEntered(with event: NSEvent) { hovered = isEnabled }
     override func mouseExited(with event: NSEvent) { hovered = false }
-    override func mouseDown(with event: NSEvent) { pressed = true }
-    override func mouseDragged(with event: NSEvent) { pressed = bounds.contains(convert(event.locationInWindow, from: nil)) }
+    override func mouseDown(with event: NSEvent) { pressed = isEnabled }
+    override func mouseDragged(with event: NSEvent) { pressed = isEnabled && bounds.contains(convert(event.locationInWindow, from: nil)) }
     override func mouseUp(with event: NSEvent) {
-        let inside = bounds.contains(convert(event.locationInWindow, from: nil))
+        let inside = pressed && bounds.contains(convert(event.locationInWindow, from: nil))
         pressed = false
-        if inside { NSApp.sendAction(action, to: target, from: self) }
+        if inside { press() }
     }
-    override func accessibilityPerformPress() -> Bool { NSApp.sendAction(action, to: target, from: self) }
+    override func accessibilityPerformPress() -> Bool { press(); return isEnabled }
 }
 
 /// A view that draws with a closure and ignores the mouse.
@@ -316,40 +352,49 @@ class HoverBar: NSView {
     }
 }
 
-/// Top strip: drags the window; on hover shows the traffic lights, Settings and Search on the left and New Note
-/// and Pin on the right. The bar is 30 pt tall and its buttons (and the traffic lights) sit 5 pt below its middle,
-/// so they reach 5 pt past it; the strip covers them.
+/// Top strip: drags the window; on hover shows the traffic lights, then Settings, Search and Typing on the left
+/// and New Note and Pin on the right, all on `ChromeMetrics`: the row is centred 20 pt from the top (the traffic
+/// lights are moved onto it), the left group starts one gap after the zoom button, the right group ends 10 pt
+/// from the edge, 8 pt between buttons. The strip is 35 pt tall, so it covers the buttons' lower edge.
 final class TitleBarView: HoverBar {
-    static let height: CGFloat = 35
-    /// Centre of the button row, from the window top: the 30 pt bar's middle plus 5.
-    static let iconRow: CGFloat = 20
-    /// Left buttons start after the traffic lights; the right ones end 10 pt from the edge.
-    static let leadingInset: CGFloat = 80
-    static let trailingInset: CGFloat = 10
-    /// Gap between neighbouring buttons: none, or 5 pt between the round glass buttons of macOS 26.
-    static var spacing: CGFloat { if #available(macOS 26, *) { 5 } else { 0 } }
+    static let height = ChromeMetrics.topBarHeight
+    /// Centre of the button row, from the window top.
+    static let iconRow = ChromeMetrics.row
 
     let pinButton: ChromeButton
+    /// The Typing options button; its menu drops from under it.
+    let typingButton: ChromeButton
     private let buttons: [ChromeButton]
 
     init(target: AnyObject) {
         let settings = ChromeButton(.settings, "Settings", tooltip: "Settings - ⌘+,", target: target,
                                     action: #selector(Shell.openSettings(_:)))
         let search = ChromeButton(.search, "Search Notes", target: target, action: #selector(Shell.searchAllNotes(_:)))
+        typingButton = ChromeButton(.typing, "Typing Options", tooltip: "Typing options", target: target,
+                                    action: #selector(Shell.showTypingOptions(_:)))
         let new = ChromeButton(.new, "New Note", target: target, action: #selector(Shell.newNote(_:)))
         pinButton = ChromeButton(.pin, "Pin Super Notes to Top", target: target, action: #selector(Shell.togglePin(_:)))
-        buttons = [settings, search, new, pinButton]
+        buttons = [settings, search, typingButton, new, pinButton]
         super.init(frame: .zero)
         buttons.forEach(content.addSubview)
-        let side = ChromeButton.side, gap = Self.spacing
+        let step = ChromeMetrics.button + ChromeMetrics.spacing
         NSLayoutConstraint.activate([
-            settings.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: Self.leadingInset),
-            search.leadingAnchor.constraint(equalTo: settings.leadingAnchor, constant: side + gap),
-            pinButton.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -Self.trailingInset),
-            new.trailingAnchor.constraint(equalTo: pinButton.trailingAnchor, constant: -(side + gap)),
+            settings.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: ChromeMetrics.leadingInset),
+            search.leadingAnchor.constraint(equalTo: settings.leadingAnchor, constant: step),
+            typingButton.leadingAnchor.constraint(equalTo: search.leadingAnchor, constant: step),
+            pinButton.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -ChromeMetrics.sideInset),
+            new.trailingAnchor.constraint(equalTo: pinButton.trailingAnchor, constant: -step),
         ] + buttons.map { $0.centerYAnchor.constraint(equalTo: content.topAnchor, constant: Self.iconRow) })
     }
     required init?(coder: NSCoder) { fatalError() }
+
+    /// In a window too narrow for both groups (under 261 pt) the Typing button gives way; its menu stays in the
+    /// Edit menu's reach through Settings → Editor → Typing.
+    override func layout() {
+        super.layout()
+        let fits = ChromeMetrics.leftButtonsFitting(width: bounds.width, left: 3, right: 2) == 3
+        if typingButton.isHidden == fits { typingButton.isHidden = !fits }
+    }
 
     /// Clicks on the strip itself (not a button) drag the window, double-click zooms — even while hidden.
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -372,13 +417,47 @@ final class TitleBarView: HoverBar {
     func setPinned(_ pinned: Bool) { pinButton.isPinned = pinned }
 }
 
+/// The Typing options menu, dropped from the top bar's Typing button: one checkmark item per `TypingOption` (the
+/// checkers, a separator, then the substitutions), each applied to every editor the moment it's ticked and kept
+/// in Settings → Editor → Typing. A greyed last line says what the shown note's mode suspends ("Code notes: no
+/// checking or substitutions").
+@MainActor
+enum TypingMenu {
+    static func build(mode: NoteMode, target: AnyObject, action: Selector) -> NSMenu {
+        let menu = NSMenu(title: "Typing")
+        menu.autoenablesItems = false
+        for (i, option) in TypingOption.allCases.enumerated() {
+            if i > 0, !option.isChecker, TypingOption.allCases[i - 1].isChecker { menu.addItem(.separator()) }
+            let item = NSMenuItem(title: option.title, action: action, keyEquivalent: "")
+            item.target = target
+            item.tag = i
+            item.state = option.isOn ? .on : .off
+            item.toolTip = option.isSuspended(in: mode) ? "Not in \(mode.displayName.lowercased()) notes" : nil
+            menu.addItem(item)
+        }
+        if let note = TypingOption.suspensionNote(for: mode) {
+            menu.addItem(.separator())
+            let item = NSMenuItem(title: note, action: nil, keyEquivalent: "")
+            item.isEnabled = false
+            menu.addItem(item)
+        }
+        return menu
+    }
+
+    /// Pops the menu up under `button`, 4 pt below it.
+    static func show(mode: NoteMode, under button: NSView, target: AnyObject, action: Selector) {
+        build(mode: mode, target: target, action: action).popUp(positioning: nil, at: NSPoint(x: 0, y: -4), in: button)
+    }
+}
+
 /// Bottom strip (40 pt), shown on hover: Delete on the left; the note's date and position ("Oct 17, 2026 | 3 of
 /// 12", the bar 8 pt from each part) in the middle, in the system's grey 11 pt subheadline; Previous / Next /
-/// First and Export on the right. Buttons are 30 pt, centred 20 pt above the bottom, 10 pt in from the sides and
-/// 8 pt apart. In a narrow window the text is cut short in the middle, then dropped, then Export and First give
-/// way (`BottomBarLayout`), so nothing is clipped or overlapped.
+/// First and Export on the right. Buttons follow `ChromeMetrics`: 30 pt, centred 20 pt above the bottom, 10 pt
+/// in from the sides and 8 pt apart. In a narrow window the text is cut short in the middle, then dropped, then
+/// Export and First give way (`BottomBarLayout`), so nothing is clipped or overlapped. The shell keeps the bar
+/// down while a mode owns the strip (Search's capsules, the find shelf).
 final class BottomBarView: HoverBar {
-    static let height: CGFloat = 40
+    static let height = ChromeMetrics.bottomBarHeight
     static let textFont = NSFont.preferredFont(forTextStyle: .subheadline)
     private let info = NSTextField(labelWithString: "")
     private let delete: ChromeButton
@@ -397,6 +476,7 @@ final class BottomBarView: HoverBar {
         buttons = [delete] + trailing
         super.init(frame: .zero)
         info.lineBreakMode = .byTruncatingMiddle
+        info.identifier = NSUserInterfaceItemIdentifier("BottomBarInfo")
         // Placed by frame in `layout()`, from `BottomBarLayout.fit`.
         for view in buttons + [info] as [NSView] {
             view.translatesAutoresizingMaskIntoConstraints = true
@@ -410,7 +490,7 @@ final class BottomBarView: HoverBar {
         let width = content.bounds.width, side = CGFloat(BottomBarLayout.button)
         let text = info.attributedStringValue.length == 0 ? 0 : ceil(info.cell?.cellSize.width ?? 0)   // with the cell's padding
         let fit = BottomBarLayout.fit(width: Double(width), textWidth: Double(text))
-        let row = Self.height / 2, y = row - side / 2
+        let row = ChromeMetrics.row, y = row - side / 2
         let inset = CGFloat(BottomBarLayout.sideInset), step = side + CGFloat(BottomBarLayout.spacing)
         delete.frame = NSRect(x: inset, y: y, width: side, height: side)
         let shown = Array(trailing.prefix(fit.buttons - 1))

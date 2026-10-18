@@ -425,6 +425,10 @@ public protocol NoteEditing: AnyObject {
     /// Height of chrome resting over the bottom of the note (the always-shown slot bar); the end of a long note
     /// scrolls clear of it.
     var bottomOverlay: CGFloat { get set }
+    /// Whether the editor's own controls occupy the bottom of the note (the find shelf); the window's bottom bar
+    /// stays down while they do. `onBottomControlsChange` fires when this changes.
+    var hasBottomControls: Bool { get }
+    var onBottomControlsChange: (() -> Void)? { get set }
     /// While this returns a manager, Edit › Undo / Redo act on it instead of the note's own history (the shell's
     /// "Undo Delete Note" right after a note was deleted).
     var externalUndo: (() -> UndoManager?)? { get set }

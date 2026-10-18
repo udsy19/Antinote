@@ -104,3 +104,18 @@ public enum SearchMetrics {
         return (count, min(maximum, max(0, column)).rounded(.down))
     }
 }
+
+/// The Search pane's toolbar capsules sit on the window's bottom row (`ChromeMetrics`): 10 pt in from the sides,
+/// centred 20 pt above the bottom, at least 30 pt tall, 8 pt apart. Where the two capsules with their labels
+/// don't fit the width, the left capsule's items keep their glyphs and drop their labels.
+public enum SearchToolbarLayout {
+    public static let gap: CGFloat = 8
+    /// Results scroll clear of the capsules.
+    public static var resultsBottom: CGFloat { ChromeMetrics.row + ChromeMetrics.button / 2 + 20 }
+
+    /// Whether the labels fit a pane `width` wide: `labelled` is the left capsule's width with its labels, `right`
+    /// the right capsule's.
+    public static func showsLabels(width: CGFloat, labelled: CGFloat, right: CGFloat) -> Bool {
+        2 * ChromeMetrics.sideInset + labelled + gap + right <= width
+    }
+}

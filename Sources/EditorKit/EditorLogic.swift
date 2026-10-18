@@ -872,6 +872,64 @@ extension EditorLogic {
     }
 }
 
+// MARK: - Capitalisation
+
+extension EditorLogic {
+    /// "Capitalize words automatically": the first word of a sentence is upper-cased the moment it's finished,
+    /// i.e. when a space, newline or tab is typed after it. A sentence starts at the beginning of a line (after
+    /// indentation, a list marker or heading marks) or after `.`, `!` or `?` and a space on the same line. Only
+    /// whole words of letters (apostrophes allowed) that begin with a lower-case letter change, so URLs, paths,
+    /// e-mail addresses and "example.com" never do, nor abbreviations such as "e.g." before the word.
+    public enum Capitalization {
+        /// The characters that finish a word for this purpose.
+        public static func isSeparator(_ typed: String) -> Bool { typed == " " || typed == "\n" || typed == "\t" }
+
+        private static let lineStart = try! NSRegularExpression(
+            pattern: #"^[ \t]*(?:#+[ \t]+|\[[ xX]\][ \t]+|[-*•][ \t]+|\d+[.)][ \t]+)?$"#)
+        private static let sentenceEnd = try! NSRegularExpression(pattern: #"(?:^|[ \t])([^ \t]*)[.!?]["')\]]*[ \t]+$"#)
+        private static let abbreviations: Set<String> = ["e.g", "i.e", "etc", "vs", "mr", "mrs", "ms", "dr", "prof", "no", "cf", "approx"]
+
+        /// `st` after the separator went in at `separatorAt`; the state with the word before it capitalised, or
+        /// nil when nothing changes. `skipLines` are line indices left alone (the keyword line); `protected`
+        /// ranges (code blocks, short links) are never touched.
+        public static func applied(_ st: TextState, separatorAt loc: Int, skipLines: Set<Int> = [],
+                                   protected: [NSRange] = []) -> TextState? {
+            let s = st.ns
+            guard loc > 0, loc <= s.length else { return nil }
+            // The word: letters and apostrophes right before the separator.
+            var start = loc
+            while start > 0, isWordChar(s.character(at: start - 1)) { start -= 1 }
+            guard start < loc, let first = s.substring(with: NSRange(location: start, length: 1)).unicodeScalars.first,
+                  CharacterSet.lowercaseLetters.contains(first) else { return nil }
+            let upper = String(first).uppercased()
+            guard (upper as NSString).length == 1, upper != String(first) else { return nil }
+            let word = NSRange(location: start, length: loc - start)
+            // A word with capitals of its own ("iPhone", "macOS") is spelled that way on purpose.
+            guard !s.substring(with: word).unicodeScalars.contains(where: CharacterSet.uppercaseLetters.contains) else { return nil }
+            guard !protected.contains(where: { NSIntersectionRange($0, word).length > 0 || NSLocationInRange(start, $0) }) else { return nil }
+            let line = Lines.range(s, at: start)
+            guard !skipLines.contains(Lines.index(s, at: start)) else { return nil }
+            let before = s.substring(with: NSRange(location: line.location, length: start - line.location))
+            let whole = NSRange(location: 0, length: (before as NSString).length)
+            var starts = lineStart.firstMatch(in: before, range: whole) != nil
+            if !starts, let m = sentenceEnd.firstMatch(in: before, range: whole) {
+                let token = (before as NSString).substring(with: m.range(at: 1)).lowercased()
+                starts = !abbreviations.contains(token) && !(token.count == 1 && token != "a" && token != "i")
+            }
+            guard starts else { return nil }
+            var out = st
+            out.text = s.replacingCharacters(in: NSRange(location: start, length: 1), with: upper)
+            return out
+        }
+
+        private static func isWordChar(_ c: unichar) -> Bool {
+            if c == 0x27 || c == 0x2019 { return true }   // ' and ’
+            guard let scalar = Unicode.Scalar(c) else { return false }
+            return CharacterSet.letters.contains(scalar)
+        }
+    }
+}
+
 // MARK: - Find and replace
 
 extension EditorLogic {

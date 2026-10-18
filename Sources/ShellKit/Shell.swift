@@ -46,6 +46,10 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
     private var appliedThemeID = ""
     /// Holds "Undo Delete Note" until the next edit or navigation; the editors route ⌘Z here while it does.
     private let noteUndo = UndoManager()
+    /// The store the preview window was last built for (`prepareForPreview`); set, the window is an offscreen
+    /// preview that is never ordered front.
+    private var previewStoreID: ObjectIdentifier?
+    private var isPreview: Bool { previewStoreID != nil }
 
     private var store: NoteStoring { Services.store }
     private var isSplit: Bool { Defaults[.shellKitSplit] }
@@ -79,17 +83,30 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
 
     @objc private func handleReopen(_ event: NSAppleEventDescriptor, reply: NSAppleEventDescriptor) { showMain() }
 
+    /// Renders and self-tests: an editor command on the shown note, and where the Typing button sits in the
+    /// window's frame view (the menu facsimile goes under it).
+    func performForPreview(_ command: EditorCommand) { pane(activeRole).editor.perform(command) }
+    var typingButtonFrameInFrame: NSRect {
+        let frame = window.contentView?.superview ?? window.contentView!
+        return titleBar.typingButton.convert(titleBar.typingButton.bounds, to: frame)
+    }
+
     /// Builds the window without showing it (offscreen renders): the front note, or `slot`, with the hover bars
     /// pinned visible when `revealed`, the content `size` (the default when nil), the pointer resting on the slot
     /// bar's `hoveredSlot`, and the slot bar as `slotBar` has it. Returns the window's frame view.
     func prepareForPreview(revealed: Bool, slot: Int?, size: NSSize? = nil, hoveredSlot: Int? = nil,
-                           slotBar: WindowPreview.SlotBar = .natural) -> NSView {
+                           slotBar: WindowPreview.SlotBar = .natural, presenting: NSView? = nil) -> NSView {
         if !launched {
             launched = true
             MainMenu.buildForPreview()
             buildWindow()
             restoreCurrentNote()
         }
+        // Self-tests swap the store between cases: the window follows the store it is now pointed at.
+        let storeID = ObjectIdentifier(store as AnyObject)
+        if previewStoreID != nil, previewStoreID != storeID { reloadForPreview() }
+        previewStoreID = storeID
+        if presenting !== presented { present(inWindow: presenting) }
         window.setContentSize(size ?? MainWindow.defaultSize)
         slotsBar.setHovered(hoveredSlot)   // before the slot opens: a planet under the pointer keeps its tip
         if let slot { openSlot(slot) }
@@ -196,6 +213,7 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
             self?.refreshChrome()
             self?.forgetUndoDelete()   // typing moves on; the deleted note stays in The Void
         }
+        editor.onBottomControlsChange = { [weak self] in self?.refreshChrome() }
         editor.externalUndo = { [weak self] in
             guard let self, self.noteUndo.canUndo else { return nil }
             return self.noteUndo
@@ -337,17 +355,26 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         SettingsWindow.shared.show(tab: SettingsTab(routing: tab))
     }
 
+    /// The presented view owns the bottom strip: the bottom bar, the slot bar and the latest-note dot stay down
+    /// while it shows (`refreshChrome`), so its own controls never meet the note's.
     func present(inWindow view: NSView?) {
         presented?.removeFromSuperview()
         presented = view
-        guard let view, let root = window.contentView else { focusActive(); return }
+        guard let view, let root = window.contentView else { refreshChrome(); focusActive(); return }
         view.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(view, positioned: .below, relativeTo: latestDot)
         NSLayoutConstraint.activate([
             view.leadingAnchor.constraint(equalTo: root.leadingAnchor), view.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             view.topAnchor.constraint(equalTo: root.topAnchor), view.bottomAnchor.constraint(equalTo: root.bottomAnchor),
         ])
-        if !window.isVisible { showMain() }
+        refreshChrome()
+        if !window.isVisible, !isPreview { showMain() }
+    }
+
+    /// Whether a mode's own controls hold the bottom strip right now: a presented view (Search) or an editor's
+    /// find shelf. The bottom bar and the slot bar stay down while they do.
+    private var bottomStripTaken: Bool {
+        presented != nil || [ephemeralPane, slotPane].contains { $0?.window != nil && $0?.editor.hasBottomControls == true }
     }
 
     func hideMain() {
@@ -685,7 +712,7 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
     private func applySlotBarVisibility() {
         guard slotsBar != nil else { return }
         let now = Date()
-        slotsBar.isShown = slotBarState.isVisible(at: now)
+        slotsBar.isShown = !bottomStripTaken && slotBarState.isVisible(at: now)
         slotBarWork?.cancel()
         slotBarWork = nil
         guard let next = slotBarState.nextChange(after: now) else { return }
@@ -847,7 +874,7 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
     func refreshChrome() {
         guard let bottomBar else { return }
         let theme = chromeTheme
-        let showBar = Defaults[.showBottomBar]
+        let showBar = Defaults[.showBottomBar] && !bottomStripTaken
         if bottomBar.isHidden == showBar {
             bottomBar.isHidden = !showBar
             if !showBar { bottomBar.setRevealed(false, animated: false) }
@@ -888,7 +915,7 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         bottomBar.update(parts: parts, theme: theme)
         let quick = Defaults[.quickExportDestination]
         bottomBar.exportButton.refreshTooltip(label: quick.map { "Quick Export (\(ChromeText.shortName($0.displayName)))" } ?? "Export")
-        latestDot.isHidden = !(latest && Defaults[.showLatestNoteIndicator]) || bottomBar.isRevealed
+        latestDot.isHidden = !(latest && Defaults[.showLatestNoteIndicator]) || bottomBar.isRevealed || presented != nil
         latestDot.layer?.backgroundColor = NSColor(hex: theme.accent1Main).cgColor
         titleBar.setPinned(Defaults[.pinOnTop])
     }
@@ -1209,6 +1236,23 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         validateVisibleNotes()
     }
 
+    /// The top bar's Typing button: its menu of typing switches, under the button.
+    @objc func showTypingOptions(_ sender: Any?) {
+        let anchor = (sender as? NSView) ?? titleBar.typingButton
+        TypingMenu.show(mode: analyses[activeRole]?.mode ?? .plain, under: anchor, target: self,
+                        action: #selector(toggleTypingOption(_:)))
+    }
+
+    @objc func toggleTypingOption(_ sender: NSMenuItem) {
+        guard TypingOption.allCases.indices.contains(sender.tag) else { return }
+        let option = TypingOption.allCases[sender.tag]
+        option.isOn.toggle()
+        let mode = analyses[activeRole]?.mode ?? .plain
+        let state = option.isOn ? "on" : "off"
+        HUD.show(option.isSuspended(in: mode) && option.isOn ? "\(option.title) \(state) · not in \(mode.displayName.lowercased()) notes"
+                                                           : "\(option.title) \(state)")
+    }
+
     @objc func togglePin(_ sender: Any?) {
         Defaults[.pinOnTop].toggle()
         HUD.show(Defaults[.pinOnTop] ? "Pinned on top" : "Unpinned")
@@ -1249,6 +1293,7 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         let note = currentNoteID.flatMap { Services.store?.note($0) }
         switch item.action {
         case #selector(toggleSlotsBar(_:)): item.state = Defaults[.alwaysShowSlotsBar] ? .on : .off
+        case #selector(toggleTypingOption(_:)): return true
         case #selector(toggleSplitHorizontal(_:)): item.state = Defaults[.shellKitSplitHorizontal] ? .on : .off; return isSplit
         case #selector(swapPanes(_:)): return isSplit
         case #selector(toggleLock(_:)), #selector(toggleReadOnly(_:)): return note != nil   // MenuState sets their titles

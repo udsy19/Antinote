@@ -280,12 +280,13 @@ final class SquareIconButton: NSButton {
 }
 
 /// A floating capsule holding toolbar items: `typeHyperLight` fill, a 1 pt `typeLight` 20 % border and a soft shadow
-/// (black 18 %, radius 8, 2 pt down).
+/// (black 18 %, radius 8, 2 pt down). It is a chrome button tall (`ChromeMetrics.button`, 30 pt; taller only
+/// when big text needs it), its items centred in it.
 @MainActor
 final class ToolbarCapsule: NSView {
     let stack = NSStackView()
 
-    init(horizontalPadding: CGFloat, verticalPadding: CGFloat = 5) {
+    init(horizontalPadding: CGFloat) {
         super.init(frame: .zero)
         wantsLayer = true
         layer?.masksToBounds = false
@@ -298,11 +299,15 @@ final class ToolbarCapsule: NSView {
         stack.alignment = .centerY
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
+        let preferred = heightAnchor.constraint(equalToConstant: ChromeMetrics.button)
+        preferred.priority = .defaultHigh
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: horizontalPadding),
             stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -horizontalPadding),
-            stack.topAnchor.constraint(equalTo: topAnchor, constant: verticalPadding),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -verticalPadding),
+            stack.centerYAnchor.constraint(equalTo: centerYAnchor),
+            stack.topAnchor.constraint(greaterThanOrEqualTo: topAnchor, constant: 2),
+            heightAnchor.constraint(greaterThanOrEqualToConstant: ChromeMetrics.button),
+            preferred,
         ])
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
@@ -343,6 +348,11 @@ final class ToolbarItem: NSView {
     var action: (() -> Void)?
     var isSelected = false { didSet { if let c = colors { apply(c) } } }
     var isDimmed = false { didSet { if let c = colors { apply(c) } } }
+    /// Whether the label shows (a narrow window keeps the glyph only; the title stays the tooltip).
+    var showsLabel = true { didSet { label.isHidden = !showsLabel || title == nil } }
+    /// What the label adds to the item's width.
+    var labelWidth: CGFloat { title == nil ? 0 : label.intrinsicContentSize.width + stack.spacing }
+    private var title: String?
     private let icon = NSImageView()
     private let label = NSTextField(labelWithString: "")
     private let stack = NSStackView()
@@ -353,6 +363,8 @@ final class ToolbarItem: NSView {
         wantsLayer = true
         icon.symbolConfiguration = .init(pointSize: size, weight: .regular)
         label.font = Typography.font(size: size)
+        // Below the window's own size priority (500): a narrow window shrinks and the pane hides the label.
+        label.setContentCompressionResistancePriority(.init(400), for: .horizontal)
         stack.orientation = .horizontal
         stack.spacing = 6
         stack.addArrangedSubview(icon)
@@ -370,9 +382,10 @@ final class ToolbarItem: NSView {
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
     func set(symbol: String, title: String?) {
+        self.title = title
         icon.image = NSImage(systemSymbolName: symbol, accessibilityDescription: title ?? toolTip)
         label.stringValue = title ?? ""
-        label.isHidden = title == nil
+        label.isHidden = title == nil || !showsLabel
         setAccessibilityLabel(title ?? toolTip)
     }
 

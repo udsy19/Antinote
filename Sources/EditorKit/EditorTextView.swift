@@ -476,6 +476,15 @@ final class EditorTextView: NSTextView {
         return super.validateUserInterfaceItem(item)
     }
 
+    // The context menu's Spelling and Grammar / Substitutions toggles write the typing settings, so every note
+    // and the top bar's Typing menu follow (the editor applies them as its mode allows).
+    override func toggleContinuousSpellChecking(_ sender: Any?) { TypingOption.checkSpelling.isOn.toggle() }
+    override func toggleAutomaticSpellingCorrection(_ sender: Any?) { TypingOption.autocorrect.isOn.toggle() }
+    override func toggleGrammarChecking(_ sender: Any?) { TypingOption.checkGrammar.isOn.toggle() }
+    override func toggleAutomaticQuoteSubstitution(_ sender: Any?) { TypingOption.smartQuotes.isOn.toggle() }
+    override func toggleAutomaticDashSubstitution(_ sender: Any?) { TypingOption.smartDashes.isOn.toggle() }
+    override func toggleAutomaticTextReplacement(_ sender: Any?) { TypingOption.textReplacements.isOn.toggle() }
+
     // MARK: Drag & drop (images → OCR)
 
     override var acceptableDragTypes: [NSPasteboard.PasteboardType] {

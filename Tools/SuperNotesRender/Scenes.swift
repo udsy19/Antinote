@@ -306,7 +306,7 @@ extension Scenes {
                 Scene(name: "window-slot-open-dark", size: size, dark: true) { windowFrame(revealed: false, slot: 1) },
                 Scene(name: "window-slot", size: size) { windowFrame(revealed: true, slot: 1) },
                 Scene(name: "window-slot-own-theme", size: size) { slottedThemeFrame() },
-                Scene(name: "window-locked", size: size) { lockedFrame() }]
+                Scene(name: "window-locked", size: size) { lockedFrame() }] + chrome
             + chromeGlyphs
     }
 
@@ -332,8 +332,8 @@ extension Scenes {
     /// Seeds a few notes (the demo math note in front, two slotted notes) and snapshots the window frame, showing
     /// `slot` when given, at content `size` (the default when nil), the pointer on the slot bar's `hoveredSlot`,
     /// the slot bar as `slotBar` has it.
-    private static func windowFrame(revealed: Bool, slot: Int? = nil, size: NSSize? = nil, hoveredSlot: Int? = nil,
-                                    slotBar: WindowPreview.SlotBar = .natural) -> NSView {
+    static func windowFrame(revealed: Bool, slot: Int? = nil, size: NSSize? = nil, hoveredSlot: Int? = nil,
+                            slotBar: WindowPreview.SlotBar = .natural, presenting: NSView? = nil) -> NSView {
         let store = Services.store!
         if store.deck.isEmpty {
             store.setSlot(1, for: store.create(content: "# Aphrodite\nSlot two.").id)
@@ -341,7 +341,8 @@ extension Scenes {
             store.create(content: Demo.notes[2].1)
             store.create(content: Demo.notes[0].1)
         }
-        return Render.drawn(WindowPreview.frameView(revealed: revealed, slot: slot, size: size, hoveredSlot: hoveredSlot, slotBar: slotBar))
+        return Render.drawn(WindowPreview.frameView(revealed: revealed, slot: slot, size: size, hoveredSlot: hoveredSlot, slotBar: slotBar,
+                                                    presenting: presenting))
     }
 
     /// Slot five with its own theme (Meadow) while ephemeral notes keep the default pair.

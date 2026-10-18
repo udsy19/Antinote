@@ -24,6 +24,29 @@ All notable changes to Super Notes are documented here. The format follows
   `"usesAI": true` in their manifest; the permissions list says so.
 - The bundle embeds llama.cpp's framework in Contents/Frameworks, signed before the app that seals it.
 
+- A Typing button in the top bar (the “A” after Settings and Search; tooltip "Typing options"): a menu of
+  checkmarks that take effect at once in every note and stay set — Check Spelling While Typing, Correct Spelling
+  Automatically, Check Grammar, Capitalize Words Automatically, Smart Quotes, Smart Dashes, Text Replacements. Only
+  spelling is on to begin with (a scratchpad shouldn't rewrite what you type). Code notes are never checked; code
+  and math notes get no substitutions or capitalisation, and the menu says so under the items. The same switches,
+  with the same names, are in Settings → Editor → Typing, and the note's right-click Spelling / Substitutions
+  toggles write the same settings. Capitalisation is Super Notes' own: the first word of a line or sentence is
+  capitalised once it's finished, never URLs, paths, addresses, "example.com", "e.g." or words spelled with
+  capitals of their own ("iPhone"). The settings sync with the rest.
+
+### Fixed
+- Search no longer fights the window's bottom bar: resting the pointer along the bottom of the Search view brought
+  Delete / Previous / Next / Latest / Export up over Search's own Select | Ephemeral and list / cards capsules (and
+  their tooltips over each other). A mode that brings its own bottom controls — Search, the find shelf — now owns
+  the bottom strip: the bottom bar, the slot bar and the latest-note dot stay down until it closes. Search's
+  capsules sit where the bar's buttons would be (10 pt in, centred 20 pt up, 30 pt tall); under 261 pt the Typing
+  button gives way, and in a narrow Search the Select and Ephemeral items keep their glyphs and drop their labels,
+  so nothing overlaps at any width from 240 pt up (a self-test checks every mode at 240, 350, 600 and 1200 pt).
+- The corner buttons share one size system (`ChromeMetrics`): 30 pt buttons with 22 pt glyphs, rows centred 20 pt
+  from the top and bottom edges (the traffic lights on the same row), 10 pt from the sides, 8 pt apart in both
+  bars (the top bar's buttons used to touch). Every button has the same hover and pressed shape, a disabled state,
+  a keyboard focus ring with Full Keyboard Access (Space or Return presses it) and an accessibility label.
+
 ### Removed
 - The AI commands' provider list (OpenAI, Anthropic, Gemini, OpenRouter, Ollama), their API keys and their HTTP
   calls. "Let extensions call their own APIs" stays for community extensions that need the network; the built-in

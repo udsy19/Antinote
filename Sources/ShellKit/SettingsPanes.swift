@@ -418,6 +418,11 @@ struct EditorSettings: View {
     @Default(.keepIndentOnReturn) private var keepIndent
     @Default(.allowTextReplacements) private var replacements
     @Default(.checkSpelling) private var spelling
+    @Default(.autocorrectSpelling) private var autocorrect
+    @Default(.checkGrammar) private var grammar
+    @Default(.autoCapitalize) private var capitalize
+    @Default(.smartQuotes) private var smartQuotes
+    @Default(.smartDashes) private var smartDashes
     @Default(.inlineCheckboxes) private var inlineCheckboxes
     @Default(.inlineBullets) private var inlineBullets
     @Default(.inlineNumbered) private var inlineNumbered
@@ -431,9 +436,17 @@ struct EditorSettings: View {
         SettingsForm {
             Section("Typing") {
                 Toggle("Keep indentation of the previous line when pressing Return", isOn: $keepIndent)
-                Toggle("Allow macOS text replacements", isOn: $replacements)
-                Captioned("Code notes are never spell-checked.") {
-                    Toggle("Check spelling", isOn: $spelling)
+                Captioned("Also in the note window's Typing menu (the “A” button in the top bar). Code notes are never "
+                          + "checked; code and math notes get no substitutions or capitalization.") {
+                    Toggle(TypingOption.checkSpelling.settingsTitle, isOn: $spelling)
+                }
+                Toggle(TypingOption.autocorrect.settingsTitle, isOn: $autocorrect)
+                Toggle(TypingOption.checkGrammar.settingsTitle, isOn: $grammar)
+                Toggle(TypingOption.autoCapitalize.settingsTitle, isOn: $capitalize)
+                Toggle(TypingOption.smartQuotes.settingsTitle, isOn: $smartQuotes)
+                Toggle(TypingOption.smartDashes.settingsTitle, isOn: $smartDashes)
+                Captioned("The replacements set up in System Settings → Keyboard.") {
+                    Toggle(TypingOption.textReplacements.settingsTitle, isOn: $replacements)
                 }
             }
             Section("Vim mode") {

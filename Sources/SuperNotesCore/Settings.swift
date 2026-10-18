@@ -65,6 +65,73 @@ public enum ExportDestination: String, Codable, CaseIterable, Sendable {
     }
 }
 
+/// The typing switches, in the order the top bar's Typing menu and Settings → Editor → Typing list them. Each
+/// reads and writes one `Defaults` key, and every editor applies a change at once. Some never apply in some
+/// notes, whatever the switch says: code notes are never spell- or grammar-checked, and code and math notes get
+/// no substitutions or capitalisation (`isSuspended(in:)`).
+public enum TypingOption: String, CaseIterable, Sendable {
+    case checkSpelling, autocorrect, checkGrammar, autoCapitalize, smartQuotes, smartDashes, textReplacements
+
+    /// The menu item's title.
+    public var title: String {
+        switch self {
+        case .checkSpelling: "Check Spelling While Typing"
+        case .autocorrect: "Correct Spelling Automatically"
+        case .autoCapitalize: "Capitalize Words Automatically"
+        case .smartQuotes: "Smart Quotes"
+        case .smartDashes: "Smart Dashes"
+        case .textReplacements: "Text Replacements"
+        case .checkGrammar: "Check Grammar"
+        }
+    }
+
+    /// The same words as a Settings row (sentence case).
+    public var settingsTitle: String {
+        let words = title.split(separator: " ")
+        return words.enumerated().map { i, w in i == 0 ? String(w) : w.lowercased() }.joined(separator: " ")
+    }
+
+    public var key: Defaults.Key<Bool> {
+        switch self {
+        case .checkSpelling: .checkSpelling
+        case .autocorrect: .autocorrectSpelling
+        case .autoCapitalize: .autoCapitalize
+        case .smartQuotes: .smartQuotes
+        case .smartDashes: .smartDashes
+        case .textReplacements: .allowTextReplacements
+        case .checkGrammar: .checkGrammar
+        }
+    }
+
+    public var isOn: Bool {
+        get { Defaults[key] }
+        nonmutating set { Defaults[key] = newValue }
+    }
+
+    /// The checking options come first, then the ones that change what was typed.
+    public var isChecker: Bool { self == .checkSpelling || self == .autocorrect || self == .checkGrammar }
+
+    /// Whether the option never applies in notes of `mode`, whatever its switch says.
+    public func isSuspended(in mode: NoteMode) -> Bool {
+        switch self {
+        case .checkSpelling, .checkGrammar: mode == .code
+        case .autocorrect, .autoCapitalize, .smartQuotes, .smartDashes, .textReplacements: mode == .code || mode == .math
+        }
+    }
+
+    /// The option as it applies in notes of `mode`: its switch, unless suspended there.
+    public func isActive(in mode: NoteMode) -> Bool { !isSuspended(in: mode) && isOn }
+
+    /// What the menu says under a suspended option.
+    public static func suspensionNote(for mode: NoteMode) -> String? {
+        switch mode {
+        case .code: "Code notes: no checking or substitutions"
+        case .math: "Math notes: no substitutions"
+        default: nil
+        }
+    }
+}
+
 /// How the next launch shows the main window after UpdateKit relaunched Super Notes into an update while it sat idle.
 public enum UpdateRelaunch: String, Codable, Sendable { case hidden, visible }
 
@@ -129,6 +196,13 @@ public extension Defaults.Keys {
     static let shortenLinks = Key<Bool>("shortenLinks", default: true)
     static let detectLinks = Key<Bool>("detectLinks", default: true)
     static let checkSpelling = Key<Bool>("checkSpelling", default: true)
+    /// The other typing switches (`TypingOption`): off by default — this is a scratchpad, and smart punctuation
+    /// breaks code and math.
+    static let autocorrectSpelling = Key<Bool>("autocorrectSpelling", default: false)
+    static let autoCapitalize = Key<Bool>("autoCapitalize", default: false)
+    static let smartQuotes = Key<Bool>("smartQuotes", default: false)
+    static let smartDashes = Key<Bool>("smartDashes", default: false)
+    static let checkGrammar = Key<Bool>("checkGrammar", default: false)
     /// Milliseconds Vim mode waits for the next key of a multi-key command ("dd", "2w", "gg").
     static let vimMotionTimeout = Key<Double>("vimMotionTimeout", default: 1000)
     /// Selecting text copies it.

@@ -4,8 +4,9 @@ import SuperNotesCore
 
 /// Search All Notes: replaces the note inside the main window (`WindowServicing.present(inWindow:)`).
 /// A rounded search field on top, results as a list or a grid of cards (columns 230–340 pt wide), and two floating
-/// toolbar capsules: Select | Ephemeral/Slotted on the left, list/cards on the right. ↑/↓ move, Return opens, Esc
-/// closes.
+/// toolbar capsules on the window's bottom row (`ChromeMetrics`, where the bottom bar's buttons would be; the
+/// shell keeps that bar down while Search shows): Select | Ephemeral/Slotted on the left, list/cards on the right.
+/// In a narrow window the left items drop their labels (`SearchToolbarLayout`). ↑/↓ move, Return opens, Esc closes.
 @MainActor
 final class SearchPane: NSView, NSTextFieldDelegate {
     enum Layout: String { case list, cards }
@@ -75,9 +76,8 @@ final class SearchPane: NSView, NSTextFieldDelegate {
     static let sideInset: CGFloat = 16
     static let fieldTop: CGFloat = 38
     static let fieldGap: CGFloat = 12
-    /// The toolbar capsules sit 16 pt from the sides and 14 pt from the bottom; results scroll 80 pt clear of them.
-    static let toolbarBottom: CGFloat = 14
-    static let resultsBottom: CGFloat = 80
+    /// Results scroll clear of the capsules on the bottom row.
+    static var resultsBottom: CGFloat { SearchToolbarLayout.resultsBottom }
     /// Rows built at once; refine the query to reach older notes.
     static let maxResults = 200
 
@@ -123,6 +123,7 @@ final class SearchPane: NSView, NSTextFieldDelegate {
     // MARK: Building
 
     private func build() {
+        fieldBox.identifier = NSUserInterfaceItemIdentifier("SearchField")
         fieldBox.wantsLayer = true
         fieldBox.layer?.cornerRadius = 8
         fieldBox.layer?.cornerCurve = .continuous
@@ -196,10 +197,10 @@ final class SearchPane: NSView, NSTextFieldDelegate {
             emptyLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
             emptyLabel.widthAnchor.constraint(lessThanOrEqualTo: widthAnchor, constant: -2 * inset),
 
-            leftCapsule.leadingAnchor.constraint(equalTo: leadingAnchor, constant: inset),
-            leftCapsule.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Self.toolbarBottom),
-            rightCapsule.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -inset),
-            leftCapsule.trailingAnchor.constraint(lessThanOrEqualTo: rightCapsule.leadingAnchor, constant: -8),
+            leftCapsule.leadingAnchor.constraint(equalTo: leadingAnchor, constant: ChromeMetrics.sideInset),
+            leftCapsule.centerYAnchor.constraint(equalTo: bottomAnchor, constant: -ChromeMetrics.row),
+            rightCapsule.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -ChromeMetrics.sideInset),
+            leftCapsule.trailingAnchor.constraint(lessThanOrEqualTo: rightCapsule.leadingAnchor, constant: -SearchToolbarLayout.gap),
             rightCapsule.centerYAnchor.constraint(equalTo: leftCapsule.centerYAnchor),
         ])
     }
@@ -272,7 +273,17 @@ final class SearchPane: NSView, NSTextFieldDelegate {
 
     override func layout() {
         super.layout()
+        fitToolbarLabels()
         layoutRows()
+    }
+
+    /// Select and Ephemeral/Slotted keep their labels while both capsules fit side by side; otherwise glyphs only.
+    private func fitToolbarLabels() {
+        let labelled = [selectButton, scopeButton]
+        let hidden = labelled.filter { !$0.showsLabel }.reduce(0) { $0 + $1.labelWidth }
+        let shows = SearchToolbarLayout.showsLabels(width: bounds.width, labelled: leftCapsule.fittingSize.width + hidden,
+                                                    right: rightCapsule.fittingSize.width)
+        for item in labelled where item.showsLabel != shows { item.showsLabel = shows }
     }
 
     /// List: full-width rows (4 pt in from the sides, 8 pt below the field). Cards: 190 pt cards in columns of

@@ -4,7 +4,7 @@ import AppKit
 /// small "sparkle". The canvas is drawn at 22 pt inside a 30 pt button (4 pt inset), so strokes land at ~1.1 pt.
 /// Template images (tinted by the button that shows them).
 enum ChromeIcon: CaseIterable {
-    case settings, search, new, pin, previous, next, front, export, delete
+    case settings, search, typing, new, pin, previous, next, front, export, delete
 
     /// The design canvas, in units.
     static let canvas: CGFloat = 30
@@ -99,6 +99,18 @@ enum ChromeIcon: CaseIterable {
             NSGraphicsContext.restoreGraphicsState()
             stroke(line([(18.6, 20.6), (20.6, 24)]))
             sparkle(21.9, 19.4, 1.1)
+        case .typing:
+            // A capital A over a spelling squiggle, with a sparkle: the typing options (spelling, substitutions).
+            stroke(line([(7.5, 19.5), (13.5, 6.75), (19.5, 19.5)]))
+            stroke(line([(9.9, 14.75), (17.1, 14.75)]))
+            let wave = NSBezierPath()
+            wave.move(to: NSPoint(x: 7, y: 24))
+            for i in 0..<4 {
+                let x0 = 7 + CGFloat(i) * 3.25, x1 = x0 + 3.25, yc: CGFloat = i % 2 == 0 ? 22.4 : 25.6
+                wave.curve(to: NSPoint(x: x1, y: 24), controlPoint1: NSPoint(x: x0 + 1.2, y: yc), controlPoint2: NSPoint(x: x1 - 1.2, y: yc))
+            }
+            stroke(wave, width: 1.25)
+            sparkle(23.5, 9, 1.3)
         case .new:
             // A rounded square with a pen stroke from its centre into the top-right corner.
             stroke(NSBezierPath(roundedRect: NSRect(x: 6.75, y: 6.75, width: 16.5, height: 16.5), xRadius: 3.5, yRadius: 3.5))

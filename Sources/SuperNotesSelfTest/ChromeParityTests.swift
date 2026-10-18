@@ -1,5 +1,7 @@
-import Foundation
+import AppKit
+import SuperNotesCore
 import ShellKit
+import ToolsKit
 
 /// Window-chrome text and geometry that mirror the reference app.
 func registerChromeParityTests() {
@@ -81,6 +83,114 @@ func registerChromeParityTests() {
             let fit = L.fit(width: width, textWidth: 260)
             check(L.width(buttons: fit.buttons, text: fit.textWidth) <= width, "fits at \(width) pt")
             check(fit.textWidth == 0 || fit.textWidth >= L.minTextWidth, "text is either readable or gone at \(width) pt")
+        }
+    }))
+
+    SelfTest.cases.append(("ShellKit.chromeMetrics", {
+        typealias M = ChromeMetrics
+        check(M.button == 30 && M.glyph == 22 && M.sideInset == 10 && M.spacing == 8 && M.row == 20 && M.cornerRadius == 5,
+              "one size system for every chrome button")
+        check(M.leadingInset == 69, "the top bar's left group starts one gap after the zoom button (7 + 14 + 2 × 20 = 61)")
+        check(BottomBarLayout.button == 30 && BottomBarLayout.sideInset == 10 && BottomBarLayout.spacing == 8, "the bottom bar follows it")
+        check(M.buttons(3, from: M.leadingInset, y: 5).map(\.minX) == [69, 107, 145], "Settings, Search, Typing")
+        check(M.topBarHeight == M.row + M.button / 2 && M.bottomBarHeight == 2 * M.row, "each strip covers its row")
+        check(M.leftButtonsFitting(width: 350, left: 3, right: 2) == 3, "350 pt: Settings, Search and Typing beside New Note and Pin")
+        check(M.leftButtonsFitting(width: 261, left: 3, right: 2) == 3 && M.leftButtonsFitting(width: 260, left: 3, right: 2) == 2,
+              "under 261 pt (69 + 3 × 30 + 2 × 8 + 8 + 2 × 30 + 8 + 10) Typing gives way")
+        check(M.leftButtonsFitting(width: 100, left: 3, right: 2) == 2, "Settings and Search always stay")
+        check(SearchToolbarLayout.showsLabels(width: 350, labelled: 220, right: 80), "350 pt: both Search capsules with labels")
+        check(!SearchToolbarLayout.showsLabels(width: 240, labelled: 220, right: 80), "240 pt: glyphs only")
+        check(SearchToolbarLayout.showsLabels(width: 240, labelled: 93, right: 80), "and then they fit")
+        check(SearchToolbarLayout.resultsBottom == 55, "results scroll clear of the capsules")
+    }))
+
+    // No two controls in the window's strips ever overlap: the hover bars, the traffic lights, Search's capsules
+    // and field, the find shelf — in every mode, at the minimum, default and very wide sizes.
+    SelfTest.cases.append(("ShellKit.chromeNoOverlap", {
+        MainActor.assumeIsolated {
+            let b = Bench()
+            defer { b.cleanup() }
+            b.store.setSlot(1, for: b.store.create(content: "# Aphrodite\nSlot two.").id)
+            var locked = b.store.create(content: "# Ouranos\nPrivate.")
+            locked.isLocked = true
+            b.store.update(locked)
+            b.store.setSlot(6, for: locked.id)
+            _ = b.store.create(content: "an older note")
+            _ = b.store.create(content: "the front note, being written")
+            WindowPreview.reload()
+            let notes = (0..<6).map { Note(content: "note \($0) with a line of text to search", created: Date(), modified: Date()) }
+            let tracked: Set<String> = ["ChromeButton", "ToolbarCapsule", "FindShelf", "SlotsBarView"]
+            let identified: Set<String> = ["SearchField", "BottomBarInfo"]
+
+            /// Visible controls (name and frame in the frame view): hidden views, hidden bars (alpha 0) and the
+            /// view tree below a control are left out.
+            @MainActor func controls(in frame: NSView) -> [(name: String, frame: NSRect)] {
+                var out: [(String, NSRect)] = []
+                func walk(_ v: NSView, alpha: CGFloat) {
+                    let a = alpha * v.alphaValue
+                    guard !v.isHidden, a > 0.01 else { return }
+                    let name = "\(type(of: v))"
+                    if tracked.contains(name) || identified.contains(v.identifier?.rawValue ?? "") {
+                        out.append((v.identifier?.rawValue ?? name, v.superview!.convert(v.frame, to: frame)))
+                        return
+                    }
+                    v.subviews.forEach { walk($0, alpha: a) }
+                }
+                walk(frame, alpha: 1)
+                let window = WindowPreview.window
+                for kind in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
+                    if let light = window.standardWindowButton(kind), light.alphaValue > 0, let sup = light.superview {
+                        out.append(("light", sup.convert(light.frame, to: frame)))
+                    }
+                }
+                return out
+            }
+
+            @MainActor func verify(_ label: String, _ frame: NSView, buttons: Int, capsules: Int = 0, shelf: Bool = false) {
+                frame.layoutSubtreeIfNeeded()
+                let found = controls(in: frame)
+                let names = found.map(\.name)
+                check(names.filter { $0 == "ChromeButton" }.count == buttons, "\(label): \(buttons) chrome buttons, got \(names)")
+                check(names.filter { $0 == "ToolbarCapsule" }.count == capsules, "\(label): \(capsules) capsules")
+                check(names.contains("FindShelf") == shelf, "\(label): find shelf \(shelf ? "docked" : "away")")
+                check(names.filter { $0 == "light" }.count == 3, "\(label): three traffic lights")
+                for (i, a) in found.enumerated() {
+                    check(frame.bounds.contains(a.frame), "\(label): \(a.name) \(a.frame) inside the window \(frame.bounds)")
+                    for c in found[(i + 1)...] where a.frame.intersects(c.frame) {
+                        check(false, "\(label): \(a.name) \(a.frame) overlaps \(c.name) \(c.frame)")
+                    }
+                }
+            }
+
+            for width in [240.0, 350.0, 600.0, 1200.0] {
+                let size = NSSize(width: width, height: 400)
+                let w = "\(Int(width)) pt"
+                // The note: five top buttons; Delete, Previous, Next and (room allowing) First, Export below.
+                let fit = BottomBarLayout.fit(width: width, textWidth: 120)
+                let top = 2 + ChromeMetrics.leftButtonsFitting(width: width, left: 3, right: 2)
+                verify("note at \(w)", WindowPreview.frameView(revealed: true, size: size), buttons: top + fit.buttons)
+                verify("slot at \(w)", WindowPreview.frameView(revealed: true, slot: 1, size: size), buttons: top + fit.buttons)
+                verify("locked at \(w)", WindowPreview.frameView(revealed: true, slot: 6, size: size), buttons: top + fit.buttons)
+                WindowPreview.backToNotes()
+                verify("slot bar at \(w)", WindowPreview.frameView(revealed: true, size: size, hoveredSlot: 1, slotBar: .hovering),
+                       buttons: top + fit.buttons)
+                // Search owns the bottom strip: its capsules, no bottom bar.
+                for (mode, pane) in [("list", ToolsPreviews.search(notes: notes)), ("cards", ToolsPreviews.search(notes: notes, cards: true)),
+                                     ("select", ToolsPreviews.search(notes: notes, selecting: true))] {
+                    let frame = WindowPreview.frameView(revealed: true, size: size, presenting: pane)
+                    check(frame.bounds.width == width && pane.frame.width == width, "search \(mode) at \(w): the pane fits the window, got \(pane.frame)")
+                    verify("search \(mode) at \(w)", frame, buttons: top, capsules: 2)
+                }
+                // The find shelf likewise.
+                _ = WindowPreview.frameView(revealed: true, size: size, presenting: nil)
+                WindowPreview.perform(.find)
+                verify("find at \(w)", WindowPreview.frameView(revealed: true, size: size), buttons: top, shelf: true)
+                func buttons(in view: NSView) -> [NSButton] { (view as? NSButton).map { [$0] } ?? view.subviews.flatMap(buttons) }
+                buttons(in: WindowPreview.window.contentView!).first { $0.title == "Done" }?.performClick(nil)
+                verify("after find at \(w)", WindowPreview.frameView(revealed: true, size: size), buttons: top + fit.buttons)
+            }
+            WindowPreview.backToNotes()
+            _ = WindowPreview.frameView(revealed: false, size: nil, slotBar: .hidden)
         }
     }))
 }

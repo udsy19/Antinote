@@ -62,6 +62,41 @@ private func caretState(_ text: String) -> TextState {
 
 /// Append cases with `SelfTest.cases.append(("name", { check(..., "msg") }))`.
 func registerEditorKitTests() {
+    SelfTest.cases.append(("EditorKit.autoCapitalize", {
+        typealias C = EditorLogic.Capitalization
+        func fixed(_ text: String, _ at: Int, skip: Set<Int> = [], protected: [NSRange] = []) -> String? {
+            C.applied(TextState(text, caret: at + 1), separatorAt: at, skipLines: skip, protected: protected)?.text
+        }
+        check(C.isSeparator(" ") && C.isSeparator("\n") && C.isSeparator("\t") && !C.isSeparator(".") && !C.isSeparator(":"),
+              "a space, newline or tab finishes a word; punctuation doesn't (URLs, 'www.')")
+        check(fixed("hello ", 5) == "Hello ", "the first word of a note")
+        check(fixed("Hello world ", 11) == nil, "mid-sentence words stay")
+        check(fixed("one. two ", 8) == "one. Two ", "after a full stop and a space")
+        check(fixed("really? yes ", 11) == "really? Yes ", "after a question mark")
+        check(fixed("\"Quoted.\" next ", 14) == "\"Quoted.\" Next ", "closing quotes after the stop are fine")
+        check(fixed("line one\nsecond ", 15) == "line one\nSecond ", "the start of a line")
+        check(fixed("  indented ", 10) == "  Indented ", "after indentation")
+        check(fixed("[ ] milk ", 8) == "[ ] Milk ", "after a checkbox")
+        check(fixed("- apples ", 8) == "- Apples ", "after a bullet")
+        check(fixed("1. first ", 8) == "1. First ", "after a number")
+        check(fixed("## heading ", 10) == "## Heading ", "after heading marks")
+        check(fixed("see example.com ", 15) == nil, "'com' after a dot with no space is no sentence")
+        check(fixed("https://x ", 9) == nil && fixed("a/b/c ", 5) == nil && fixed("me@x ", 4) == nil, "paths, URLs and addresses")
+        check(fixed("e.g. this ", 9) == nil && fixed("vs. that ", 8) == nil, "abbreviations don't end sentences")
+        check(fixed("I am. fine ", 10) == "I am. Fine ", "'am.' does")
+        check(fixed("x. yes ", 6) == nil && fixed("a. yes ", 6) == "a. Yes ", "a lone letter before the stop reads as a list marker, except a / i")
+        check(fixed("Hello ", 5) == nil && fixed("iPhone ", 6) == nil, "already capitalised, or mixed case, stays")
+        check(fixed("don't ", 5) == "Don't ", "apostrophes belong to the word")
+        check(fixed("über ", 4) == "Über ", "non-ASCII letters")
+        check(fixed("ß ", 1) == nil, "a letter whose capital is two letters is left alone")
+        check(fixed("123 abc ", 7) == nil, "after a number mid-line: no sentence start")
+        check(fixed("math\n1 + 1 ", 6) == nil, "math is never capitalised here (skipped by mode); the second line of plain text is not a sentence start after '+'")
+        check(fixed("list\nmilk ", 9, skip: [0]) == "list\nMilk " && fixed("list ", 4, skip: [0]) == nil, "the keyword line is skipped")
+        check(fixed("code here ", 9, protected: [NSRange(location: 0, length: 10)]) == nil, "protected ranges (code, links) stay")
+        check(fixed("", 0) == nil && fixed(" ", 1) == nil, "nothing to do")
+        check(C.applied(TextState("hello ", caret: 6), separatorAt: 5)?.selection == NSRange(location: 6, length: 0), "the caret stays put")
+    }))
+
     SelfTest.cases.append(("EditorKit.commandListSelection", {
         var list = EditorLogic.CommandList(count: 12, visible: 9)
         check(list.selected == 0 && list.top == 0 && list.shownRows == 9 && list.canScroll, "starts at the top, 9 of 12 shown")

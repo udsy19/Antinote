@@ -1,4 +1,5 @@
 import Foundation
+import SuperNotesCore
 
 // Pure, UI-free rules behind the shell (covered by SuperNotesSelfTest).
 
@@ -351,9 +352,10 @@ public enum SlotBarLayout {
 /// each side. As the window narrows the text is cut short (with "…"), then dropped below `minTextWidth`; then
 /// Export goes, then First. Delete, Previous and Next always stay.
 public enum BottomBarLayout {
-    public static let sideInset = 10.0
-    public static let spacing = 8.0
-    public static let button = 30.0
+    /// The bar's buttons follow `ChromeMetrics` (30 pt, 10 pt in from the sides, 8 pt apart).
+    public static let sideInset = Double(ChromeMetrics.sideInset)
+    public static let spacing = Double(ChromeMetrics.spacing)
+    public static let button = Double(ChromeMetrics.button)
     public static let minTextWidth = 48.0
 
     public struct Fit: Equatable, Sendable {

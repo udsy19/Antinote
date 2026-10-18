@@ -31,6 +31,37 @@ func registerSettingsBehaviourTests() {
         check(NoteMode.keywordModes.allSatisfy { !$0.summary.isEmpty }, "every keyword has a summary for the / list")
     }))
 
+    SelfTest.cases.append(("Settings.typingOptions", {
+        typealias T = TypingOption
+        check(T.allCases.map(\.title) == ["Check Spelling While Typing", "Correct Spelling Automatically", "Check Grammar",
+                                          "Capitalize Words Automatically", "Smart Quotes", "Smart Dashes", "Text Replacements"],
+              "the menu's items, checkers first")
+        check(T.checkSpelling.settingsTitle == "Check spelling while typing" && T.smartQuotes.settingsTitle == "Smart quotes",
+              "Settings rows carry the same words in sentence case")
+        check(Set(T.allCases.map(\.key.name)).count == T.allCases.count, "one key per option")
+        check(T.checkSpelling.key.name == "checkSpelling" && T.textReplacements.key.name == "allowTextReplacements",
+              "the existing keys are reused")
+        check(T.allCases.filter(\.isChecker) == [.checkSpelling, .autocorrect, .checkGrammar], "the separator falls after the checkers")
+        let keys = T.allCases.map(\.key.name)
+        with(Dictionary(uniqueKeysWithValues: keys.map { ($0, false) })) {
+            for option in T.allCases { Defaults.store.removeObject(forKey: option.key.name) }
+            check(T.checkSpelling.isOn && T.allCases.filter { $0 != .checkSpelling }.allSatisfy { !$0.isOn },
+                  "defaults: spelling checked, nothing else on")
+            for option in T.allCases { option.isOn = true }
+            check(T.allCases.allSatisfy { $0.isActive(in: .plain) && $0.isActive(in: .list) && $0.isActive(in: .timer) },
+                  "everything applies in plain, list and timer notes")
+            check(T.allCases.allSatisfy { !$0.isActive(in: .code) }, "code notes: nothing")
+            check(T.checkSpelling.isActive(in: .math) && T.checkGrammar.isActive(in: .math) && T.autocorrect.isSuspended(in: .math),
+                  "math notes: checked and no autocorrect")
+            check([T.autoCapitalize, .smartQuotes, .smartDashes, .textReplacements].allSatisfy { $0.isSuspended(in: .math) },
+                  "math notes: no substitutions")
+            T.smartQuotes.isOn = false
+            check(!T.smartQuotes.isActive(in: .plain) && Defaults[.smartQuotes] == false, "a switch written through the option")
+        }
+        check(T.suspensionNote(for: .code) == "Code notes: no checking or substitutions" && T.suspensionNote(for: .plain) == nil,
+              "the menu's footer")
+    }))
+
     SelfTest.cases.append(("Settings.slottedThemes", {
         with(["lightTheme": "fern", "darkTheme": "dune", "slottedLightTheme": "", "slottedDarkTheme": ""]) {
             check(Theme.selectedID(dark: false, slotted: true) == "fern", "slotted follows the ephemeral pair")

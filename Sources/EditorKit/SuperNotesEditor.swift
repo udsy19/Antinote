@@ -15,6 +15,9 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
     public let view: NSView = NSView()
     public private(set) var note: Note?
     public var onAnalysis: ((NoteAnalysis) -> Void)?
+    /// The find shelf holds the bottom of the note while it shows; the window's bottom bar stays down then.
+    public var hasBottomControls: Bool { !findShelf.isHidden }
+    public var onBottomControlsChange: (() -> Void)?
     public var bottomOverlay: CGFloat = 0 {
         didSet {
             guard bottomOverlay != oldValue else { return }
@@ -128,12 +131,10 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
         // Undo is the editor's own (`NoteHistory`): the text view's would coalesce typing by range and break once
         // the editor rewrites list markers or shortens links inside a keystroke.
         textView.allowsUndo = false
-        textView.isAutomaticQuoteSubstitutionEnabled = false
-        textView.isAutomaticDashSubstitutionEnabled = false
         textView.isAutomaticLinkDetectionEnabled = false
         textView.isAutomaticDataDetectionEnabled = false
         textView.smartInsertDeleteEnabled = false
-        textView.isContinuousSpellCheckingEnabled = true
+        applyTyping()
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
         textView.autoresizingMask = [.width]
@@ -192,7 +193,8 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
     private func observeSettings() {
         let keys: [Defaults.Keys] = [.fontName, .textSize, .doubleFontSize, .lineSpacing, .paperType, .paperOpacity, .forceRTL, .lightTheme,
                                      .darkTheme, .slottedLightTheme, .slottedDarkTheme, .vimMode, .detectLinks,
-                                     .allowTextReplacements, .checkSpelling, .caretOffset, .caretOffsetInLists, .defaultListStyle,
+                                     .allowTextReplacements, .checkSpelling, .autocorrectSpelling, .autoCapitalize, .smartQuotes,
+                                     .smartDashes, .checkGrammar, .caretOffset, .caretOffsetInLists, .defaultListStyle,
                                      .inlineCheckboxes, .inlineBullets, .inlineNumbered, .keywordsEnabled]
         let names = Set(keys.map(\.name))
         Defaults.changes.filter { names.contains($0) }.receive(on: RunLoop.main)
@@ -444,6 +446,7 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
                 linksExpandedForFind = true
             }
             findShelf.isHidden = false
+            onBottomControlsChange?()
         }
         if replace != findShelf.isExpanded { findShelf.setExpanded(replace) }
         layoutFindShelf()
@@ -469,6 +472,7 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
         let shown = findIndex.map { findMatches[$0] }
         findShelf.isHidden = true
         layoutFindShelf()
+        onBottomControlsChange?()
         findMatches = []
         findIndex = nil
         highlightMatches()
@@ -611,9 +615,15 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
         case .partial: toast("Click the link to expand it before editing"); return false
         case .allowed: break
         }
-        if range.length == 0, string == " " || string == "\n" || string == "\t" { shrinkTypedURL(endingAt: range.location) }
+        if range.length == 0, EditorLogic.Capitalization.isSeparator(string) {
+            shrinkTypedURL(endingAt: range.location)
+            typedSeparatorAt = range.location
+        }
         return true
     }
+
+    /// Where the last typed space, newline or tab went in (`textDidChange` capitalises the word before it).
+    private var typedSeparatorAt: Int?
 
     public func textStorage(_ textStorage: NSTextStorage, didProcessEditing editedMask: NSTextStorageEditActions,
                             range editedRange: NSRange, changeInLength delta: Int) {
@@ -640,6 +650,14 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
                                                                  inListNote: listNote, behavior: Defaults[.checkedItemBehavior]) {
                 next = checked
             }
+            // "Capitalize words automatically": the word just finished, when it starts a sentence.
+            if let at = typedSeparatorAt, programmaticEdits == 0, TypingOption.autoCapitalize.isActive(in: mode),
+               next.text == textView.string,
+               let capitalised = EditorLogic.Capitalization.applied(next, separatorAt: at, skipLines: mode == .plain ? [] : [0],
+                                                                    protected: codeRanges + links.map(\.range)) {
+                next = capitalised
+            }
+            typedSeparatorAt = nil
             if listNote { next = EditorLogic.Lists.normalizedListNote(next, style: Defaults[.defaultListStyle]) }
             if next.text != textView.string {
                 isNormalizing = true
@@ -725,7 +743,7 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
         }
         if analysis.mode != mode {
             mode = analysis.mode
-            applySpelling()
+            applyTyping()
         }
         if mode != .autopaste, autoPaste.isRunning { stopAutoPaste(announce: false) }
         onAnalysis?(analysis)
@@ -1003,8 +1021,7 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
         textView.backgroundColor = background
         scrollView.backgroundColor = background
         (scrollView.verticalScroller as? ThinScroller)?.knobColor = NSColor(hex: theme.typeHighlight)
-        textView.isAutomaticTextReplacementEnabled = Defaults[.allowTextReplacements]
-        applySpelling()
+        applyTyping()
         findShelf.apply(theme: theme)
         highlightMatches()
         dropOverlay.theme = theme
@@ -1013,10 +1030,20 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
         restyle()
     }
 
-    /// Settings → Editor → Check spelling (never in code notes).
-    private func applySpelling() {
-        let on = Defaults[.checkSpelling] && mode != .code
-        if textView.isContinuousSpellCheckingEnabled != on { textView.isContinuousSpellCheckingEnabled = on }
+    /// The typing switches (the top bar's Typing menu, Settings → Editor → Typing) as they apply in this note's
+    /// mode: code notes are never checked, code and math notes never substituted (`TypingOption.isActive(in:)`).
+    /// Capitalisation is the editor's own (`EditorLogic.Capitalization`), applied in `textDidChange`.
+    private func applyTyping() {
+        func set(_ path: ReferenceWritableKeyPath<NSTextView, Bool>, _ option: TypingOption) {
+            let on = option.isActive(in: mode)
+            if textView[keyPath: path] != on { textView[keyPath: path] = on }
+        }
+        set(\.isContinuousSpellCheckingEnabled, .checkSpelling)
+        set(\.isAutomaticSpellingCorrectionEnabled, .autocorrect)
+        set(\.isGrammarCheckingEnabled, .checkGrammar)
+        set(\.isAutomaticQuoteSubstitutionEnabled, .smartQuotes)
+        set(\.isAutomaticDashSubstitutionEnabled, .smartDashes)
+        set(\.isAutomaticTextReplacementEnabled, .textReplacements)
     }
 
     private func updateModeLabel() {
@@ -1590,7 +1617,6 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
         pill.show(text, kind: .info, theme: theme, duration: 3600)
     }
 
-
     private func applyExtensionEdit(_ edit: ExtensionEdit, invocation: String, near location: Int) {
         let s = textView.string as NSString
         var found: NSRange?
@@ -1641,7 +1667,6 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
             pillAtTop.isActive = low
         }
     }
-
 
     /// The pill wraps at the text column: at least 160 pt, at most 80% of the note.
     private var pillWidth: CGFloat {

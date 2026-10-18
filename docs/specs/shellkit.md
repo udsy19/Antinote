@@ -16,10 +16,18 @@ themeAppearanceObserver), `WindowTopBar` (buttonVisibilityState, isHovered), `Cu
 
 - A small (default 337×386) titled window with a transparent, full-size title bar; the title is hidden. The note
   fills the window and the bars float over it (see ui-reference.md §1).
-- Top bar (34 pt, hover): the traffic lights (centred 17 pt down), Settings and Search on the left, New Note and
-  Pin on the right — line-art glyphs drawn in code (`ChromeIcon`), `typeHyperLight` hover, `typeLight` pressed,
-  `accent3Main` when pinned. The strip drags the window even while hidden.
-- Bottom bar (30 pt, hover; gone with "Show bottom bar" off): Move to The Void on the left; the note's date
+- Top bar (35 pt, hover): the traffic lights (centred 20 pt down), Settings, Search and Typing on the left, New
+  Note and Pin on the right — line-art glyphs drawn in code (`ChromeIcon`), `typeHyperLight` hover, `typeLight`
+  pressed, `accent3Main` when pinned, a focus ring under Full Keyboard Access. The strip drags the window even while
+  hidden. Under 261 pt the Typing button gives way. Typing drops a checkmark menu (`TypingMenu`) of the
+  `TypingOption` switches (spelling, autocorrect, grammar, capitalisation, smart quotes and dashes, text
+  replacements), mirrored in Settings → Editor → Typing.
+- Every chrome button follows `ChromeMetrics` (SuperNotesCore): 30 pt square, 22 pt glyph, rows centred 20 pt from
+  the window's top and bottom edges, 10 pt side insets, 8 pt between buttons, 5 pt hover corners. Search's toolbar
+  capsules sit on the same bottom row. A mode with its own bottom controls (Search, the find shelf) owns the
+  strip: the bottom bar, the slot bar and the latest-note dot stay down while it shows (`Shell.bottomStripTaken`,
+  `NoteEditing.hasBottomControls`).
+- Bottom bar (40 pt, hover; gone with "Show bottom bar" off): Move to The Void on the left; the note's date
   ("Show the time of day next to the date" adds the time, "Date the note by when it was created, not last changed" shows when it was created instead of
   last changed) and position "14 of 18" ("Show note count") in the middle; Previous, Next, Latest and Export (a menu
   of the export destinations, Quick Export and Print) on the right. Nothing is ever clipped (`BottomBarLayout`): as
