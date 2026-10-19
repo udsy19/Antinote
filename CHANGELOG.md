@@ -3,6 +3,27 @@
 All notable changes to Super Notes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Fixed
+- Typing into a note and moving to another one within a third of a second deleted the note as "empty" — the text
+  was gone for good. Notes are now read with their latest typing wherever they are checked.
+- A paste containing a NUL byte was cut short at that byte when saved.
+- `supernotes://overwrite` links from other apps replaced the current note silently; the previous text now goes to
+  The Void first, and locked or read-only notes refuse `append` and `overwrite`.
+- Appending from a link or the command palette while typing worked from stale text.
+
+### Changed
+- Unsaved text survives a crash, a forced quit or a power cut: every change is written to a small draft file first
+  and the next launch puts it back ("Recovered unsaved text"). Saves are flushed to disk on every commit.
+- When the disk is full or the notes folder can't be written, Super Notes says so, keeps the text in memory, keeps
+  trying, and on quit writes what it couldn't save to `unsaved-notes-<time>.json` next to the database.
+- A damaged notes database is moved into the Backups folder and the newest readable backup is restored (or an empty
+  database started), with an alert either way; a database saved by a newer version is left untouched and new notes
+  go to a side file that is merged back after updating.
+- Backup rotation leaves the pre-migration and damaged-file copies alone and never counts a half-written backup.
+- Only one copy of Super Notes runs at a time.
+
 ## [1.3.7] — 2026-10-19
 
 ### Fixed
