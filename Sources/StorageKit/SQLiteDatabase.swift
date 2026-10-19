@@ -1,9 +1,19 @@
 import Foundation
 import SQLite3
 
-struct StorageError: LocalizedError {
-    let message: String
-    var errorDescription: String? { message }
+public struct StorageError: LocalizedError {
+    public enum Kind {
+        /// The file isn't a readable SQLite database any more (`SQLITE_CORRUPT`, `SQLITE_NOTADB`, a failed
+        /// `quick_check`): the store moves it aside and recovers from a backup.
+        case damaged
+        /// `user_version` is ahead of this build's schema (the app was downgraded after an update).
+        case newerVersion
+        /// Anything else: permissions, a full disk, a locked file. The file is left exactly as it is.
+        case other
+    }
+    public let message: String
+    public var kind: Kind = .other
+    public var errorDescription: String? { message }
 }
 
 /// A bindable SQLite value.
@@ -37,11 +47,16 @@ final class SQLiteDatabase {
 
     private var lastError: String { handle.map { String(cString: sqlite3_errmsg($0)) } ?? "database is closed" }
 
+    /// The last error as a `StorageError`, flagged `.damaged` when SQLite found the file itself unreadable.
+    private func error(_ sql: String) -> StorageError {
+        let code = handle.map { sqlite3_errcode($0) & 0xFF } ?? SQLITE_ERROR
+        let damaged = code == SQLITE_CORRUPT || code == SQLITE_NOTADB
+        return StorageError(message: "\(lastError) — \(sql.prefix(80))", kind: damaged ? .damaged : .other)
+    }
+
     /// Runs one or more statements without results.
     func execute(_ sql: String) throws {
-        guard sqlite3_exec(handle, sql, nil, nil, nil) == SQLITE_OK else {
-            throw StorageError(message: "\(lastError) — \(sql.prefix(80))")
-        }
+        guard sqlite3_exec(handle, sql, nil, nil, nil) == SQLITE_OK else { throw error(sql) }
     }
 
     /// Runs one statement with bound parameters.
@@ -49,7 +64,7 @@ final class SQLiteDatabase {
         let stmt = try prepare(sql, params)
         defer { sqlite3_finalize(stmt) }
         let rc = sqlite3_step(stmt)
-        guard rc == SQLITE_DONE || rc == SQLITE_ROW else { throw StorageError(message: "\(lastError) — \(sql.prefix(80))") }
+        guard rc == SQLITE_DONE || rc == SQLITE_ROW else { throw error(sql) }
     }
 
     /// Runs a query and maps each row.
@@ -60,7 +75,7 @@ final class SQLiteDatabase {
         while true {
             let rc = sqlite3_step(stmt)
             if rc == SQLITE_DONE { break }
-            guard rc == SQLITE_ROW else { throw StorageError(message: "\(lastError) — \(sql.prefix(80))") }
+            guard rc == SQLITE_ROW else { throw error(sql) }
             out.append(try map(Row(stmt: stmt!)))
         }
         return out
@@ -79,9 +94,7 @@ final class SQLiteDatabase {
 
     private func prepare(_ sql: String, _ params: [SQLValue]) throws -> OpaquePointer? {
         var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(handle, sql, -1, &stmt, nil) == SQLITE_OK else {
-            throw StorageError(message: "\(lastError) — \(sql.prefix(80))")
-        }
+        guard sqlite3_prepare_v2(handle, sql, -1, &stmt, nil) == SQLITE_OK else { throw error(sql) }
         let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
         for (i, p) in params.enumerated() {
             let idx = Int32(i + 1)
@@ -89,7 +102,8 @@ final class SQLiteDatabase {
             case .null: sqlite3_bind_null(stmt, idx)
             case .int(let v): sqlite3_bind_int64(stmt, idx, v)
             case .double(let v): sqlite3_bind_double(stmt, idx, v)
-            case .text(let v): sqlite3_bind_text(stmt, idx, v, -1, transient)
+            // The byte count, not -1: a pasted NUL would otherwise end the text early (silent truncation).
+            case .text(let v): sqlite3_bind_text(stmt, idx, v, Int32(v.utf8.count), transient)
             }
         }
         return stmt
@@ -100,7 +114,12 @@ final class SQLiteDatabase {
         func isNull(_ i: Int32) -> Bool { sqlite3_column_type(stmt, i) == SQLITE_NULL }
         func int(_ i: Int32) -> Int { Int(sqlite3_column_int64(stmt, i)) }
         func double(_ i: Int32) -> Double { sqlite3_column_double(stmt, i) }
-        func text(_ i: Int32) -> String { sqlite3_column_text(stmt, i).map { String(cString: $0) } ?? "" }
+        /// Read by length so an embedded NUL comes back too.
+        func text(_ i: Int32) -> String {
+            guard let bytes = sqlite3_column_text(stmt, i) else { return "" }
+            let count = Int(sqlite3_column_bytes(stmt, i))
+            return String(decoding: UnsafeBufferPointer(start: bytes, count: count), as: UTF8.self)
+        }
     }
 }
 

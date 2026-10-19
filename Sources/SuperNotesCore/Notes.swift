@@ -81,6 +81,9 @@ public protocol NoteStoring: AnyObject {
     func search(_ query: String, includeArchived: Bool) -> [Note]
 
     var changes: AnyPublisher<NoteStoreChange, Never> { get }
+    /// Notes whose last write to disk failed (full disk, read-only folder). They are kept in memory and retried;
+    /// the editor keeps its draft file for them until they land.
+    var unsavedNoteIDs: Set<UUID> { get }
     /// Deletes the note when its content is blank; returns whether it was deleted. Called when leaving a note.
     @discardableResult func deleteIfEmpty(_ id: UUID) -> Bool
 

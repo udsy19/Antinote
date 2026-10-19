@@ -4,7 +4,7 @@ import SuperNotesCore
 // Backups, restore, and JSON export/import.
 extension SQLiteNoteStore {
     /// `notes-<timestamp>[-tag].sqlite`, made unique if a file with that name already exists.
-    nonisolated static func uniqueBackupURL(in folder: URL, tag: String? = nil) -> URL {
+    public nonisolated static func uniqueBackupURL(in folder: URL, tag: String? = nil) -> URL {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.dateFormat = "yyyyMMdd-HHmmss-SSS"
@@ -17,23 +17,53 @@ extension SQLiteNoteStore {
         return url
     }
 
-    /// Writes a consistent copy of the open database (`VACUUM INTO`) and prunes old backups.
+    /// Writes a consistent copy of the open database (`VACUUM INTO`) and prunes old backups. A copy that didn't
+    /// finish (full disk) is removed, so it can never count as the newest backup.
     public func backup() throws -> URL {
         let dest = Self.uniqueBackupURL(in: SuperNotesPaths.ensure(backupsFolder))
-        try db.run("VACUUM INTO ?", [.text(dest.path)])
+        do { try db.run("VACUUM INTO ?", [.text(dest.path)]) } catch {
+            try? FileManager.default.removeItem(at: dest)
+            throw error
+        }
         pruneBackups(keep: max(Defaults[.backupCount], 1))
         return dest
     }
 
     /// Backups, newest first.
-    public var backups: [URL] {
-        let files = (try? FileManager.default.contentsOfDirectory(at: backupsFolder, includingPropertiesForKeys: nil)) ?? []
+    public var backups: [URL] { Self.backups(in: backupsFolder) }
+
+    public nonisolated static func backups(in folder: URL) -> [URL] {
+        let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
         return files.filter { $0.lastPathComponent.hasPrefix("notes-") && $0.pathExtension == "sqlite" }
             .sorted { $0.lastPathComponent > $1.lastPathComponent }
     }
 
+    /// `notes-<timestamp>[-n].sqlite`: the routine (manual and automatic) backups the rotation applies to. Tagged
+    /// copies — `pre-migration-v1`, `damaged` — are safety nets kept outside the rotation.
+    public nonisolated static func isRotated(_ backup: URL) -> Bool {
+        backup.lastPathComponent.range(of: #"^notes-\d{8}-\d{6}-\d{3}(-\d+)?\.sqlite$"#, options: .regularExpression) != nil
+    }
+
     func pruneBackups(keep: Int) {
-        for old in backups.dropFirst(keep) { try? FileManager.default.removeItem(at: old) }
+        for old in backups.filter(Self.isRotated).dropFirst(keep) { try? FileManager.default.removeItem(at: old) }
+    }
+
+    /// Merges the notes of a database written while this one couldn't be opened (see `StorageKitModule`) and
+    /// removes that file; returns how many notes came over, or nil when there was no such file.
+    @discardableResult public func absorb(fallback: URL) -> Int? {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: fallback.path) else { return nil }
+        var count = 0
+        do {
+            let other = try SQLiteNoteStore(url: fallback, backupsFolder: fm.temporaryDirectory.appendingPathComponent("supernotes-fallback-backups"))
+            count = try importJSON(other.exportJSON())
+            other.db.close()
+        } catch {
+            Log.store.error("merging \(fallback.lastPathComponent, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+        for suffix in ["", "-wal", "-shm"] { try? fm.removeItem(atPath: fallback.path + suffix) }
+        return count
     }
 
     /// Replaces the database with `backup`. The current notes are saved as a new backup first; sync is turned off
@@ -65,7 +95,7 @@ extension SQLiteNoteStore {
         subject.send(.reloaded)
     }
 
-    private nonisolated static func validate(_ file: URL) throws {
+    nonisolated static func validate(_ file: URL) throws {
         let probe = try SQLiteDatabase(url: file, readOnly: true)
         defer { probe.close() }
         let check = try probe.query("PRAGMA quick_check") { $0.text(0) }.first

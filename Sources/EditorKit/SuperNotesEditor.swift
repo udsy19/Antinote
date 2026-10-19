@@ -90,6 +90,8 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
     private var isNormalizing = false
     private var applyingVim = false
     private var saveWork: DispatchWorkItem?
+    /// A draft file was written for the current note since its last successful save.
+    private var draftOutstanding = false
     /// Drops a half-typed Vim command after the motion timeout.
     private var vimTimeout: DispatchWorkItem?
     /// Copies a selection once it settles (Auto-copy selected text).
@@ -672,6 +674,7 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
         }
         refresh()
         scheduleSave()
+        writeDraft()
         updateCompletion()
         updateSlash()
         updateHint()
@@ -1074,18 +1077,36 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
     public func flush() { save() }
     public var hasUnsavedChanges: Bool { saveWork != nil }
 
+    /// The links as stored: each distinct one once.
+    private var shortLinks: [ShortLink] {
+        var seen = Set<ShortLink>()
+        return links.map(\.link).filter { seen.insert($0).inserted }
+    }
+
+    /// The write-ahead copy of the text (`NoteDrafts`), kept until the store has written it: a crash between a
+    /// keystroke and the debounced save, or a save the disk refused, is recovered at the next launch.
+    private func writeDraft() {
+        guard let note, !note.isReadOnly else { return }
+        NoteDrafts.write(NoteDrafts.Draft(id: note.id, content: persistedContent, links: shortLinks))
+        draftOutstanding = true
+    }
+
     private func save() {
         saveWork?.cancel()
         saveWork = nil
         guard var n = note, let store = Services.store else { return }
-        var seen = Set<ShortLink>()
-        let shortLinks = links.map(\.link).filter { seen.insert($0).inserted }
+        let shortLinks = self.shortLinks
         let content = persistedContent
-        guard content != n.content || shortLinks != n.links else { return }
-        n.content = content
-        n.links = shortLinks
-        note = n
-        store.update(n)
+        if content != n.content || shortLinks != n.links {
+            n.content = content
+            n.links = shortLinks
+            note = n
+            store.update(n)
+        }
+        if draftOutstanding, !store.unsavedNoteIDs.contains(n.id) {
+            NoteDrafts.remove(n.id)
+            draftOutstanding = false
+        }
     }
 
     private func subscribeToStore() {

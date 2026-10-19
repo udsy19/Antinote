@@ -14,6 +14,26 @@ extension Defaults.Keys {
     static let storageSyncLocalWins = Key<Bool>("storageKit.syncLocalWins", default: false)
 }
 
+/// What `init` did when the database file turned out to be damaged: the damaged file is never deleted, it is
+/// moved into the backups folder.
+public enum StoreRecovery: Equatable, Sendable {
+    case restoredBackup(URL, damaged: URL)
+    case startedFresh(damaged: URL)
+
+    /// Plain words for the user.
+    public var message: String {
+        switch self {
+        case let .restoredBackup(backup, damaged):
+            "Your notes database was damaged, so the backup “\(backup.deletingPathExtension().lastPathComponent)” was "
+                + "restored. Notes written after that backup may be missing. The damaged file is kept as "
+                + "“\(damaged.lastPathComponent)” in the Backups folder."
+        case let .startedFresh(damaged):
+            "Your notes database was damaged and no backup could be read, so Super Notes starts with an empty one. "
+                + "The damaged file is kept as “\(damaged.lastPathComponent)” in the Backups folder."
+        }
+    }
+}
+
 /// SQLite-backed `NoteStoring`. All notes are cached in memory and written through to the database.
 @MainActor
 public final class SQLiteNoteStore: NoteStoring {
@@ -21,16 +41,30 @@ public final class SQLiteNoteStore: NoteStoring {
     let backupsFolder: URL
     /// Clock; replaced by tests.
     public var now: () -> Date = Date.init
+    /// Set when opening found the file damaged and recovered (see `StoreRecovery`); the module tells the user.
+    public private(set) var recovery: StoreRecovery?
 
     var db: SQLiteDatabase
     var records: [UUID: NoteRecord] = [:]
     let subject = PassthroughSubject<NoteStoreChange, Never>()
+    /// Notes (and deletions) whose last write failed — a full disk, a read-only file. The in-memory copy is the
+    /// truth; every later write retries them, and `retryUnsaved()` does so on a timer.
+    public private(set) var unsavedNoteIDs: Set<UUID> = []
+    private var unsavedRemovals: Set<UUID> = []
+    private let saveFailureSubject = PassthroughSubject<String, Never>()
+    /// The message of each failed write, in plain words (shown once per run of failures).
+    public var saveFailures: AnyPublisher<String, Never> { saveFailureSubject.eraseToAnyPublisher() }
 
     public init(url: URL = SuperNotesPaths.database, backupsFolder: URL = SuperNotesPaths.backups) throws {
         self.url = url
         self.backupsFolder = SuperNotesPaths.ensure(backupsFolder)
         SuperNotesPaths.ensure(url.deletingLastPathComponent())
-        db = try SQLiteNoteStore.open(url, backupsFolder: backupsFolder)
+        do {
+            db = try SQLiteNoteStore.open(url, backupsFolder: backupsFolder)
+        } catch let error as StorageError where error.kind == .damaged {
+            Log.store.error("notes database damaged: \(error.message, privacy: .public)")
+            (db, recovery) = try SQLiteNoteStore.recover(url, backupsFolder: backupsFolder, cause: error)
+        }
         try load()
     }
 
@@ -67,13 +101,17 @@ public final class SQLiteNoteStore: NoteStoring {
     ]
     nonisolated static var schemaVersion: Int { migrations.count }
 
-    /// Opens, configures and migrates a database file. Older files are backed up before migrating.
+    /// Opens, configures, checks and migrates a database file. Older files are backed up before migrating.
+    /// WAL with `synchronous = FULL`: every commit is on disk before the write returns, so a crash, a forced quit or
+    /// a power cut loses nothing that was saved (NORMAL would let a power cut roll back the last commits).
     static func open(_ url: URL, backupsFolder: URL) throws -> SQLiteDatabase {
         let db = try SQLiteDatabase(url: url)
-        try db.execute("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON;")
+        try db.execute("PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL; PRAGMA foreign_keys = ON;")
+        let check = try db.query("PRAGMA quick_check") { $0.text(0) }.first ?? "no result"
+        guard check == "ok" else { throw StorageError(message: "The notes database is damaged: \(check)", kind: .damaged) }
         let version = db.userVersion
         guard version <= schemaVersion else {
-            throw StorageError(message: "The notes database was created by a newer version of Super Notes.")
+            throw StorageError(message: "The notes database was saved by a newer version of Super Notes.", kind: .newerVersion)
         }
         if version > 0 && version < schemaVersion {
             let dest = uniqueBackupURL(in: backupsFolder, tag: "pre-migration-v\(version)")
@@ -87,7 +125,47 @@ public final class SQLiteNoteStore: NoteStoring {
                 try db.execute("PRAGMA user_version = \(i + 1)")
             }
         }
+        // Schema v1 files were created without the sync table; make sure every table this build reads is there.
+        guard try db.scalarInt("SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'notes'") == 1 else {
+            throw StorageError(message: "The notes database has no notes table.", kind: .damaged)
+        }
         return db
+    }
+
+    /// The damaged file (with its `-wal`/`-shm`) moves into the backups folder as `notes-<time>-damaged.sqlite`, then
+    /// the newest backup that passes `validate` is copied into place; without one, a fresh database starts. Nothing
+    /// is deleted. Throws `cause` when the damaged file can't even be moved aside (the folder is read-only).
+    static func recover(_ url: URL, backupsFolder: URL, cause: StorageError) throws -> (SQLiteDatabase, StoreRecovery) {
+        let fm = FileManager.default
+        let damaged = uniqueBackupURL(in: SuperNotesPaths.ensure(backupsFolder), tag: "damaged")
+        for suffix in ["", "-wal", "-shm"] where fm.fileExists(atPath: url.path + suffix) {
+            try? fm.moveItem(atPath: url.path + suffix, toPath: damaged.path + suffix)
+        }
+        guard !fm.fileExists(atPath: url.path) else { throw cause }
+        for backup in backups(in: backupsFolder) where backup != damaged && (try? validate(backup)) != nil {
+            do {
+                try fm.copyItem(at: backup, to: url)
+                let db = try open(url, backupsFolder: backupsFolder)
+                Log.store.error("restored \(backup.lastPathComponent, privacy: .public) over the damaged database")
+                return (db, .restoredBackup(backup, damaged: damaged))
+            } catch {
+                for suffix in ["", "-wal", "-shm"] { try? fm.removeItem(atPath: url.path + suffix) }
+            }
+        }
+        let db = try open(url, backupsFolder: backupsFolder)
+        Log.store.error("no readable backup; started a fresh database")
+        return (db, .startedFresh(damaged: damaged))
+    }
+
+    /// Folds the WAL into the main file (quit, hourly maintenance); harmless while writes carry on.
+    public func checkpoint() {
+        try? db.execute("PRAGMA wal_checkpoint(PASSIVE)")
+    }
+
+    /// Tests only: caps the file at `pages` pages so the next write that needs room fails the way a full disk does
+    /// (`SQLITE_FULL`). 0 lifts the cap.
+    public func setPageLimit(_ pages: Int) {
+        try? db.execute("PRAGMA max_page_count = \(pages > 0 ? pages : 1_073_741_823)")
     }
 
     func load() throws {
@@ -110,8 +188,12 @@ public final class SQLiteNoteStore: NoteStoring {
 
     // MARK: - Writing
 
-    /// Upserts the given records (in order — slot hand-overs clear the old owner first) and deletes `removed`.
+    /// Upserts the given records (in order — slot hand-overs clear the old owner first) and deletes `removed`, plus
+    /// whatever an earlier write left unsaved. The transaction either lands whole or not at all: a failure keeps the
+    /// previous version on disk, the new one in memory, and is reported through `saveFailures`.
     func persist(_ ids: [UUID], removed: [UUID] = []) {
+        let removed = Set(removed).union(unsavedRemovals).filter { records[$0] == nil }
+        let ids = ids + Array(unsavedNoteIDs.subtracting(ids))
         let encoder = JSONEncoder()
         do {
             try db.transaction {
@@ -133,9 +215,24 @@ public final class SQLiteNoteStore: NoteStoring {
                               .bool(n.isReadOnly), .bool(n.isArchived), .date(n.deletedAt), .text(links)])
                 }
             }
+            unsavedNoteIDs = []
+            unsavedRemovals = []
         } catch {
+            unsavedNoteIDs.formUnion(ids.filter { records[$0] != nil })
+            unsavedRemovals.formUnion(removed)
             Log.store.error("save failed: \(error.localizedDescription, privacy: .public)")
+            saveFailureSubject.send("Your notes can't be saved right now (\(error.localizedDescription)). "
+                                    + "They stay in memory; free up space or fix the notes folder and Super Notes will keep trying.")
         }
+    }
+
+    /// Whether a write is still owed to the disk.
+    public var hasUnsavedWrites: Bool { !unsavedNoteIDs.isEmpty || !unsavedRemovals.isEmpty }
+
+    /// Writes what earlier failures left unsaved; returns whether everything is on disk afterwards.
+    @discardableResult public func retryUnsaved() -> Bool {
+        if hasUnsavedWrites { persist([]) }
+        return !hasUnsavedWrites
     }
 
     /// Renumbers positions: `deckOrder` gets 0…, archived notes follow (keeping their order), Void notes get -1.

@@ -110,6 +110,7 @@ enum Maintenance {
                                  + "Make a backup first if you might want today's notes back. Super Notes quits; reopen it to finish.",
                              confirmTitle: "Restore and Quit", destructive: true) else { return }
         do {
+            Services.windows?.flushEdits()   // or quitting would write today's typing over the restored note
             try Services.store.restore(from: backup)
             NSApp.terminate(nil)
         } catch {

@@ -34,7 +34,11 @@ Sources: the class digest (ivars/selectors), UI strings and the bundled `DataMod
 
 ### Database (`SQLiteNoteStore`, `SQLiteDatabase`)
 - System SQLite C API (`import SQLite3`) at `SuperNotesPaths.database` (path injectable for tests), `journal_mode=WAL`,
-  `synchronous=NORMAL`, `foreign_keys=ON`.
+  `synchronous=FULL` (every commit fsynced), `foreign_keys=ON`; `quick_check` at open. A damaged file is moved into
+  `Backups/` as `notes-<time>-damaged.sqlite` and the newest readable backup restored (`StoreRecovery`); other open
+  failures (newer schema, permissions) open a fallback `notes-fallback.sqlite` that is merged back later. Failed
+  writes are kept in memory (`unsavedNoteIDs`), reported (`saveFailures`) and retried. Text is bound by byte count,
+  so NUL bytes survive. See `reliability.md` for the full failure-mode table.
 - Versioned migrations keyed on `PRAGMA user_version`, each run in a transaction:
   v1 `notes(id, content, created, modified, changed, position, slot, is_locked, is_read_only, is_archived,
   deleted_at, links JSON)` + indexes (partial unique index on `slot`, position, deleted_at);
@@ -43,6 +47,8 @@ Sources: the class digest (ivars/selectors), UI strings and the bundled `DataMod
 - `changed` is an internal revision time bumped by any synced-field change (content, flags, archive, Void);
   `modified` only moves when content changes (contract).
 - All notes are cached in memory and written through; `changes` publishes `NoteStoreChange`.
+- The editor keeps a write-ahead draft of the note being typed (`NoteDrafts`, `Drafts/<id>.json`) that
+  `StorageKitModule.recoverDrafts` puts back at launch after a crash.
 
 ### Deck, slots, archive, The Void
 - Deck = non-deleted, non-archived notes by `position` (0 = front, contiguous). Archived notes are kept after the
@@ -56,7 +62,8 @@ Sources: the class digest (ivars/selectors), UI strings and the bundled `DataMod
 
 ### Backups and portability
 - `backup()` runs `VACUUM INTO` (consistent while open) into `SuperNotesPaths.backups/notes-<timestamp>.sqlite` and keeps
-  the newest `Defaults[.backupCount]`. `StorageKitModule`'s hourly maintenance makes one automatically once
+  the newest `Defaults[.backupCount]` routine backups; tagged copies (`pre-migration-v1`, `damaged`) stay outside the
+  rotation and a copy that failed half-way is removed. `StorageKitModule`'s hourly maintenance makes one automatically once
   `Defaults[.backupIntervalHours]` (default 24) have passed, and moves ephemeral, unarchived notes not changed for
   `Defaults[.autoDeleteUnmodifiedDays]` days to The Void (0 = never; `Note.isUnmodified(since:)`).
 - `restore(from:)` validates the file, saves the current notes as a new backup, closes the database, swaps the file

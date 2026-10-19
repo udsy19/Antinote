@@ -329,6 +329,7 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
     var isMainWindowVisible: Bool { window.isVisible }
     var isMainWindowKey: Bool { window.isKeyWindow && NSApp.isActive }
     var hasUnsavedEdits: Bool { ephemeralPane != nil && (ephemeralPane.editor.hasUnsavedChanges || slotPane.editor.hasUnsavedChanges) }
+    func flushEdits() { if ephemeralPane != nil { flushEditors() } }
 
     func showMain() {
         if !window.isVisible { startFreshIfInactive() }

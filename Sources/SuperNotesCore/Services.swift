@@ -315,6 +315,9 @@ public protocol WindowServicing: AnyObject {
     var isMainWindowKey: Bool { get }
     /// Whether an editor holds typing that hasn't been written to the store yet.
     var hasUnsavedEdits: Bool { get }
+    /// Writes every editor's pending typing to the store now. Anything that reads or rewrites a note from outside
+    /// the editor (URL scheme, palette, restore) calls this first, or it works from stale text.
+    func flushEdits()
 }
 
 /// One command of the ⌘K palette. The editor's inline "/" list offers the same commands.

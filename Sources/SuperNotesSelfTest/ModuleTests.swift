@@ -17,4 +17,5 @@ func registerModuleTests() {
     registerUndoTests()
     registerSlotsTests()
     registerAIKitTests()
+    registerReliabilityTests()
 }
