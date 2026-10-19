@@ -379,6 +379,10 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
 
     public func focus() { textView.window?.makeFirstResponder(textView) }
 
+    /// Self-tests: the inline results' frames and the text column's edges, in the text view's coordinates.
+    public var resultFrames: [NSRect] { textView.annotationFrames().map(\.rect) }
+    public var textColumn: (start: CGFloat, end: CGFloat) { textView.textEdges }
+
     public func insert(_ text: String) {
         guard textView.isEditable, !text.isEmpty else { return }
         let sel = textView.selectedRange()
@@ -892,7 +896,8 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
             }
             model.markers.append((marker, kind, i))
             let hang = para.mutableCopy() as! NSMutableParagraphStyle
-            hang.headIndent = item.indent.reduce(0) { x, c in c == "\t" ? ((x / 28).rounded(.down) + 1) * 28 : x + advance }
+            let indent = item.indent.reduce(0) { x, c in c == "\t" ? ((x / 28).rounded(.down) + 1) * 28 : x + advance }
+            hang.headIndent = EditorLogic.Annotations.hangingIndent(indent, column: tc.size.width)
             storage.addAttribute(.paragraphStyle, value: hang, range: line)
         }
 
@@ -947,30 +952,32 @@ public final class SuperNotesEditor: NSObject, NoteEditing, NSTextViewDelegate, 
         }
         storage.endEditing()
 
-        // Results follow their line; one that doesn't fit gets a reserved row below it.
+        // Results follow their line; one that doesn't fit gets the rows it needs below the line, wrapped inside the
+        // column (a column too narrow to tell gets one row).
         lm.ensureLayout(for: tc)
         placedWidth = tc.size.width
         let edges = (start: inset.width, end: inset.width + tc.size.width)
-        var wrapped: [NSRange] = []
+        var wrapped: [(line: NSRange, rows: Int)] = []
         for a in analysis.annotations where lines.indices.contains(a.line) {
             let line = lines[a.line]
             let display = EditorLogic.Annotations.display(a.text, after: s.substring(with: line))
             let width = display.size(withAttributes: [.font: font]).width
-            var wraps = false
+            var rows = 1
             if tc.size.width > 4 * advance {
                 let end = textView.lineEnd(line).x
-                wraps = EditorLogic.Annotations.place(lineEnd: end, width: width, textStart: edges.start, textEnd: edges.end,
-                                                      rightToLeft: rtl).wraps
+                let wraps = EditorLogic.Annotations.place(lineEnd: end, width: width, textStart: edges.start, textEnd: edges.end,
+                                                          rightToLeft: rtl).wraps
+                rows = wraps ? EditorTextView.resultRows(a.text, font: font, lineHeight: lineHeight, width: tc.size.width) : 0
             }
-            if wraps { wrapped.append(line) }
-            model.annotations.append((line, display, wraps, a))
+            if rows > 0 { wrapped.append((line, rows)) }
+            model.annotations.append((line, display, rows, a))
         }
         if !wrapped.isEmpty {
             storage.beginEditing()
-            for line in wrapped {
+            for (line, rows) in wrapped {
                 let style = (storage.attribute(.paragraphStyle, at: line.location, effectiveRange: nil) as? NSParagraphStyle ?? para)
                     .mutableCopy() as! NSMutableParagraphStyle
-                style.paragraphSpacing += lineHeight
+                style.paragraphSpacing += lineHeight * CGFloat(rows)
                 storage.addAttribute(.paragraphStyle, value: style, range: line)
             }
             storage.endEditing()

@@ -90,14 +90,25 @@ func registerChromeParityTests() {
         typealias M = ChromeMetrics
         check(M.button == 30 && M.glyph == 22 && M.sideInset == 10 && M.spacing == 8 && M.row == 20 && M.cornerRadius == 5,
               "one size system for every chrome button")
-        check(M.leadingInset == 69, "the top bar's left group starts one gap after the zoom button (7 + 14 + 2 × 20 = 61)")
+        let lights = M.trafficLights
+        check(M.groupGap == 16 && M.leadingInset == lights.end + 16, "the top bar's left group starts two gaps after the zoom button")
+        check(lights.start >= 7 && lights.end >= 61 && lights.end - lights.start >= 54, "the lights were measured from the window: \(lights)")
         check(BottomBarLayout.button == 30 && BottomBarLayout.sideInset == 10 && BottomBarLayout.spacing == 8, "the bottom bar follows it")
-        check(M.buttons(3, from: M.leadingInset, y: 5).map(\.minX) == [69, 107, 145], "Settings, Search, Typing")
+        check(M.buttons(3, from: M.leadingInset, y: 5).map { $0.minX - M.leadingInset } == [0, 38, 76], "Settings, Search, Typing")
         check(M.topBarHeight == M.row + M.button / 2 && M.bottomBarHeight == 2 * M.row, "each strip covers its row")
         check(M.leftButtonsFitting(width: 350, left: 3, right: 2) == 3, "350 pt: Settings, Search and Typing beside New Note and Pin")
-        check(M.leftButtonsFitting(width: 261, left: 3, right: 2) == 3 && M.leftButtonsFitting(width: 260, left: 3, right: 2) == 2,
-              "under 261 pt (69 + 3 × 30 + 2 × 8 + 8 + 2 × 30 + 8 + 10) Typing gives way")
+        let full = M.topBarWidth(left: 3, right: 2)
+        check(full == M.leadingInset + 3 * 30 + 2 * 8 + 8 + 2 * 30 + 8 + 10, "the full top bar: \(full) pt")
+        check(M.leftButtonsFitting(width: full, left: 3, right: 2) == 3 && M.leftButtonsFitting(width: full - 1, left: 3, right: 2) == 2,
+              "under \(full) pt Typing gives way")
+        check(M.topBarWidth(left: 2, right: 2) <= 240, "Settings and Search still fit the narrowest window beside New Note and Pin")
         check(M.leftButtonsFitting(width: 100, left: 3, right: 2) == 2, "Settings and Search always stay")
+        let classic = M.trafficLights
+        M.trafficLights = M.TrafficLights(start: 7, end: 61)
+        check(M.leadingInset == 77 && M.topBarWidth(left: 3, right: 2) == 269, "macOS 14 / 15 lights: the group starts at 77, Typing goes under 269 pt")
+        M.trafficLights = M.TrafficLights(start: 9, end: 69)
+        check(M.leadingInset == 85 && M.topBarWidth(left: 3, right: 2) == 277, "macOS 26 lights: the group starts at 85, Typing goes under 277 pt")
+        M.trafficLights = classic
         check(SearchToolbarLayout.showsLabels(width: 350, labelled: 220, right: 80), "350 pt: both Search capsules with labels")
         check(!SearchToolbarLayout.showsLabels(width: 240, labelled: 220, right: 80), "240 pt: glyphs only")
         check(SearchToolbarLayout.showsLabels(width: 240, labelled: 93, right: 80), "and then they fit")
@@ -159,6 +170,28 @@ func registerChromeParityTests() {
                     for c in found[(i + 1)...] where a.frame.intersects(c.frame) {
                         check(false, "\(label): \(a.name) \(a.frame) overlaps \(c.name) \(c.frame)")
                     }
+                }
+                // The traffic lights, as measured, sit on the top row's centre line; the top bar's buttons keep two
+                // gaps clear of the zoom button, so no hover background comes near a light.
+                let lights = found.filter { $0.name == "light" }.sorted { $0.frame.minX < $1.frame.minX }
+                let topButtons = found.filter { $0.name == "ChromeButton" && $0.frame.maxY > frame.bounds.height - ChromeMetrics.topBarHeight }
+                if let close = lights.first, let zoom = lights.last {
+                    check(close.frame.minX == ChromeMetrics.trafficLights.start && zoom.frame.maxX == ChromeMetrics.trafficLights.end,
+                          "\(label): ChromeMetrics carries the measured lights \(ChromeMetrics.trafficLights), got \(close.frame.minX)…\(zoom.frame.maxX)")
+                    check(abs(close.frame.midY - (frame.bounds.height - ChromeMetrics.row)) < 0.5, "\(label): lights centred on the row")
+                    for b in topButtons {
+                        check(b.frame.minX - zoom.frame.maxX >= ChromeMetrics.groupGap - 0.5,
+                              "\(label): \(b.frame) keeps \(ChromeMetrics.groupGap) pt clear of the zoom button \(zoom.frame)")
+                        check(abs(b.frame.midY - close.frame.midY) < 0.5, "\(label): button \(b.frame) centred on the lights' line \(close.frame.midY)")
+                    }
+                    // New Note and Pin are the right group; whatever is left of them follows the lights.
+                    let ordered = topButtons.sorted { $0.frame.minX < $1.frame.minX }
+                    let left = Array(ordered.dropLast(2)), right = Array(ordered.suffix(2))
+                    check(left.first?.frame.minX == zoom.frame.maxX + ChromeMetrics.groupGap, "\(label): the left group starts two gaps after zoom")
+                    for pair in Array(zip(left, left.dropFirst())) + Array(zip(right, right.dropFirst())) {
+                        check(abs(pair.1.frame.minX - pair.0.frame.maxX - ChromeMetrics.spacing) < 0.5, "\(label): equal gaps in each group")
+                    }
+                    check(right.last.map { frame.bounds.width - $0.frame.maxX } == ChromeMetrics.sideInset, "\(label): the right group ends one inset in")
                 }
             }
 

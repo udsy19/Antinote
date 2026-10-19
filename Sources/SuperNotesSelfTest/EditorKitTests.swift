@@ -1,6 +1,7 @@
 import AppKit
 import SuperNotesCore
 import EditorKit
+import NoteEngine
 
 /// Feeds keys to a Vim engine, applying each output like the editor does.
 private func vim(_ keys: [String], _ text: String, caret: Int = 0) -> (text: String, sel: NSRange, engine: VimEngine) {
@@ -393,10 +394,13 @@ func registerEditorKitTests() {
         check(fits.x == 200 && !fits.wraps, "result follows the line end")
         check(!A.place(lineEnd: 253, width: 40, textStart: 44, textEnd: 293).wraps, "exactly fits")
         let wraps = A.place(lineEnd: 260, width: 40, textStart: 44, textEnd: 293)
-        check(wraps.x == 44 && wraps.wraps, "too long: wraps to the text start")
+        check(wraps.x == 253 && wraps.wraps, "too long: wraps to a row below, against the column's right edge")
+        check(A.wrappedX(width: 400, textStart: 44, textEnd: 293) == 44, "a result as wide as the column fills it from the start")
+        check(A.hangingIndent(196, column: 150) == 75 && A.hangingIndent(28, column: 150) == 28 && A.hangingIndent(28, column: 0) == 0,
+              "a hanging indent never takes more than half the column")
         let rtl = A.place(lineEnd: 100, width: 40, textStart: 44, textEnd: 293, rightToLeft: true)
         check(rtl.x == 60 && !rtl.wraps, "right-to-left: before the line end")
-        check(A.place(lineEnd: 70, width: 40, textStart: 44, textEnd: 293, rightToLeft: true) == (253, true), "rtl wrap")
+        check(A.place(lineEnd: 70, width: 40, textStart: 44, textEnd: 293, rightToLeft: true) == (44, true), "rtl wrap: the column's left edge")
     }))
 
     SelfTest.cases.append(("EditorKit.listToggleCycle", {
@@ -601,6 +605,93 @@ func registerEditorKitTests() {
             tv.insertText("Z", replacementRange: NSRange(location: 0, length: 0))
             check(!tv.string.contains("Z"), "read-only notes are not editable")
             editor.view.cacheDisplay(in: editor.view.bounds, to: rep)
+        }
+    }))
+    // Soft wrap always holds: in every mode, at every width and text size, no line fragment, inline result or
+    // frame runs past the visible width, and nothing scrolls sideways — after resizes too.
+    SelfTest.cases.append(("EditorKit.softWrap", {
+        MainActor.assumeIsolated {
+            let saved = Services.analyzer
+            Services.analyzer = NoteEngine()
+            defer { Services.analyzer = saved }
+            let editor = SuperNotesEditor()
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled, .resizable],
+                                  backing: .buffered, defer: false)
+            window.contentView = editor.view
+            let tv = editor.view.subviews.compactMap({ $0 as? NSScrollView }).first!.documentView as! NSTextView
+            let scroll = tv.enclosingScrollView!
+            let url = "https://example.com/a/very/long/path/that/never/breaks/" + String(repeating: "segment-", count: 20) + "end.html"
+            let word = String(repeating: "x", count: 300)
+            let notes: [(String, String)] = [
+                ("plain url", "Notes\nsee " + url + " soon"),
+                ("plain word", "Notes\n" + word + " done"),
+                ("list", "list: Chores\n- " + String(repeating: "wash the car and sweep the porch ", count: 6) + "\n[ ] " + word),
+                ("math", "math\n" + String(repeating: "123456789 + ", count: 12) + "1 =\n99999999999999 * 99999999999 =\nx = " + String(repeating: "1", count: 60) + "\nx * x ="),
+                ("code", "code: swift\nlet path = \"" + url + "\"\nfunc " + word + "() {}"),
+                ("sum", "sum\n" + String(repeating: "$1234567.89 ", count: 10) + "\n" + word),
+                ("timer", "timer 25m\n" + word),
+                ("markdown", "# " + String(repeating: "Heading ", count: 30) + "\n**" + word + "**\n`" + url + "`"),
+                ("deep list", "list: Deep\n\t\t\t\t\t\t\t- seven tabs in, an item long enough to wrap a few times over\n"
+                              + String(repeating: " ", count: 24) + "- twenty-four spaces in, another long item that wraps"),
+                ("big results", "math\n2 ^ 200 =\n12345678901234 * 12345678901234 * 12345678901234 =\n5 feet in parsecs =\n1 + foo ="),
+            ]
+            @MainActor func verify(_ label: String) {
+                editor.view.layoutSubtreeIfNeeded()
+                tv.layoutManager!.ensureLayout(for: tv.textContainer!)
+                let clip = scroll.contentView.bounds.width
+                let column = tv.textContainer!.size.width
+                check(abs(tv.frame.width - clip) < 0.5, "\(label): text view \(tv.frame.width) as wide as the clip \(clip)")
+                check(column <= clip - 2 * tv.textContainerInset.width + 0.5, "\(label): container \(column) fits inside the view")
+                check(scroll.contentView.bounds.origin.x == 0, "\(label): no sideways scroll")
+                let lm = tv.layoutManager!
+                let s = tv.string as NSString
+                lm.enumerateLineFragments(forGlyphRange: NSRange(location: 0, length: lm.numberOfGlyphs)) { frag, used, _, range, _ in
+                    check(used.maxX <= column + 0.5, "\(label): fragment \(range) used \(used) inside the column \(column)")
+                    check(frag.maxX <= column + 0.5, "\(label): fragment \(range) \(frag) inside the column \(column)")
+                    // A fragment holding visible characters lays them out (a paragraph indented past its column
+                    // degenerates into empty fragments with their glyphs parked on the edge).
+                    let chars = lm.characterRange(forGlyphRange: range, actualGlyphRange: nil)
+                    var visible = false
+                    for i in chars.location..<NSMaxRange(chars) where !CharacterSet.whitespacesAndNewlines.contains(Unicode.Scalar(s.character(at: i)) ?? " ") {
+                        // Hidden list markers are kerned to zero width.
+                        if ((tv.textStorage?.attribute(.kern, at: i, effectiveRange: nil) as? CGFloat) ?? 0) >= 0 { visible = true; break }
+                    }
+                    check(!visible || (used.width > 1 && used.minX < column), "\(label): fragment \(range) '\(s.substring(with: chars).prefix(12))' laid out: \(used)")
+                    // Every glyph, its advance included, ends inside the column (a degenerate layout parks glyphs on the edge).
+                    for g in range.location..<NSMaxRange(range) where !lm.propertyForGlyph(at: g).contains(.controlCharacter) {
+                        let ch = lm.characterIndexForGlyph(at: g)
+                        guard ch < s.length, s.character(at: ch) != 10 else { continue }
+                        let width = lm.boundingRect(forGlyphRange: NSRange(location: g, length: 1), in: tv.textContainer!).width
+                        let right = frag.minX + lm.location(forGlyphAt: g).x + width
+                        if right > column + 0.5 {
+                            check(false, "\(label): glyph \(g) '\(s.substring(with: NSRange(location: ch, length: 1)))' ends at \(right), past the column \(column)")
+                            break
+                        }
+                    }
+                }
+                let (start, end) = editor.textColumn
+                for r in editor.resultFrames {
+                    check(r.minX >= start - 0.5 && r.maxX <= end + 0.5, "\(label): result \(r) inside the column \(start)–\(end)")
+                }
+            }
+            for (name, text) in notes {
+                editor.load(Note(content: text))
+                for width in [240.0, 350.0, 600.0, 240.0] {
+                    window.setContentSize(NSSize(width: width, height: 400))
+                    verify("\(name) at \(Int(width)) pt")
+                }
+                editor.perform(.expandAllLinks)
+                verify("\(name) at 240 pt, links expanded")
+            }
+            check((editor.view.subviews.compactMap { $0 as? NSScrollView }.first?.hasHorizontalScroller) == false, "no horizontal scroller")
+            Defaults[.textSize] = .xl
+            Defaults[.doubleFontSize] = true
+            defer { Defaults.reset(.textSize); Defaults.reset(.doubleFontSize) }
+            editor.load(Note(content: notes[3].1))
+            for width in [600.0, 240.0, 350.0] {
+                window.setContentSize(NSSize(width: width, height: 400))
+                verify("xl double math at \(Int(width)) pt")
+            }
         }
     }))
 }

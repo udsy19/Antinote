@@ -499,9 +499,21 @@ extension EditorLogic {
         public static func place(lineEnd: CGFloat, width: CGFloat, textStart: CGFloat, textEnd: CGFloat,
                                  rightToLeft: Bool = false) -> (x: CGFloat, wraps: Bool) {
             if rightToLeft {
-                return lineEnd - width >= textStart ? (lineEnd - width, false) : (max(textStart, textEnd - width), true)
+                return lineEnd - width >= textStart ? (lineEnd - width, false) : (wrappedX(width: width, textStart: textStart, textEnd: textEnd, rightToLeft: true), true)
             }
-            return lineEnd + width <= textEnd ? (lineEnd, false) : (textStart, true)
+            return lineEnd + width <= textEnd ? (lineEnd, false) : (wrappedX(width: width, textStart: textStart, textEnd: textEnd), true)
+        }
+
+        /// A wrapped result sits against the column's far edge (the right edge left-to-right, the left edge
+        /// right-to-left), where results belong; one as wide as the column fills it.
+        public static func wrappedX(width: CGFloat, textStart: CGFloat, textEnd: CGFloat, rightToLeft: Bool = false) -> CGFloat {
+            rightToLeft ? textStart : max(textStart, textEnd - width)
+        }
+
+        /// A list item's hanging indent, kept to half the column so the item's text always has room to wrap
+        /// (TextKit lays a paragraph indented past its column out one glyph per line, hanging off the edge).
+        public static func hangingIndent(_ indent: CGFloat, column: CGFloat) -> CGFloat {
+            min(indent, max(0, column / 2))
         }
     }
 }

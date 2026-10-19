@@ -20,10 +20,19 @@ final class MainWindow: NSWindow {
         isReleasedWhenClosed = false
         collectionBehavior = [.fullScreenPrimary, .moveToActiveSpace]
         tabbingMode = .disallowed
+        measureTrafficLights()
     }
 
     var trafficLights: [NSButton] {
         [.closeButton, .miniaturizeButton, .zoomButton].compactMap { standardWindowButton($0) }
+    }
+
+    /// Tells `ChromeMetrics` where the system really put the traffic lights (their x differs between macOS 26 and
+    /// 14 / 15), so the top bar's left group starts a clear gap after the zoom button on every release.
+    func measureTrafficLights() {
+        guard let close = standardWindowButton(.closeButton), let zoom = standardWindowButton(.zoomButton) else { return }
+        let measured = ChromeMetrics.TrafficLights(start: close.frame.minX, end: zoom.frame.maxX)
+        if measured != ChromeMetrics.trafficLights { ChromeMetrics.trafficLights = measured }
     }
 
     /// Centres the traffic lights on the top bar's button row (`TitleBarView.iconRow` down); x stays standard.
@@ -34,6 +43,7 @@ final class MainWindow: NSWindow {
             button.setFrameOrigin(NSPoint(x: button.frame.minX,
                                           y: container.bounds.height - TitleBarView.iconRow - size.height / 2))
         }
+        measureTrafficLights()
     }
 }
 
@@ -354,8 +364,9 @@ class HoverBar: NSView {
 
 /// Top strip: drags the window; on hover shows the traffic lights, then Settings, Search and Typing on the left
 /// and New Note and Pin on the right, all on `ChromeMetrics`: the row is centred 20 pt from the top (the traffic
-/// lights are moved onto it), the left group starts one gap after the zoom button, the right group ends 10 pt
-/// from the edge, 8 pt between buttons. The strip is 35 pt tall, so it covers the buttons' lower edge.
+/// lights are moved onto it, so every button and glyph is centred on their centre line), the left group starts two
+/// gaps (16 pt) after the zoom button as the system really placed it, the right group ends 10 pt from the edge,
+/// 8 pt between buttons. The strip is 35 pt tall, so it covers the buttons' lower edge.
 final class TitleBarView: HoverBar {
     static let height = ChromeMetrics.topBarHeight
     /// Centre of the button row, from the window top.
@@ -365,6 +376,7 @@ final class TitleBarView: HoverBar {
     /// The Typing options button; its menu drops from under it.
     let typingButton: ChromeButton
     private let buttons: [ChromeButton]
+    private var leading: NSLayoutConstraint!
 
     init(target: AnyObject) {
         let settings = ChromeButton(.settings, "Settings", tooltip: "Settings - ⌘+,", target: target,
@@ -377,9 +389,10 @@ final class TitleBarView: HoverBar {
         buttons = [settings, search, typingButton, new, pinButton]
         super.init(frame: .zero)
         buttons.forEach(content.addSubview)
+        leading = settings.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: ChromeMetrics.leadingInset)
         let step = ChromeMetrics.button + ChromeMetrics.spacing
         NSLayoutConstraint.activate([
-            settings.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: ChromeMetrics.leadingInset),
+            leading,
             search.leadingAnchor.constraint(equalTo: settings.leadingAnchor, constant: step),
             typingButton.leadingAnchor.constraint(equalTo: search.leadingAnchor, constant: step),
             pinButton.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -ChromeMetrics.sideInset),
@@ -388,10 +401,12 @@ final class TitleBarView: HoverBar {
     }
     required init?(coder: NSCoder) { fatalError() }
 
-    /// In a window too narrow for both groups (under 261 pt) the Typing button gives way; its menu stays in the
-    /// Edit menu's reach through Settings → Editor → Typing.
+    /// In a window too narrow for both groups (under 277 pt on macOS 26, 269 on 14 / 15) the Typing button gives
+    /// way; its menu stays in the Edit menu's reach through Settings → Editor → Typing. The left group follows the
+    /// traffic lights as last measured.
     override func layout() {
         super.layout()
+        if leading.constant != ChromeMetrics.leadingInset { leading.constant = ChromeMetrics.leadingInset }
         let fits = ChromeMetrics.leftButtonsFitting(width: bounds.width, left: 3, right: 2) == 3
         if typingButton.isHidden == fits { typingButton.isHidden = !fits }
     }

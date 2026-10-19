@@ -3,6 +3,16 @@
 All notable changes to Super Notes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Fixed
+- Text no longer runs off the right edge of a narrow note. A list item indented deeper than the note was wide
+  vanished until the window was widened; a math result or error too wide to fit was drawn past the edge. Results
+  that don't fit after their line now sit on their own rows, right-aligned and wrapped inside the note.
+- The buttons next to the close, minimize and zoom buttons are spaced evenly: Super Notes measures where macOS put
+  the traffic lights (macOS 26 spaces them wider) and starts its own buttons a clear gap after them, centred on
+  the same line.
+
 ## [1.3.6] — 2026-10-18
 
 ### Fixed

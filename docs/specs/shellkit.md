@@ -19,7 +19,10 @@ themeAppearanceObserver), `WindowTopBar` (buttonVisibilityState, isHovered), `Cu
 - Top bar (35 pt, hover): the traffic lights (centred 20 pt down), Settings, Search and Typing on the left, New
   Note and Pin on the right — line-art glyphs drawn in code (`ChromeIcon`), `typeHyperLight` hover, `typeLight`
   pressed, `accent3Main` when pinned, a focus ring under Full Keyboard Access. The strip drags the window even while
-  hidden. Under 261 pt the Typing button gives way. Typing drops a checkmark menu (`TypingMenu`) of the
+  hidden. The window measures where the system put the traffic lights (`MainWindow.measureTrafficLights` →
+  `ChromeMetrics.trafficLights`; macOS 26 spaces them wider than 14 / 15) and the left group starts two gaps
+  (16 pt) after the zoom button, so the lights and the glyphs read as two groups with every button centred on
+  the lights' line. Under 277 pt on macOS 26 (269 on 14 / 15) the Typing button gives way. Typing drops a checkmark menu (`TypingMenu`) of the
   `TypingOption` switches (spelling, autocorrect, grammar, capitalisation, smart quotes and dashes, text
   replacements), mirrored in Settings → Editor → Typing.
 - Every chrome button follows `ChromeMetrics` (SuperNotesCore): 30 pt square, 22 pt glyph, rows centred 20 pt from

@@ -50,6 +50,14 @@ enum Scenes {
             EditorPreview.findShelf(Demo.notes[2].1, term: "the", replace: true)
         })
         scenes.append(Scene(name: "editor-bullet-list", size: window) { listStyle(.bullet) })
+        // Soft wrap at the narrowest window: long unbreakable tokens, a deep hanging indent, results wider than the
+        // column (on their own rows, right-aligned), a long code line.
+        let narrow = NSSize(width: 240, height: 420)
+        for (name, text) in Demo.wrapNotes {
+            scenes.append(Scene(name: "editor-wrap-\(name)-240", size: narrow) { editor(text) })
+            scenes.append(Scene(name: "editor-wrap-\(name)-240-dark", size: narrow, dark: true) { editor(text) })
+        }
+        scenes.append(Scene(name: "editor-wrap-math-350", size: NSSize(width: 350, height: 420)) { editor(Demo.wrapNotes[1].1) })
         // Last: each one leaves its theme selected (the editors restyle when the window lays them out).
         let themes = Theme.builtIn.filter { ["Meadow", "Armor", "Stealth", "Spice", "Bubblegum"].contains($0.name) }.map { theme in
             Scene(name: "theme-\(theme.id)", size: window, dark: theme.isDark) { themed(theme) }
@@ -252,6 +260,14 @@ enum Demo {
         """),
     ]
 
+    /// Notes that test soft wrap: a long URL and a 60-character word, big math results, a deep hanging indent, code.
+    static let wrapNotes: [(String, String)] = [
+        ("plain", "Links\nspec at https://example.com/docs/really/long/path/to/the/specification/index.html#section-3\nand " + String(repeating: "x", count: 60)),
+        ("math", "math\n2 ^ 200 =\n12345678901234 * 12345678901234 * 12345678901234 =\n5 feet in parsecs =\nrent / 3 ="),
+        ("list", "list: Deep\n[ ] top item\n\t\t\t\t\t\t- seven tabs in, an item long enough to wrap a few times over\n[ ] back out"),
+        ("code", "code: swift\nlet url = URL(string: \"https://example.com/docs/really/long/path/index.html\")!\nfunc greet(_ name: String) -> String { \"Hi, \\(name)\" }"),
+    ]
+
     /// Shortens raw URLs the way pasting does, so short links render.
     static func shortenLinks(_ text: String) -> (text: String, links: [ShortLink]) {
         guard let analyzer = Services.analyzer,
@@ -281,6 +297,19 @@ extension Scenes {
                 Scene(name: "window-bottombar-350-dark", size: size, dark: true) { withDates { windowFrame(revealed: true) } },
                 Scene(name: "window-bottombar-240", size: NSSize(width: 240, height: size.height)) {
                     withDates { windowFrame(revealed: true, size: NSSize(width: 240, height: size.height)) }
+                },
+                // The top bar beside the traffic lights at the narrowest and a wide window.
+                Scene(name: "window-revealed-240", size: NSSize(width: 240, height: size.height)) {
+                    windowFrame(revealed: true, size: NSSize(width: 240, height: size.height))
+                },
+                Scene(name: "window-revealed-240-dark", size: NSSize(width: 240, height: size.height), dark: true) {
+                    windowFrame(revealed: true, size: NSSize(width: 240, height: size.height))
+                },
+                Scene(name: "window-revealed-600", size: NSSize(width: 600, height: size.height)) {
+                    windowFrame(revealed: true, size: NSSize(width: 600, height: size.height))
+                },
+                Scene(name: "window-revealed-600-dark", size: NSSize(width: 600, height: size.height), dark: true) {
+                    windowFrame(revealed: true, size: NSSize(width: 600, height: size.height))
                 },
                 // The slot bar alone: no notes slotted, some, all nine; the pointer on a slot holding a note and on
                 // an empty one.

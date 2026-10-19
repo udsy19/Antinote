@@ -92,8 +92,18 @@ its UI strings (quoted below).
 
 - `LineAnnotation`s draw right after their line's text, on its last wrapped fragment: a space then the result after
   a trailing "=", otherwise " = result" (`EditorLogic.Annotations`). Results are `accent3Main`, errors
-  `accent5Main`, info `typeLight`. A result that doesn't fit starts its own row under the line (the row is
-  reserved with paragraph spacing). They are not text: not selectable, not copied.
+  `accent5Main`, info `typeLight`. A result that doesn't fit goes on its own rows under the line (reserved with
+  paragraph spacing), against the column's far edge — right-aligned left-to-right — and wrapped inside the column
+  when it is wider than that (a long number breaks by character), so it never passes the visible width. They are
+  not text: not selectable, not copied.
+- Soft wrap always holds: the text container tracks the text view, which is never horizontally resizable and has
+  no horizontal scroller, in every mode and at every size; TextKit breaks a word longer than the column (a URL, a
+  hash) by character. A list item's hanging indent is kept to half the column (`EditorLogic.Annotations.hangingIndent`):
+  indented past its column, TextKit lays a paragraph out one glyph per line, parked on the edge, and the item
+  vanishes until the window is widened. `EditorKit.softWrap` drives the real editor at 240, 350 and 600 pt
+  (resizing between them, links expanded, XL double text) over a long URL, a 300-character word, big math
+  results, a long code line, list items and a seven-tab indent, and checks every fragment, glyph and result
+  stays inside the column with no sideways scroll.
 - Math variables: the defined name (`NoteAnalysis.definitions`) in `accent1Secondary`, its colon in `accent2Main`,
   later uses in `accent1Tertiary`.
 - Clicking a result copies it ("Copied to clipboard"). With `Defaults[.preventEditingAnswers]` off, ⌥-click

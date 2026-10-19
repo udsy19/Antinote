@@ -6,8 +6,8 @@ struct RenderModel {
     enum Marker: Equatable { case checkbox(checked: Bool), bullet, number(String) }
     /// Hidden, zero-width marker characters (the caret never stops inside them), drawn in the left gutter.
     var markers: [(range: NSRange, kind: Marker, line: Int)] = []
-    /// Results drawn right after their line's text; `wraps` puts one on a reserved row below the line.
-    var annotations: [(line: NSRange, text: String, wraps: Bool, annotation: LineAnnotation)] = []
+    /// Results drawn right after their line's text; `rows` > 0 puts one on that many reserved rows below the line.
+    var annotations: [(line: NSRange, text: String, rows: Int, annotation: LineAnnotation)] = []
     /// The generated summary line ("Total: $40") drawn after a blank line below the note, in `color`.
     var summary: (text: String, color: String)?
     /// Fenced blocks (one rounded rect across their lines) and inline `code` spans.
@@ -254,29 +254,64 @@ final class EditorTextView: NSTextView {
                    from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
     }
 
+    /// A result on its reserved rows: the note's font and line pitch, wrapped inside `width` (a long number breaks
+    /// by character), against the column's far edge (right-aligned left-to-right, left-aligned right-to-left).
+    static func wrappedResult(_ text: String, font: NSFont, color: NSColor, lineHeight: CGFloat, rightToLeft: Bool) -> NSAttributedString {
+        let para = NSMutableParagraphStyle()
+        para.minimumLineHeight = lineHeight
+        para.maximumLineHeight = lineHeight
+        para.alignment = rightToLeft ? .left : .right
+        para.lineBreakMode = .byWordWrapping
+        return NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: color, .paragraphStyle: para])
+    }
+
+    /// How many rows of `lineHeight` a result needs when wrapped inside `width`.
+    static func resultRows(_ text: String, font: NSFont, lineHeight: CGFloat, width: CGFloat) -> Int {
+        guard width > 0 else { return 1 }
+        let box = wrappedResult(text, font: font, color: .black, lineHeight: lineHeight, rightToLeft: false)
+            .boundingRect(with: NSSize(width: width, height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin])
+        return max(1, Int((box.height / lineHeight).rounded()))
+    }
+
+    /// Where each inline result goes (view coordinates): after its line's text when it fits, otherwise on its
+    /// reserved rows below the line, against the column's far edge and wrapped inside the column — never past it.
+    func annotationFrames() -> [(rect: NSRect, text: String, annotation: LineAnnotation, line: NSRange)] {
+        let font = model.font
+        let (start, end) = textEdges
+        return model.annotations.map { a in
+            let endPoint = lineEnd(a.line)
+            guard a.rows > 0 else {
+                let width = (a.text as NSString).size(withAttributes: [.font: font]).width
+                let x = EditorLogic.Annotations.place(lineEnd: endPoint.x, width: width, textStart: start, textEnd: end,
+                                                      rightToLeft: model.rightToLeft).x
+                return (NSRect(x: x, y: endPoint.y - font.ascender, width: width, height: font.ascender - font.descender), a.text, a.annotation, a.line)
+            }
+            let text = a.annotation.text
+            let width = min((text as NSString).size(withAttributes: [.font: font]).width.rounded(.up), end - start)
+            let x = EditorLogic.Annotations.wrappedX(width: width, textStart: start, textEnd: end, rightToLeft: model.rightToLeft)
+            let top = endPoint.y + model.lineHeight - model.baselineOffset
+            return (NSRect(x: x, y: top, width: width, height: CGFloat(a.rows) * model.lineHeight), text, a.annotation, a.line)
+        }
+    }
+
     private func drawAnnotations(_ dirtyRect: NSRect) {
         annotationHits.removeAll()
         let theme = model.theme, font = model.font
-        let (start, end) = textEdges
-        for a in model.annotations {
+        for (a, placed) in zip(model.annotations, annotationFrames()) {
             let color: NSColor
             switch a.annotation.kind {
             case .result: color = NSColor(hex: theme.accent3Main)
             case .error: color = NSColor(hex: theme.accent5Main)
             case .info: color = NSColor(hex: theme.typeLight)
             }
-            let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
-            let endPoint = lineEnd(a.line)
-            let text = a.wraps ? a.annotation.text : a.text
-            let width = (text as NSString).size(withAttributes: attrs).width
-            let place = EditorLogic.Annotations.place(lineEnd: endPoint.x, width: width, textStart: start, textEnd: end,
-                                                      rightToLeft: model.rightToLeft)
-            let baseline = endPoint.y + (a.wraps ? model.lineHeight : 0)
-            let x = a.wraps ? (model.rightToLeft ? end - width : start) : place.x
-            let r = NSRect(x: x, y: baseline - font.ascender, width: width, height: font.ascender - font.descender)
-            annotationHits.append((r.insetBy(dx: -4, dy: -2), a.annotation, a.line))
-            guard r.intersects(dirtyRect) else { continue }
-            (text as NSString).draw(at: r.origin, withAttributes: attrs)
+            annotationHits.append((placed.rect.insetBy(dx: -4, dy: -2), a.annotation, a.line))
+            guard placed.rect.intersects(dirtyRect) else { continue }
+            if a.rows > 0 {
+                Self.wrappedResult(placed.text, font: font, color: color, lineHeight: model.lineHeight, rightToLeft: model.rightToLeft)
+                    .draw(with: placed.rect, options: [.usesLineFragmentOrigin])
+            } else {
+                (placed.text as NSString).draw(at: placed.rect.origin, withAttributes: [.font: font, .foregroundColor: color])
+            }
         }
     }
 
@@ -289,7 +324,7 @@ final class EditorTextView: NSTextView {
         } else {
             let last = s.lineRange(for: NSRange(location: s.length - 1, length: 0))
             baseline = lineEnd(last).y
-            if model.annotations.contains(where: { NSMaxRange($0.line) == s.length && $0.wraps }) { baseline += model.lineHeight }
+            if let last = model.annotations.first(where: { NSMaxRange($0.line) == s.length }) { baseline += model.lineHeight * CGFloat(last.rows) }
         }
         baseline += model.lineHeight * 2
         let font = model.font
