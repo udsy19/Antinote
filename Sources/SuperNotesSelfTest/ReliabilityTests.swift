@@ -268,6 +268,44 @@ func registerReliabilityTests() {
         }
     }))
 
+    // Typing into a blank note and moving on within the 0.3 s save debounce: the note is kept with the typing
+    // (it used to be deleted as "empty" from the stale copy).
+    SelfTest.cases.append(("Reliability.switchNoteMidDebounce", {
+        MainActor.assumeIsolated {
+            let b = Bench()
+            defer { b.cleanup() }
+            let older = b.store.create(content: "an older note")
+            let front = b.store.create(content: "")
+            WindowPreview.reload()
+            _ = WindowPreview.frameView(revealed: false, slotBar: .hidden)
+            check(WindowPreview.currentNoteID == front.id, "starts on the blank front note")
+            guard let tv = WindowPreview.window.firstResponder as? NSTextView else { return check(false, "the note's text has the focus") }
+            tv.insertText("typed fast", replacementRange: tv.selectedRange())
+            WindowPreview.navigate(.previous)   // to the older note, within the debounce
+            check(b.store.note(front.id)?.content == "typed fast", "the typed note survives the switch: \(String(describing: b.store.note(front.id)?.content))")
+            check(WindowPreview.currentNoteID == older.id, "and the older note is shown")
+            // A note left truly blank is still dropped.
+            WindowPreview.navigate(.next)
+            guard let tv2 = WindowPreview.window.firstResponder as? NSTextView, WindowPreview.currentNoteID == front.id else {
+                return check(false, "back on the front note")
+            }
+            tv2.selectAll(nil)
+            tv2.insertText("", replacementRange: tv2.selectedRange())
+            WindowPreview.navigate(.previous)
+            check(b.store.note(front.id) == nil, "an emptied note is deleted when left")
+        }
+    }))
+
+    // Links from other apps may not wipe a note quietly, and locked or read-only notes are left alone.
+    SelfTest.cases.append(("Reliability.urlOverwriteKeepsOldText", {
+        check(URLCommand.keepsCopy(of: "my notes", replacedBy: "theirs"), "different text: the old one is kept in The Void")
+        check(!URLCommand.keepsCopy(of: "  \n", replacedBy: "theirs"), "a blank note has nothing to keep")
+        check(!URLCommand.keepsCopy(of: "same", replacedBy: "same"), "the same text again keeps nothing")
+        check(URLCommand.rejection(editing: Note(content: "x", isLocked: true)) == "This note is locked", "locked notes refuse")
+        check(URLCommand.rejection(editing: Note(content: "x", isReadOnly: true)) == "This note is read-only", "read-only notes refuse")
+        check(URLCommand.rejection(editing: Note(content: "x")) == nil, "ordinary notes accept")
+    }))
+
     // Text that is easy to get wrong in storage: NUL bytes from a binary paste, emoji, combining marks, RTL,
     // and a 10 MB note, through the database and the JSON export.
     storageCase("oddTextRoundTrips") { dir in

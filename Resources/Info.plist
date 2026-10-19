@@ -37,6 +37,8 @@
 	<string>public.app-category.productivity</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
+	<key>LSMultipleInstancesProhibited</key>
+	<true/>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Super Notes sends notes to Apple Notes only when you choose Export → Apple Notes.</string>
 	<key>NSFaceIDUsageDescription</key>

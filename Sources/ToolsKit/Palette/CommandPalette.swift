@@ -200,6 +200,7 @@ final class CommandPalette {
 
     /// Makes `keyword` the note's first line (replacing an existing keyword line).
     private func setKeyword(_ keyword: String) {
+        Services.windows.flushEdits()
         guard var note = currentNote else { return }
         note.content = NoteMode.settingKeyword(keyword, in: note.content)
         Services.store.update(note)
@@ -207,6 +208,7 @@ final class CommandPalette {
     }
 
     private func appendLine(_ line: String) {
+        Services.windows.flushEdits()
         guard var note = currentNote else { return }
         note.content = URLCommand.appending(line, to: note.content)
         Services.store.update(note)

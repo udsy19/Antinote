@@ -403,13 +403,11 @@ final class Shell: NSObject, WindowServicing, NSWindowDelegate, NSMenuItemValida
         return openSlot != nil ? .slot : .ephemeral
     }
 
-    /// The stored note merged with the editor's latest text (the editor may not have saved yet).
+    /// The stored note with the editor's latest text: the editor showing it writes its pending typing first, so a
+    /// note typed into a moment ago never reads as blank (and never gets deleted as one).
     private func freshNote(_ id: UUID) -> Note? {
-        guard var note = store.note(id) else { return nil }
-        for p in [ephemeralPane, slotPane] {
-            if let edited = p?.editor.note, edited.id == id { note.content = edited.content; note.links = edited.links }
-        }
-        return note
+        for p in [ephemeralPane, slotPane] where p?.editor.note?.id == id { p?.editor.flush() }
+        return store.note(id)
     }
 
     private func isLockedOut(_ note: Note) -> Bool {

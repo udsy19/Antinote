@@ -47,6 +47,19 @@ public enum URLCommand: Equatable, Sendable {
         guard !existing.isEmpty else { return text }
         return existing.hasSuffix("\n") ? existing + text : existing + "\n" + text
     }
+
+    /// Whether `overwrite` has to keep the old text: it says something and the new text isn't the same. Another
+    /// app may not wipe a note silently — the old text goes to The Void first.
+    public static func keepsCopy(of existing: String, replacedBy text: String) -> Bool {
+        !existing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && existing != text
+    }
+
+    /// Why a link may not change `note`, or nil when it may: locked notes and read-only notes are left alone.
+    public static func rejection(editing note: Note) -> String? {
+        if note.isLocked { return "This note is locked" }
+        if note.isReadOnly { return "This note is read-only" }
+        return nil
+    }
 }
 
 /// Receives `kAEGetURL` Apple events and runs them through `Services`. URLs that arrive before the services exist
@@ -87,15 +100,23 @@ final class URLSchemeHandler: NSObject {
         case let .new(text):
             windows.show(noteID: store.create(content: text).id)
         case let .append(text):
+            windows.flushEdits()   // the editor's typing first, or it is appended to stale text
             guard let id = windows.currentNoteID, var note = store.note(id) else {
                 windows.show(noteID: store.create(content: text).id); return
             }
+            if let reason = URLCommand.rejection(editing: note) { HUD.show(reason, kind: .warning); return }
             note.content = URLCommand.appending(text, to: note.content)
             store.update(note)
             windows.show(noteID: id)
         case let .overwrite(text):
+            windows.flushEdits()
             guard let id = windows.currentNoteID, var note = store.note(id) else {
                 windows.show(noteID: store.create(content: text).id); return
+            }
+            if let reason = URLCommand.rejection(editing: note) { HUD.show(reason, kind: .warning); return }
+            if URLCommand.keepsCopy(of: note.content, replacedBy: text) {
+                store.moveToVoid(store.create(content: note.content).id)
+                HUD.show("Previous text moved to The Void")
             }
             note.content = text
             store.update(note)
