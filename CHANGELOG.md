@@ -3,7 +3,7 @@
 All notable changes to Super Notes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org).
 
-## [Unreleased]
+## [1.3.8] — 2026-10-19
 
 ### Fixed
 - Typing into a note and moving to another one within a third of a second deleted the note as "empty" — the text
