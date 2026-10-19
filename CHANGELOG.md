@@ -3,7 +3,7 @@
 All notable changes to Super Notes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org).
 
-## [Unreleased]
+## [1.3.7] — 2026-10-19
 
 ### Fixed
 - Text no longer runs off the right edge of a narrow note. A list item indented deeper than the note was wide
